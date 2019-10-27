@@ -23,7 +23,12 @@ public class DataFetchController {
   }
 
   @GetMapping("/fetch/{instrument}")
-  public String fetchData() throws IOException, KiteException {
-    return dataFetchService.getProfile();
+  public void fetchData(@PathVariable long instrument) throws IOException, KiteException {
+    dataFetchService.downloadHistoricalData15Mins(instrument);
+  }
+
+  @GetMapping("/fetch/instruments/all")
+  public void fetchAllInstruments() throws IOException, KiteException {
+    dataFetchService.downloadAllInstruments();
   }
 }
