@@ -8,8 +8,8 @@ import java.util.List;
 
 @Repository
 public interface FifteenMinuteCandleRepository extends JpaRepository<FifteenMinuteCandle, Long> {
-    public List<FifteenMinuteCandle> findAllByInstrument(Instrument instrument);
-    public FifteenMinuteCandle findFirstByInstrumentOrderByTimestampDesc(Instrument instrument);
-    public FifteenMinuteCandle findFirstByInstrumentOrderByTimestamp(Instrument instrument);
-    public void deleteByInstrument(Instrument instrument);
+    List<FifteenMinuteCandle> findAllByInstrument(Instrument instrument);
+    FifteenMinuteCandle findFirstByInstrumentOrderByTimestampDesc(Instrument instrument);
+    FifteenMinuteCandle findFirstByInstrumentOrderByTimestamp(Instrument instrument);
+    void deleteByInstrument(Instrument instrument);
 }
