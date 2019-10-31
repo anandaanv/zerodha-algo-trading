@@ -13,3 +13,5 @@ public interface FifteenMinuteCandleRepository extends JpaRepository<FifteenMinu
     FifteenMinuteCandle findFirstByInstrumentOrderByTimestamp(Instrument instrument);
     void deleteByInstrument(Instrument instrument);
 }
+
+
