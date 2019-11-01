@@ -1,5 +1,6 @@
 package com.dtech.kitecon;
 
+import com.dtech.kitecon.controller.KiteConnectConfig;
 import com.dtech.kitecon.data.FifteenMinuteCandle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.FifteenMinuteCandleRepository;
@@ -28,40 +29,17 @@ public class DataFetchService {
 
     private final InstrumentRepository instrumentRepository;
     private final FifteenMinuteCandleRepository fifteenMinuteCandleRepository;
-    private KiteConnect kiteConnect;
+    private final KiteConnectConfig kiteConnectConfig;
 
     public String getProfile() throws IOException, KiteException {
-        Profile profile = kiteConnect.getProfile();
+        Profile profile = kiteConnectConfig.getKiteConnect().getProfile();
         return profile.userName;
-    }
-
-    //TODO export the credentials to configuration.
-    @PostConstruct
-    public void connect() throws KiteException, IOException {
-        this.kiteConnect = new KiteConnect("1g19o5ohebi8fj3l");
-
-        //If you wish to enable debug logs send true in the constructor, this will log request and response.
-        //KiteConnect kiteConnect = new KiteConnect("xxxxyyyyzzzz", true);
-
-        // If you wish to set proxy then pass proxy as a second parameter in the constructor with api_key. syntax:- new KiteConnect("xxxxxxyyyyyzzz", proxy).
-        //KiteConnect kiteConnect = new KiteConnect("xxxxyyyyzzzz", userProxy, false);
-
-        // Set userId
-        kiteConnect.setUserId("ZQ5356");
-
-        // Get login url
-        String url = kiteConnect.getLoginURL();
-
-        User user = kiteConnect.generateSession("SZG3F8IU4f7AfTkLD5v9zOdtQya0vus8", "47hfn5uwrb138506whg0lk26w6pxiadi");
-        kiteConnect.setAccessToken(user.accessToken);
-        kiteConnect.setPublicToken(user.publicToken);
-
     }
 
     public void downloadAllInstruments() throws KiteException, IOException {
         Map<Long, Instrument> databaseInstruments = instrumentRepository.findAll()
                 .stream().collect(Collectors.toMap(Instrument::getInstrument_token, instrument -> instrument));
-        List<com.zerodhatech.models.Instrument> instruments = kiteConnect.getInstruments();
+        List<com.zerodhatech.models.Instrument> instruments = kiteConnectConfig.getKiteConnect().getInstruments();
         List<Instrument> newInstruments = instruments.stream()
                 .filter(instrument -> !databaseInstruments.containsKey(instrument.instrument_token))
                 .map(instrument -> Instrument.builder()
@@ -101,7 +79,7 @@ public class DataFetchService {
         } else {
             fifteenMinuteCandleRepository.deleteByInstrument(instrument);
         }
-        HistoricalData candles = kiteConnect.getHistoricalData(startDateFirstTime, endDate, String.valueOf(instrumentId), "15minute", false, true);
+        HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(startDateFirstTime, endDate, String.valueOf(instrumentId), "15minute", false, true);
         List<FifteenMinuteCandle> databaseCandles = candles.dataArrayList.stream().map(candle ->
         {
             try {
