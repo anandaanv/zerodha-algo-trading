@@ -1,7 +1,7 @@
 package com.dtech.kitecon.controller;
 
 
-import com.dtech.kitecon.DataFetchService;
+import com.dtech.kitecon.service.DataFetchService;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,7 +23,7 @@ public class DataFetchController {
   }
 
   @GetMapping("/fetch/{instrument}")
-  public void fetchData(@PathVariable long instrument) throws IOException, KiteException {
+  public void fetchData(@PathVariable String instrument) throws IOException, KiteException {
     dataFetchService.downloadHistoricalData15Mins(instrument);
   }
 

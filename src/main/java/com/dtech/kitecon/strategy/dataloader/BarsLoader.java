@@ -21,7 +21,7 @@
  *   IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  *   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *******************************************************************************/
-package com.dtech.kitecon.strategy;
+package com.dtech.kitecon.strategy.dataloader;
 
 import com.dtech.kitecon.data.FifteenMinuteCandle;
 import com.dtech.kitecon.data.Instrument;

@@ -25,6 +25,7 @@ package com.dtech.kitecon.strategy;
 
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.InstrumentRepository;
+import com.dtech.kitecon.strategy.dataloader.BarsLoader;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

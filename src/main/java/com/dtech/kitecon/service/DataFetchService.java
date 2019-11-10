@@ -1,20 +1,17 @@
-package com.dtech.kitecon;
+package com.dtech.kitecon.service;
 
 import com.dtech.kitecon.controller.KiteConnectConfig;
 import com.dtech.kitecon.data.FifteenMinuteCandle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.FifteenMinuteCandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
-import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
 import com.zerodhatech.models.Profile;
-import com.zerodhatech.models.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
 import javax.transaction.Transactional;
 import java.io.IOException;
 import java.text.DateFormat;
@@ -61,7 +58,27 @@ public class DataFetchService {
     }
 
     @Transactional
-    public void downloadHistoricalData15Mins(long instrumentId) throws KiteException, IOException {
+    public void downloadHistoricalData15Mins(String instrumentName) {
+        String[] exchanges = new String[]{"NSE", "NFO"};
+        Calendar today1 = Calendar.getInstance();
+        today1.add(Calendar.MONTH, 4);
+        List<Instrument> instruments = instrumentRepository
+                .findAllByTradingsymbolStartingWithAndExpiryBetweenAndExchangeIn(
+                        instrumentName, Calendar.getInstance().getTime(), today1.getTime(), exchanges);
+
+        instruments.forEach(instrument -> {
+            try {
+                this.downloadFifteenMinutesData(instrument);
+            } catch (KiteException e) {
+                System.out.println("Instrument - " + instrument.getTradingsymbol());
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    public void downloadFifteenMinutesData(Instrument instrument) throws KiteException, IOException {
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
         Calendar today = Calendar.getInstance();
         Date endDate = today.getTime();
@@ -69,8 +86,10 @@ public class DataFetchService {
         Date startDate = today.getTime();
         today.add(Calendar.MONTH, -2);
         Date startDateFirstTime = today.getTime();
-
-        Instrument instrument = instrumentRepository.getOne(instrumentId);
+        if (instrument.getExchange().equals("NFO")) {
+            today.add(Calendar.MONTH, 22);
+            startDateFirstTime = today.getTime();
+        }
         FifteenMinuteCandle latestCandle = fifteenMinuteCandleRepository.findFirstByInstrumentOrderByTimestampDesc(instrument);
         FifteenMinuteCandle oldestCandle = fifteenMinuteCandleRepository.findFirstByInstrumentOrderByTimestamp(instrument);
         if (oldestCandle != null && oldestCandle.getTimestamp().before(startDate)) {
@@ -79,7 +98,8 @@ public class DataFetchService {
         } else {
             fifteenMinuteCandleRepository.deleteByInstrument(instrument);
         }
-        HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(startDateFirstTime, endDate, String.valueOf(instrumentId), "15minute", false, true);
+        HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(startDateFirstTime, endDate,
+                String.valueOf(instrument.getInstrument_token()), "15minute", false, true);
         List<FifteenMinuteCandle> databaseCandles = candles.dataArrayList.stream().map(candle ->
         {
             try {
