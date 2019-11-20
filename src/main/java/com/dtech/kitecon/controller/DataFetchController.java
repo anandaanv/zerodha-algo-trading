@@ -25,6 +25,7 @@ public class DataFetchController {
   @GetMapping("/fetch/{instrument}")
   public void fetchData(@PathVariable String instrument) throws IOException, KiteException {
     dataFetchService.downloadHistoricalData15Mins(instrument);
+    dataFetchService.downloadHistoricalDataDaily(instrument);
   }
 
   @GetMapping("/fetch/instruments/all")

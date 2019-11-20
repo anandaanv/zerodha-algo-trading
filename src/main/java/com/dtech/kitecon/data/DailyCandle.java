@@ -1,6 +1,5 @@
 package com.dtech.kitecon.data;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,10 +13,10 @@ import java.util.Date;
 @Entity
 @Data
 @NoArgsConstructor
-public class FifteenMinuteCandle extends BaseCandle {
+public class DailyCandle extends BaseCandle {
 
   @Builder
-  public FifteenMinuteCandle(Double open, Double high, Double low, Double close, long volume, long oi, Date timestamp, Instrument instrument) {
+  public DailyCandle(Double open, Double high, Double low, Double close, long volume, long oi, Date timestamp, Instrument instrument) {
     super(open, high, low, close, volume, oi, timestamp, instrument);
   }
 }
