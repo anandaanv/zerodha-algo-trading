@@ -1,8 +1,12 @@
 package com.dtech.kitecon.service;
 
 import com.dtech.kitecon.controller.KiteConnectConfig;
+import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.kitecon.data.DailyCandle;
 import com.dtech.kitecon.data.FifteenMinuteCandle;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.repository.BaseCandleRepository;
+import com.dtech.kitecon.repository.DailyCandleRepository;
 import com.dtech.kitecon.repository.FifteenMinuteCandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
@@ -26,6 +30,7 @@ public class DataFetchService {
 
     private final InstrumentRepository instrumentRepository;
     private final FifteenMinuteCandleRepository fifteenMinuteCandleRepository;
+    private final DailyCandleRepository dailyCandleRepository;
     private final KiteConnectConfig kiteConnectConfig;
 
     public String getProfile() throws IOException, KiteException {
@@ -59,6 +64,15 @@ public class DataFetchService {
 
     @Transactional
     public void downloadHistoricalData15Mins(String instrumentName) {
+        downloadCandleData(instrumentName, "15minute", fifteenMinuteCandleRepository);
+    }
+
+    @Transactional
+    public void downloadHistoricalDataDaily(String instrumentName) {
+        downloadCandleData(instrumentName, "day", dailyCandleRepository);
+    }
+
+    public void downloadCandleData(String instrumentName, String interval, BaseCandleRepository repository) {
         String[] exchanges = new String[]{"NSE", "NFO"};
         Calendar today1 = Calendar.getInstance();
         today1.add(Calendar.MONTH, 4);
@@ -68,7 +82,7 @@ public class DataFetchService {
 
         instruments.forEach(instrument -> {
             try {
-                this.downloadFifteenMinutesData(instrument);
+                this.downloadFifteenMinutesData(instrument, repository, interval);
             } catch (KiteException e) {
                 System.out.println("Instrument - " + instrument.getTradingsymbol());
                 e.printStackTrace();
@@ -78,7 +92,7 @@ public class DataFetchService {
         });
     }
 
-    public void downloadFifteenMinutesData(Instrument instrument) throws KiteException, IOException {
+    public void downloadFifteenMinutesData(Instrument instrument, BaseCandleRepository repository, String interval) throws KiteException, IOException {
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
         Calendar today = Calendar.getInstance();
         Date endDate = today.getTime();
@@ -90,29 +104,20 @@ public class DataFetchService {
             today.add(Calendar.MONTH, 22);
             startDateFirstTime = today.getTime();
         }
-        FifteenMinuteCandle latestCandle = fifteenMinuteCandleRepository.findFirstByInstrumentOrderByTimestampDesc(instrument);
-        FifteenMinuteCandle oldestCandle = fifteenMinuteCandleRepository.findFirstByInstrumentOrderByTimestamp(instrument);
+        BaseCandle latestCandle = repository.findFirstByInstrumentOrderByTimestampDesc(instrument);
+        BaseCandle oldestCandle = repository.findFirstByInstrumentOrderByTimestamp(instrument);
         if (oldestCandle != null && oldestCandle.getTimestamp().before(startDate)) {
             startDateFirstTime = latestCandle.getTimestamp();
-            fifteenMinuteCandleRepository.delete(latestCandle);
+            repository.delete(latestCandle);
         } else {
-            fifteenMinuteCandleRepository.deleteByInstrument(instrument);
+            repository.deleteByInstrument(instrument);
         }
         HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(startDateFirstTime, endDate,
-                String.valueOf(instrument.getInstrument_token()), "15minute", false, true);
-        List<FifteenMinuteCandle> databaseCandles = candles.dataArrayList.stream().map(candle ->
+                String.valueOf(instrument.getInstrument_token()), interval, false, true);
+        List<BaseCandle> databaseCandles = candles.dataArrayList.stream().map(candle ->
         {
             try {
-                return FifteenMinuteCandle.builder()
-                        .instrument(instrument)
-                        .open(candle.open)
-                        .high(candle.high)
-                        .low(candle.low)
-                        .close(candle.close)
-                        .volume(candle.volume)
-                        .oi(candle.oi)
-                        .timestamp(dateFormat.parse(candle.timeStamp))
-                        .build();
+                return buildCandle(instrument, dateFormat, candle, interval);
             } catch (ParseException e) {
                 e.printStackTrace();
                 return null;
@@ -120,7 +125,33 @@ public class DataFetchService {
         })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-        fifteenMinuteCandleRepository.saveAll(databaseCandles);
+        repository.saveAll(databaseCandles);
+    }
+
+    public BaseCandle buildCandle(Instrument instrument, DateFormat dateFormat, HistoricalData candle,
+                                           String interval) throws ParseException {
+        if(interval.equalsIgnoreCase("day")) {
+            return DailyCandle.builder()
+                    .instrument(instrument)
+                    .open(candle.open)
+                    .high(candle.high)
+                    .low(candle.low)
+                    .close(candle.close)
+                    .volume(candle.volume)
+                    .oi(candle.oi)
+                    .timestamp(dateFormat.parse(candle.timeStamp))
+                    .build();
+        }
+        return FifteenMinuteCandle.builder()
+                .instrument(instrument)
+                .open(candle.open)
+                .high(candle.high)
+                .low(candle.low)
+                .close(candle.close)
+                .volume(candle.volume)
+                .oi(candle.oi)
+                .timestamp(dateFormat.parse(candle.timeStamp))
+                .build();
     }
 
 }
