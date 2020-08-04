@@ -79,8 +79,13 @@ public class DataFetchService {
         List<Instrument> instruments = instrumentRepository
                 .findAllByTradingsymbolStartingWithAndExpiryBetweenAndExchangeIn(
                         instrumentName, Calendar.getInstance().getTime(), today1.getTime(), exchanges);
-
-        instruments.forEach(instrument -> {
+        List<Instrument> primaryInstruments = instrumentRepository
+                .findAllByTradingsymbolStartingWithAndExpiryIsNullAndExchangeIn(
+                        instrumentName, exchanges);
+        instruments.addAll(primaryInstruments);
+        instruments.addAll(primaryInstruments);
+//        instruments.forEach(instrument -> {
+        primaryInstruments.forEach(instrument -> {
             try {
                 this.downloadFifteenMinutesData(instrument, repository, interval);
             } catch (KiteException e) {
@@ -96,9 +101,9 @@ public class DataFetchService {
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
         Calendar today = Calendar.getInstance();
         Date endDate = today.getTime();
-        today.add(Calendar.MONTH, -22);
+        today.add(Calendar.DAY_OF_YEAR, -139);
         Date startDate = today.getTime();
-        today.add(Calendar.MONTH, -2);
+        today.add(Calendar.DAY_OF_YEAR, -60);
         Date startDateFirstTime = today.getTime();
         if (instrument.getExchange().equals("NFO")) {
             today.add(Calendar.MONTH, 22);

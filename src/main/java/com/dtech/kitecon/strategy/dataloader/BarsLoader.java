@@ -23,8 +23,11 @@
  *******************************************************************************/
 package com.dtech.kitecon.strategy.dataloader;
 
+import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.kitecon.data.DailyCandle;
 import com.dtech.kitecon.data.FifteenMinuteCandle;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.repository.DailyCandleRepository;
 import com.dtech.kitecon.repository.FifteenMinuteCandleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,7 +59,7 @@ public class BarsLoader {
 
         List<FifteenMinuteCandle> candles = fifteenMinuteCandleRepository.findAllByInstrument(instrument);
 
-        candles.sort(Comparator.comparing(FifteenMinuteCandle::getTimestamp));
+        candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
 
         TimeSeries series = new BaseTimeSeries(instrument.getTradingsymbol());
         candles.forEach(candle -> {

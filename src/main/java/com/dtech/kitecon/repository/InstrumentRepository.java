@@ -11,6 +11,7 @@ import java.util.List;
 public interface InstrumentRepository extends JpaRepository<Instrument, Long> {
 
     List<Instrument> findAllByTradingsymbolStartingWithAndExpiryBetweenAndExchangeIn(String symbol, Date expiryStart, Date expiryEnd, String[] exchanges);
+    List<Instrument> findAllByTradingsymbolStartingWithAndExpiryIsNullAndExchangeIn(String symbol, String[] exchanges);
     List<Instrument> findAllByTradingsymbolStartingWithAndExchangeIn(String symbol, String[] exchanges);
     Instrument findByTradingsymbolAndExchangeIn(String symbol, String[] exchanges);
 
