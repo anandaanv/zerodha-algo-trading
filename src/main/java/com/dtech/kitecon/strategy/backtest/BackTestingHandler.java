@@ -29,7 +29,7 @@ public class BackTestingHandler {
         Strategy strategy = strategyBuilder.build(tradingIdentity, timeSeriesMap);
 
         TimeSeriesManager seriesManager = new TimeSeriesManager(timeSeriesMap.get(tradingIdentity));
-        TradingRecord tradingRecord = seriesManager.run(strategy, Order.OrderType.BUY, PrecisionNum.valueOf(50));
+        TradingRecord tradingRecord = seriesManager.run(strategy, Order.OrderType.BUY, PrecisionNum.valueOf(1));
         
         return new BacktestResult(backtest(timeSeriesMap.get(tradingIdentity), tradingRecord), tradingRecord);
         

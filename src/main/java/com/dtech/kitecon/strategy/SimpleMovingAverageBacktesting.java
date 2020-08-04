@@ -50,7 +50,7 @@ public class SimpleMovingAverageBacktesting {
 
 
     public void execute(Long instrumentId) throws InterruptedException {
-        Instrument instrument = instrumentRepository.getOne(instrumentId);
+        Instrument instrument = null;// instrumentRepository.getOne(instrumentId);
         TimeSeries series = barsLoader.loadInstrumentSeries(instrument);
 
         Strategy strategy3DaySmaUnder = create3DaySmaUnderStrategy(series);
