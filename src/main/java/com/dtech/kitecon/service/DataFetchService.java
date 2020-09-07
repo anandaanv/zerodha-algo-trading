@@ -1,6 +1,6 @@
 package com.dtech.kitecon.service;
 
-import com.dtech.kitecon.controller.KiteConnectConfig;
+import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.data.BaseCandle;
 import com.dtech.kitecon.data.DailyCandle;
 import com.dtech.kitecon.data.FifteenMinuteCandle;

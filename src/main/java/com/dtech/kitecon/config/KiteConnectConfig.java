@@ -1,4 +1,4 @@
-package com.dtech.kitecon.controller;
+package com.dtech.kitecon.config;
 
 import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;

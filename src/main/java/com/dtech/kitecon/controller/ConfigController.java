@@ -1,5 +1,6 @@
 package com.dtech.kitecon.controller;
 
+import com.dtech.kitecon.config.KiteConnectConfig;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
