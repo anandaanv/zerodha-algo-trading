@@ -1,5 +1,6 @@
 package com.dtech.kitecon.data;
 
+import java.time.LocalDateTime;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -26,12 +27,12 @@ public class BaseCandle {
     @Column
     protected Long oi;
     @Column
-    protected Date timestamp;
+    protected LocalDateTime timestamp;
     @OneToOne
     protected Instrument instrument;
 
 
-    public BaseCandle(Double open, Double high, Double low, Double close, Long volume, Long oi, Date timestamp, Instrument instrument) {
+    public BaseCandle(Double open, Double high, Double low, Double close, Long volume, Long oi, LocalDateTime timestamp, Instrument instrument) {
         this.open = open;
         this.high = high;
         this.low = low;

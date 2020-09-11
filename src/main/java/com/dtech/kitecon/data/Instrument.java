@@ -1,5 +1,7 @@
 package com.dtech.kitecon.data;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -27,7 +29,7 @@ public class Instrument {
   @Column
   private Double last_price;
   @Column
-  private Date expiry;
+  private LocalDateTime expiry;
   @Column
   private String strike;
   @Column

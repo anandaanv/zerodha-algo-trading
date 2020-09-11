@@ -63,8 +63,7 @@ public class BarsLoader {
 
         TimeSeries series = new BaseTimeSeries(instrument.getTradingsymbol());
         candles.forEach(candle -> {
-            ZonedDateTime date = ZonedDateTime.ofInstant(candle.getTimestamp().toInstant(),
-                    ZoneId.systemDefault());
+            ZonedDateTime date = ZonedDateTime.from(candle.getTimestamp());
             double open = candle.getOpen();
             double high = candle.getHigh();
             double low = candle.getLow();
