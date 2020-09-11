@@ -12,6 +12,13 @@ import com.dtech.kitecon.repository.InstrumentRepository;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
 import com.zerodhatech.models.Profile;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.Period;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -52,7 +59,7 @@ public class DataFetchService {
                         .tradingsymbol(instrument.tradingsymbol)
                         .name(instrument.name)
                         .last_price(instrument.last_price)
-                        .expiry(instrument.expiry)
+                        .expiry(instrument.getExpiry() == null? null : dateToLocalDate(instrument))
                         .tick_size(instrument.tick_size)
                         .lot_size(instrument.lot_size)
                         .instrument_type(instrument.instrument_type)
@@ -60,6 +67,11 @@ public class DataFetchService {
                         .exchange(instrument.exchange)
                         .build()).collect(Collectors.toList());
         instrumentRepository.saveAll(newInstruments);
+    }
+
+    private LocalDateTime dateToLocalDate(com.zerodhatech.models.Instrument instrument) {
+        return LocalDateTime.ofInstant(instrument.expiry.toInstant(),
+            ZoneId.systemDefault());
     }
 
     @Transactional
@@ -74,17 +86,15 @@ public class DataFetchService {
 
     public void downloadCandleData(String instrumentName, String interval, BaseCandleRepository repository) {
         String[] exchanges = new String[]{"NSE", "NFO"};
-        Calendar today1 = Calendar.getInstance();
-        today1.add(Calendar.MONTH, 4);
+        LocalDateTime startDate = LocalDateTime.now().minus(4, ChronoUnit.MONTHS);
         List<Instrument> instruments = instrumentRepository
                 .findAllByTradingsymbolStartingWithAndExpiryBetweenAndExchangeIn(
-                        instrumentName, Calendar.getInstance().getTime(), today1.getTime(), exchanges);
+                        instrumentName, LocalDateTime.now(), startDate, exchanges);
         List<Instrument> primaryInstruments = instrumentRepository
                 .findAllByTradingsymbolStartingWithAndExpiryIsNullAndExchangeIn(
                         instrumentName, exchanges);
         instruments.addAll(primaryInstruments);
         instruments.addAll(primaryInstruments);
-//        instruments.forEach(instrument -> {
         primaryInstruments.forEach(instrument -> {
             try {
                 this.downloadFifteenMinutesData(instrument, repository, interval);
@@ -98,26 +108,29 @@ public class DataFetchService {
     }
 
     public void downloadFifteenMinutesData(Instrument instrument, BaseCandleRepository repository, String interval) throws KiteException, IOException {
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ");
-        Calendar today = Calendar.getInstance();
-        Date endDate = today.getTime();
-        today.add(Calendar.DAY_OF_YEAR, -139);
-        Date startDate = today.getTime();
-        today.add(Calendar.DAY_OF_YEAR, -60);
-        Date startDateFirstTime = today.getTime();
-        if (instrument.getExchange().equals("NFO")) {
-            today.add(Calendar.MONTH, 22);
-            startDateFirstTime = today.getTime();
-        }
+        ZoneId defaultZoneId = ZoneId.systemDefault();
+        DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
+
+        LocalDate endDate = getEndDate();
+        LocalDate startDate = getStartDate();
+
+        // If loading for first time, then we need to use maximum available date range
+        LocalDate startDateFirstTime = getMaxAvailableDateRange(instrument);
+
         BaseCandle latestCandle = repository.findFirstByInstrumentOrderByTimestampDesc(instrument);
         BaseCandle oldestCandle = repository.findFirstByInstrumentOrderByTimestamp(instrument);
-        if (oldestCandle != null && oldestCandle.getTimestamp().before(startDate)) {
-            startDateFirstTime = latestCandle.getTimestamp();
+
+        LocalDate actualStartDate = startDateFirstTime;
+        if (oldestCandle != null && oldestCandle.getTimestamp().isBefore(startDate.atStartOfDay())) {
+            actualStartDate = latestCandle.getTimestamp().toLocalDate();
             repository.delete(latestCandle);
         } else {
             repository.deleteByInstrument(instrument);
         }
-        HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(startDateFirstTime, endDate,
+
+        HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
+            actualStartDate.atStartOfDay(defaultZoneId).toInstant()),
+            Date.from(endDate.atStartOfDay(defaultZoneId).toInstant()),
                 String.valueOf(instrument.getInstrument_token()), interval, false, true);
         List<BaseCandle> databaseCandles = candles.dataArrayList.stream().map(candle ->
         {
@@ -133,30 +146,41 @@ public class DataFetchService {
         repository.saveAll(databaseCandles);
     }
 
-    public BaseCandle buildCandle(Instrument instrument, DateFormat dateFormat, HistoricalData candle,
-                                           String interval) throws ParseException {
-        if(interval.equalsIgnoreCase("day")) {
-            return DailyCandle.builder()
-                    .instrument(instrument)
-                    .open(candle.open)
-                    .high(candle.high)
-                    .low(candle.low)
-                    .close(candle.close)
-                    .volume(candle.volume)
-                    .oi(candle.oi)
-                    .timestamp(dateFormat.parse(candle.timeStamp))
-                    .build();
+    private LocalDate getMaxAvailableDateRange(Instrument instrument) {
+        LocalDate today = LocalDate.now();
+        if (instrument.getExchange().equals("NFO")) {
+            return today.minus(22, ChronoUnit.MONTHS);
         }
-        return FifteenMinuteCandle.builder()
-                .instrument(instrument)
-                .open(candle.open)
-                .high(candle.high)
-                .low(candle.low)
-                .close(candle.close)
-                .volume(candle.volume)
-                .oi(candle.oi)
-                .timestamp(dateFormat.parse(candle.timeStamp))
-                .build();
+        return today.minus(60, ChronoUnit.DAYS);
+    }
+
+    private LocalDate getEndDate() {
+        return LocalDate.now();
+    }
+
+    private LocalDate getStartDate() {
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = today.minus(139, ChronoUnit.DAYS);
+        return startDate;
+    }
+
+    public BaseCandle buildCandle(Instrument instrument, DateTimeFormatter dateFormat, HistoricalData candle,
+                                           String interval) throws ParseException {
+        BaseCandle dbCandle;
+        if(interval.equalsIgnoreCase("day")) {
+            dbCandle = DailyCandle.builder().build();
+        } else {
+            dbCandle = FifteenMinuteCandle.builder().build();
+        }
+        dbCandle.setInstrument(instrument);
+        dbCandle.setOpen(candle.open);
+        dbCandle.setHigh(candle.high);
+        dbCandle.setLow(candle.low);
+        dbCandle.setClose(candle.close);
+        dbCandle.setVolume(candle.volume);
+        dbCandle.setOi(candle.oi);
+        dbCandle.setTimestamp(ZonedDateTime.parse(candle.timeStamp, dateFormat).toLocalDateTime());
+        return dbCandle;
     }
 
 }

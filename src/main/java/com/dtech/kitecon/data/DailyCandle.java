@@ -1,5 +1,7 @@
 package com.dtech.kitecon.data;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,7 +18,8 @@ import java.util.Date;
 public class DailyCandle extends BaseCandle {
 
   @Builder
-  public DailyCandle(Double open, Double high, Double low, Double close, long volume, long oi, Date timestamp, Instrument instrument) {
+  public DailyCandle(Double open, Double high, Double low, Double close, long volume,
+      long oi, LocalDateTime timestamp, Instrument instrument) {
     super(open, high, low, close, volume, oi, timestamp, instrument);
   }
 }
