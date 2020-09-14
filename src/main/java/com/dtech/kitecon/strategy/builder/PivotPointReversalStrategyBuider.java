@@ -20,8 +20,8 @@ import java.util.Map;
 public class PivotPointReversalStrategyBuider extends BaseStrategyBuilder {
 
     @Override
-    public Strategy build(Instrument tradingIdentity, Map<Instrument, TimeSeries> timeSeriesMap) {
-        return create3DaySmaUnderStrategy(timeSeriesMap.get(tradingIdentity));
+    public Strategy build(Instrument tradingIdentity, Map<Instrument, BarSeries> BarSeriesMap) {
+        return create3DaySmaUnderStrategy(BarSeriesMap.get(tradingIdentity));
     }
 
     @Override
@@ -29,7 +29,7 @@ public class PivotPointReversalStrategyBuider extends BaseStrategyBuilder {
         return "PivotPointReversalBullish";
     }
 
-    private static Strategy create3DaySmaUnderStrategy(TimeSeries series) {
+    private static Strategy create3DaySmaUnderStrategy(BarSeries series) {
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
         OpenPriceIndicator openPriceIndicator1 = new OpenPriceIndicator(series);
         LowestValueIndicator lowestPrice = new LowestValueIndicator(new ClosePriceIndicator(series), 10);

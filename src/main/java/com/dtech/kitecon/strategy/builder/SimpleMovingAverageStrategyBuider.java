@@ -4,7 +4,7 @@ import com.dtech.kitecon.data.Instrument;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.BaseStrategy;
 import org.ta4j.core.Strategy;
-import org.ta4j.core.TimeSeries;
+import org.ta4j.core.BarSeries;
 import org.ta4j.core.indicators.SMAIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.trading.rules.OverIndicatorRule;
@@ -16,8 +16,8 @@ import java.util.Map;
 public class SimpleMovingAverageStrategyBuider extends BaseStrategyBuilder {
 
     @Override
-    public Strategy build(Instrument tradingIdentity, Map<Instrument, TimeSeries> timeSeriesMap) {
-        return create3DaySmaUnderStrategy(timeSeriesMap.get(tradingIdentity));
+    public Strategy build(Instrument tradingIdentity, Map<Instrument, BarSeries> BarSeriesMap) {
+        return create3DaySmaUnderStrategy(BarSeriesMap.get(tradingIdentity));
     }
 
     @Override
@@ -25,7 +25,7 @@ public class SimpleMovingAverageStrategyBuider extends BaseStrategyBuilder {
         return "SimpleMovingAverage";
     }
 
-    private static Strategy create3DaySmaUnderStrategy(TimeSeries series) {
+    private static Strategy create3DaySmaUnderStrategy(BarSeries series) {
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
         SMAIndicator sma = new SMAIndicator(closePrice, 3);
         return new BaseStrategy(
