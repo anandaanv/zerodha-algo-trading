@@ -2,8 +2,11 @@ package com.dtech.kitecon.strategy.backtest;
 
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.InstrumentRepository;
+import com.dtech.kitecon.strategy.backtest.TradeRecord.TradeRecordBuilder;
 import com.dtech.kitecon.strategy.dataloader.InstrumentDataLoader;
 import com.dtech.kitecon.strategy.builder.StrategyBuilder;
+import java.util.List;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.*;
@@ -30,14 +33,34 @@ public class BackTestingHandler {
 
         BarSeriesManager seriesManager = new BarSeriesManager(BarSeriesMap.get(tradingIdentity));
         TradingRecord tradingRecord = seriesManager.run(strategy, Order.OrderType.BUY, PrecisionNum.valueOf(1));
-        
-        return new BacktestResult(backtest(BarSeriesMap.get(tradingIdentity), tradingRecord), tradingRecord);
+        List<TradeRecord> trades = tradingRecord.getTrades().stream()
+            .map(this::mapTradeRecord)
+            .collect(Collectors.toList());
+        return new BacktestResult(backtest(BarSeriesMap.get(tradingIdentity), tradingRecord), trades);
         
     }
 
-    private Map<String, Num> backtest(BarSeries series, TradingRecord tradingRecord) {
+    private TradeRecord mapTradeRecord(Trade trade) {
+        return TradeRecord.builder()
+            .entry(buildOrder(trade.getEntry()))
+            .exit(buildOrder(trade.getExit()))
+            .profit(trade.getProfit().doubleValue()).build();
+    }
+
+    private OrderRecord buildOrder(Order order) {
+        return OrderRecord.builder()
+            .amount(order.getAmount().doubleValue())
+            .cost(order.getCost().doubleValue())
+            .index(order.getIndex())
+            .netPrice(order.getNetPrice().doubleValue())
+            .pricePerAsset(order.getPricePerAsset().doubleValue())
+            .type(order.getType())
+            .build();
+    }
+
+    private Map<String, Double> backtest(BarSeries series, TradingRecord tradingRecord) {
         //FIXME Criterion should have a method to get name. This map population is pathetic.
-        Map<String, Num> backtestresultsMap = new LinkedHashMap<>();
+        Map<String, Double> backtestresultsMap = new LinkedHashMap<>();
         backtestresultsMap.put("AverageProfitableTrades",
                 calculateCriterion(new AverageProfitableTradesCriterion(), series, tradingRecord));
         backtestresultsMap.put("AverageProfit",
@@ -62,9 +85,9 @@ public class BackTestingHandler {
     }
 
 
-    private Num calculateCriterion(AnalysisCriterion criterion, BarSeries series, TradingRecord tradingRecord) {
+    private Double calculateCriterion(AnalysisCriterion criterion, BarSeries series, TradingRecord tradingRecord) {
         System.out.println("-- " + criterion.getClass().getSimpleName() + " --");
-        return criterion.calculate(series, tradingRecord);
+        return criterion.calculate(series, tradingRecord).doubleValue();
     }
 
 
