@@ -5,7 +5,7 @@ import org.springframework.stereotype.Component;
 import org.ta4j.core.BaseStrategy;
 import org.ta4j.core.Rule;
 import org.ta4j.core.Strategy;
-import org.ta4j.core.TimeSeries;
+import org.ta4j.core.BarSeries;
 import org.ta4j.core.indicators.MACDIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.SMAIndicator;
@@ -25,8 +25,8 @@ import java.util.Map;
 public class MACDDiversionStrategy extends BaseStrategyBuilder {
 
     @Override
-    public Strategy build(Instrument tradingIdentity, Map<Instrument, TimeSeries> timeSeriesMap) {
-        return create3DaySmaUnderStrategy(timeSeriesMap.get(tradingIdentity));
+    public Strategy build(Instrument tradingIdentity, Map<Instrument, BarSeries> BarSeriesMap) {
+        return create3DaySmaUnderStrategy(BarSeriesMap.get(tradingIdentity));
     }
 
     @Override
@@ -34,7 +34,7 @@ public class MACDDiversionStrategy extends BaseStrategyBuilder {
         return "MACDDivergence";
     }
 
-    private static Strategy create3DaySmaUnderStrategy(TimeSeries series) {
+    private static Strategy create3DaySmaUnderStrategy(BarSeries series) {
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
 
         MACDIndicator macdIndicator = new MACDIndicator(closePrice);

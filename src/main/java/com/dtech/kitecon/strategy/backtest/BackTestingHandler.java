@@ -25,17 +25,17 @@ public class BackTestingHandler {
 
     public BacktestResult execute(String instrumentName, StrategyBuilder strategyBuilder) {
         Instrument tradingIdentity = instrumentRepository.findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
-        Map<Instrument, TimeSeries> timeSeriesMap = instrumentDataLoader.loadData(instrumentName);
-        Strategy strategy = strategyBuilder.build(tradingIdentity, timeSeriesMap);
+        Map<Instrument, BarSeries> BarSeriesMap = instrumentDataLoader.loadData(instrumentName);
+        Strategy strategy = strategyBuilder.build(tradingIdentity, BarSeriesMap);
 
-        TimeSeriesManager seriesManager = new TimeSeriesManager(timeSeriesMap.get(tradingIdentity));
+        BarSeriesManager seriesManager = new BarSeriesManager(BarSeriesMap.get(tradingIdentity));
         TradingRecord tradingRecord = seriesManager.run(strategy, Order.OrderType.BUY, PrecisionNum.valueOf(1));
         
-        return new BacktestResult(backtest(timeSeriesMap.get(tradingIdentity), tradingRecord), tradingRecord);
+        return new BacktestResult(backtest(BarSeriesMap.get(tradingIdentity), tradingRecord), tradingRecord);
         
     }
 
-    private Map<String, Num> backtest(TimeSeries series, TradingRecord tradingRecord) {
+    private Map<String, Num> backtest(BarSeries series, TradingRecord tradingRecord) {
         //FIXME Criterion should have a method to get name. This map population is pathetic.
         Map<String, Num> backtestresultsMap = new LinkedHashMap<>();
         backtestresultsMap.put("AverageProfitableTrades",
@@ -62,7 +62,7 @@ public class BackTestingHandler {
     }
 
 
-    private Num calculateCriterion(AnalysisCriterion criterion, TimeSeries series, TradingRecord tradingRecord) {
+    private Num calculateCriterion(AnalysisCriterion criterion, BarSeries series, TradingRecord tradingRecord) {
         System.out.println("-- " + criterion.getClass().getSimpleName() + " --");
         return criterion.calculate(series, tradingRecord);
     }

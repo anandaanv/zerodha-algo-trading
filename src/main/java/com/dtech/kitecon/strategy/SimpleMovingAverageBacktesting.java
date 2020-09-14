@@ -51,11 +51,11 @@ public class SimpleMovingAverageBacktesting {
 
     public void execute(Long instrumentId) throws InterruptedException {
         Instrument instrument = null;// instrumentRepository.getOne(instrumentId);
-        TimeSeries series = barsLoader.loadInstrumentSeries(instrument);
+        BarSeries series = barsLoader.loadInstrumentSeries(instrument);
 
         Strategy strategy3DaySmaUnder = create3DaySmaUnderStrategy(series);
 
-        TimeSeriesManager seriesManager = new TimeSeriesManager(series);
+        BarSeriesManager seriesManager = new BarSeriesManager(series);
         TradingRecord tradingRecord3DaySmaUnder = seriesManager.run(strategy3DaySmaUnder, Order.OrderType.BUY, PrecisionNum.valueOf(50));
         System.out.println(tradingRecord3DaySmaUnder);
 
@@ -75,7 +75,7 @@ public class SimpleMovingAverageBacktesting {
         calculateCriterion(new ProfitLossCriterion(), series, tradingRecord3DaySmaUnder, tradingRecord3DaySmaOver);
     }
 
-    private static void calculateCriterion(AnalysisCriterion criterion, TimeSeries series, TradingRecord tradingRecord3DaySmaUnder, TradingRecord tradingRecord3DaySmaOver) {
+    private static void calculateCriterion(AnalysisCriterion criterion, BarSeries series, TradingRecord tradingRecord3DaySmaUnder, TradingRecord tradingRecord3DaySmaOver) {
         System.out.println("-- " + criterion.getClass().getSimpleName() + " --");
         Num calculate3DaySmaUnder = criterion.calculate(series, tradingRecord3DaySmaUnder);
         Num calculate3DaySmaOver = criterion.calculate(series, tradingRecord3DaySmaOver);
@@ -88,7 +88,7 @@ public class SimpleMovingAverageBacktesting {
         return ZonedDateTime.of(2018, 01, day, 12, 0, 0, 0, ZoneId.systemDefault());
     }
 
-    private static Strategy create3DaySmaUnderStrategy(TimeSeries series) {
+    private static Strategy create3DaySmaUnderStrategy(BarSeries series) {
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
         SMAIndicator sma = new SMAIndicator(closePrice, 3);
         return new BaseStrategy(
@@ -97,7 +97,7 @@ public class SimpleMovingAverageBacktesting {
         );
     }
 
-    private static Strategy create3DaySmaOverStrategy(TimeSeries series) {
+    private static Strategy create3DaySmaOverStrategy(BarSeries series) {
         ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
         SMAIndicator sma = new SMAIndicator(closePrice, 3);
         return new BaseStrategy(

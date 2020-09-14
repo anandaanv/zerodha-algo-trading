@@ -24,22 +24,19 @@
 package com.dtech.kitecon.strategy.dataloader;
 
 import com.dtech.kitecon.data.BaseCandle;
-import com.dtech.kitecon.data.DailyCandle;
 import com.dtech.kitecon.data.FifteenMinuteCandle;
 import com.dtech.kitecon.data.Instrument;
-import com.dtech.kitecon.repository.DailyCandleRepository;
 import com.dtech.kitecon.repository.FifteenMinuteCandleRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import org.ta4j.core.BaseTimeSeries;
-import org.ta4j.core.TimeSeries;
-
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.ta4j.core.BarSeries;
+import org.ta4j.core.BaseBarSeries;
 
 /**
  * This class build a Ta4j time series from a CSV file containing bars.
@@ -55,15 +52,15 @@ public class BarsLoader {
      * @return a time series from Apple Inc. bars.
      */
 
-    public TimeSeries loadInstrumentSeries(Instrument instrument) {
+    public BarSeries loadInstrumentSeries(Instrument instrument) {
 
         List<FifteenMinuteCandle> candles = fifteenMinuteCandleRepository.findAllByInstrument(instrument);
 
         candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
 
-        TimeSeries series = new BaseTimeSeries(instrument.getTradingsymbol());
+        BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
         candles.forEach(candle -> {
-            ZonedDateTime date = ZonedDateTime.from(candle.getTimestamp());
+            ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
             double open = candle.getOpen();
             double high = candle.getHigh();
             double low = candle.getLow();
