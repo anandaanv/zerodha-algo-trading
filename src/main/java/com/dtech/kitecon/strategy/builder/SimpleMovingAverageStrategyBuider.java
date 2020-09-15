@@ -1,6 +1,7 @@
 package com.dtech.kitecon.strategy.builder;
 
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.strategy.TradeDirection;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.BaseStrategy;
 import org.ta4j.core.Strategy;
@@ -16,8 +17,19 @@ import java.util.Map;
 public class SimpleMovingAverageStrategyBuider extends BaseStrategyBuilder {
 
     @Override
-    public Strategy build(Instrument tradingIdentity, Map<Instrument, BarSeries> BarSeriesMap) {
+    protected Strategy getSellStrategy(Instrument tradingIdentity,
+        Map<Instrument, BarSeries> barSeriesMap) {
+        return null;
+    }
+
+    @Override
+    public Strategy getBuyStrategy(Instrument tradingIdentity, Map<Instrument, BarSeries> BarSeriesMap) {
         return create3DaySmaUnderStrategy(BarSeriesMap.get(tradingIdentity));
+    }
+
+    @Override
+    public TradeDirection getTradeDirection() {
+        return TradeDirection.Buy;
     }
 
     @Override

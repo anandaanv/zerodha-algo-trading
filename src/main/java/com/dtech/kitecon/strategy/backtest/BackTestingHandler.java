@@ -2,16 +2,17 @@ package com.dtech.kitecon.strategy.backtest;
 
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.InstrumentRepository;
-import com.dtech.kitecon.strategy.backtest.TradeRecord.TradeRecordBuilder;
+import com.dtech.kitecon.strategy.TradingStrategy;
 import com.dtech.kitecon.strategy.dataloader.InstrumentDataLoader;
 import com.dtech.kitecon.strategy.builder.StrategyBuilder;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.*;
 import org.ta4j.core.analysis.criteria.*;
-import org.ta4j.core.num.Num;
 import org.ta4j.core.num.PrecisionNum;
 
 import java.util.LinkedHashMap;
@@ -26,28 +27,52 @@ public class BackTestingHandler {
     private final InstrumentRepository instrumentRepository;
     private final InstrumentDataLoader instrumentDataLoader;
 
-    public BacktestResult execute(String instrumentName, StrategyBuilder strategyBuilder) {
+    public BacktestSummary execute(String instrumentName, StrategyBuilder strategyBuilder) {
         Instrument tradingIdentity = instrumentRepository.findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
         Map<Instrument, BarSeries> BarSeriesMap = instrumentDataLoader.loadData(instrumentName);
-        Strategy strategy = strategyBuilder.build(tradingIdentity, BarSeriesMap);
+        TradingStrategy strategy = strategyBuilder.build(tradingIdentity, BarSeriesMap);
 
-        BarSeriesManager seriesManager = new BarSeriesManager(BarSeriesMap.get(tradingIdentity));
-        TradingRecord tradingRecord = seriesManager.run(strategy, Order.OrderType.BUY, PrecisionNum.valueOf(1));
-        List<TradeRecord> trades = tradingRecord.getTrades().stream()
-            .map(this::mapTradeRecord)
-            .collect(Collectors.toList());
-        return new BacktestResult(backtest(BarSeriesMap.get(tradingIdentity), tradingRecord), trades);
-        
+        BarSeries barSeries = BarSeriesMap.get(tradingIdentity);
+        BarSeriesManager seriesManager = new BarSeriesManager(barSeries);
+        List<BacktestResult> results = new ArrayList<>();
+
+        Map<String, Map<?, ?>> summary = new HashMap<>();
+
+        if (strategy.getTradeDirection().isBuy()) {
+            BacktestResult backtestResult = runBacktestOnTa4jStrategy(tradingIdentity, barSeries,
+                strategy.getBuyStrategy(), seriesManager);
+            results.add(backtestResult);
+            summary.put("Buy", backtestResult.getAggregatesResults());
+
+        }
+        if (strategy.getTradeDirection().isSell()) {
+            BacktestResult backtestResult = runBacktestOnTa4jStrategy(tradingIdentity, barSeries,
+                strategy.getSellStrategy(), seriesManager);
+            results.add(backtestResult);
+            summary.put("Sell", backtestResult.getAggregatesResults());
+        }
+
+        return BacktestSummary.builder().results(results).summary(summary).build();
     }
 
-    private TradeRecord mapTradeRecord(Trade trade) {
+    private BacktestResult runBacktestOnTa4jStrategy(Instrument tradingIdentity,
+        BarSeries barSeries, Strategy strategy,
+        BarSeriesManager seriesManager) {
+        TradingRecord tradingRecord = seriesManager.run(strategy, Order.OrderType.BUY, PrecisionNum.valueOf(1));
+        List<TradeRecord> trades = tradingRecord.getTrades().stream()
+            .map(trade -> mapTradeRecord(trade, barSeries))
+            .collect(Collectors.toList());
+        return new BacktestResult(backtest(barSeries, tradingRecord), trades);
+    }
+
+    private TradeRecord mapTradeRecord(Trade trade, BarSeries barSeries) {
         return TradeRecord.builder()
-            .entry(buildOrder(trade.getEntry()))
-            .exit(buildOrder(trade.getExit()))
+            .entry(buildOrder(trade.getEntry(), barSeries))
+            .exit(buildOrder(trade.getExit(), barSeries))
             .profit(trade.getProfit().doubleValue()).build();
     }
 
-    private OrderRecord buildOrder(Order order) {
+    private OrderRecord buildOrder(Order order, BarSeries barSeries) {
         return OrderRecord.builder()
             .amount(order.getAmount().doubleValue())
             .cost(order.getCost().doubleValue())
@@ -55,6 +80,7 @@ public class BackTestingHandler {
             .netPrice(order.getNetPrice().doubleValue())
             .pricePerAsset(order.getPricePerAsset().doubleValue())
             .type(order.getType())
+            .dateTime(barSeries.getBar(order.getIndex()).getEndTime())
             .build();
     }
 

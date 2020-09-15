@@ -2,6 +2,7 @@ package com.dtech.kitecon.service;
 
 import com.dtech.kitecon.strategy.backtest.BackTestingHandler;
 import com.dtech.kitecon.strategy.backtest.BacktestResult;
+import com.dtech.kitecon.strategy.backtest.BacktestSummary;
 import com.dtech.kitecon.strategy.builder.StrategyBuilder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,7 +27,7 @@ public class StrategyService {
         strategyBuilderMap = strategyBuilders.stream().collect(Collectors.toMap(s -> s.getName(), s -> s));
     }
 
-    public BacktestResult testStrategy(String instrument, String strategyName) {
+    public BacktestSummary testStrategy(String instrument, String strategyName) {
         return backTestingHandler.execute(instrument, strategyBuilderMap.get(strategyName));
     }
 
