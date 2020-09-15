@@ -1,6 +1,7 @@
 package com.dtech.kitecon.strategy.builder;
 
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.strategy.TradeDirection;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.*;
 import org.ta4j.core.indicators.MACDIndicator;
@@ -19,14 +20,27 @@ import java.util.Map;
 @Component
 public class PivotPointReversalStrategyBuider extends BaseStrategyBuilder {
 
+
     @Override
-    public Strategy build(Instrument tradingIdentity, Map<Instrument, BarSeries> BarSeriesMap) {
-        return create3DaySmaUnderStrategy(BarSeriesMap.get(tradingIdentity));
+    public TradeDirection getTradeDirection() {
+        return TradeDirection.Both;
+    }
+
+    @Override
+    protected Strategy getSellStrategy(Instrument tradingIdentity,
+        Map<Instrument, BarSeries> barSeriesMap) {
+        return create3DaySmaUnderStrategy(barSeriesMap.get(tradingIdentity));
+    }
+
+    @Override
+    protected Strategy getBuyStrategy(Instrument tradingIdentity,
+        Map<Instrument, BarSeries> barSeriesMap) {
+        return create3DaySmaUnderSellStrategy(barSeriesMap.get(tradingIdentity));
     }
 
     @Override
     public String getName() {
-        return "PivotPointReversalBullish";
+        return "PivotPointReversal";
     }
 
     private static Strategy create3DaySmaUnderStrategy(BarSeries series) {
@@ -64,4 +78,27 @@ public class PivotPointReversalStrategyBuider extends BaseStrategyBuilder {
         );
     }
 
+
+    private static Strategy create3DaySmaUnderSellStrategy(BarSeries series) {
+        ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
+        OpenPriceIndicator openPriceIndicator1 = new OpenPriceIndicator(series);
+        HighestValueIndicator highestPrice = new HighestValueIndicator(new ClosePriceIndicator(series), 10);
+        PivotPointIndicator pivotPoints = new PivotPointIndicator(series, TimeLevel.BARBASED);
+        StandardReversalIndicator reversalIndicator = new StandardReversalIndicator(pivotPoints, PivotLevel.RESISTANCE_1);
+        MACDIndicator macdIndicator = new MACDIndicator(closePrice);
+        SMAIndicator tenSMA = new SMAIndicator(closePrice, 10);
+        SMAIndicator fiftySMA1 = new SMAIndicator(closePrice, 50);
+
+        Rule entryRule = new UnderIndicatorRule(reversalIndicator, highestPrice)
+            .and(new UnderIndicatorRule(closePrice, tenSMA))
+            .and(new UnderIndicatorRule(macdIndicator, tenSMA))
+            .and(new UnderIndicatorRule(openPriceIndicator1, reversalIndicator))
+            .and(new OverIndicatorRule(closePrice, fiftySMA1));
+
+        Rule exitRule = new StopGainRule(closePrice, -2.5)
+            .or(new StopLossRule(closePrice, -0.7))
+            .or(new TrailingStopLossRule(closePrice, PrecisionNum.valueOf(1)));
+
+        return new BaseStrategy (entryRule, exitRule);
+    }
 }

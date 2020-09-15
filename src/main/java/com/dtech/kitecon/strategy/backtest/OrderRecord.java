@@ -1,5 +1,6 @@
 package com.dtech.kitecon.strategy.backtest;
 
+import java.time.ZonedDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -40,5 +41,7 @@ public class OrderRecord {
    * Cost of executing the order
    */
   private Double cost;
+
+  private ZonedDateTime dateTime;
 
 }
