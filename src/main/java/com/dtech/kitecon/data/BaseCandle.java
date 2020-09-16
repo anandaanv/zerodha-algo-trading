@@ -10,6 +10,7 @@ import java.util.Date;
 @MappedSuperclass
 @Data
 @NoArgsConstructor
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"timestamp", "instrument"}))
 public class BaseCandle {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
