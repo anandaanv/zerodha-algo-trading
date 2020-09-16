@@ -78,7 +78,6 @@ public class DataDownloader {
   }
 
   private BaseCandle getBaseCandle(String interval) {
-    BaseCandle dbCandle = null;
     switch (interval) {
       case "day":
         return DailyCandle.builder().build();
