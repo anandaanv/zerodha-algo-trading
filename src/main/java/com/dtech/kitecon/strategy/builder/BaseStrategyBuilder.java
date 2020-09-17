@@ -2,12 +2,11 @@ package com.dtech.kitecon.strategy.builder;
 
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.strategy.TradingStrategy;
-import org.ta4j.core.Strategy;
-import org.ta4j.core.BarSeries;
-
 import java.util.Map;
+import org.ta4j.core.BarSeries;
+import org.ta4j.core.Strategy;
 
-public abstract class BaseStrategyBuilder implements StrategyBuilder{
+public abstract class BaseStrategyBuilder implements StrategyBuilder {
 
   @Override
   public TradingStrategy build(Instrument tradingIdentity,

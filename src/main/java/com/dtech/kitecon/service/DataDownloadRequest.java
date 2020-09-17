@@ -9,6 +9,7 @@ import lombok.Data;
 @AllArgsConstructor
 @Builder
 public class DataDownloadRequest {
+
   private Instrument instrument;
   private DateRange dateRange;
   private String interval;

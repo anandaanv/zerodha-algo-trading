@@ -5,7 +5,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import org.ta4j.core.Order.OrderType;
-import org.ta4j.core.num.Num;
 
 @Data
 @AllArgsConstructor

@@ -3,13 +3,14 @@ package com.dtech.kitecon.controller;
 
 import com.dtech.kitecon.service.DataFetchService;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.io.IOException;
 
 @RestController
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
@@ -23,10 +24,17 @@ public class DataFetchController {
   }
 
   @GetMapping("/fetch/{instrument}")
-  public void fetchData(@PathVariable String instrument) throws IOException, KiteException {
-    dataFetchService.downloadHistoricalData15Mins(instrument);
-    dataFetchService.downloadHistoricalData5Mins(instrument);
-    dataFetchService.downloadHistoricalDataDaily(instrument);
+  public void fetchData(@PathVariable String instrument) {
+    List<String> intervals = Arrays.asList("day", "15minute", "5minute");
+    String[] exchanges = new String[]{"NSE", "NFO"};
+    intervals
+        .forEach(interval -> dataFetchService.downloadCandleData(instrument, interval, exchanges));
+  }
+
+  @GetMapping("/fetch-interval/{instrument}/{interval}")
+  public void fetchDataInterval(@PathVariable String instrument, @PathVariable String interval) {
+    String[] exchanges = new String[]{"NSE", "NFO"};
+    dataFetchService.downloadCandleData(instrument, interval, exchanges);
   }
 
   @GetMapping("/fetch/instruments/all")

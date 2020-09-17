@@ -13,20 +13,20 @@ import org.ta4j.core.BarSeries;
 @Component
 public class InstrumentDataLoader {
 
-    private final InstrumentRepository instrumentRepository;
-    private final BarsLoader barsLoader;
+  private final InstrumentRepository instrumentRepository;
+  private final BarsLoader barsLoader;
 
-    public Map<Instrument, BarSeries> loadData(String instrumentName) {
-        String[] exchanges = new String[]{"NSE", "NFO"};
-        List<Instrument> instruments = getRelaventInstruments(instrumentName, exchanges);
-        return instruments.stream()
-                .collect(Collectors.toMap(instrument ->
-                        instrument, instrument -> barsLoader.loadInstrumentSeries(instrument)));
-    }
+  public Map<Instrument, BarSeries> loadData(String instrumentName) {
+    String[] exchanges = new String[]{"NSE", "NFO"};
+    List<Instrument> instruments = getRelaventInstruments(instrumentName, exchanges);
+    return instruments.stream()
+        .collect(Collectors.toMap(instrument ->
+            instrument, instrument -> barsLoader.loadInstrumentSeries(instrument)));
+  }
 
-    private List<Instrument> getRelaventInstruments(String instrument, String[] exchanges) {
-        return instrumentRepository
-                .findAllByTradingsymbolStartingWithAndExchangeIn(instrument, exchanges);
-    }
+  private List<Instrument> getRelaventInstruments(String instrument, String[] exchanges) {
+    return instrumentRepository
+        .findAllByTradingsymbolStartingWithAndExchangeIn(instrument, exchanges);
+  }
 
 }

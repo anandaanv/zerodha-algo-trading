@@ -6,7 +6,8 @@ import com.dtech.kitecon.data.DailyCandle;
 import com.dtech.kitecon.data.FifteenMinuteCandle;
 import com.dtech.kitecon.data.FiveMinuteCandle;
 import com.dtech.kitecon.data.Instrument;
-import com.dtech.kitecon.repository.BaseCandleRepository;
+import com.dtech.kitecon.data.OneMinuteCandle;
+import com.dtech.kitecon.repository.CandleRepository;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
 import java.io.IOException;
@@ -32,25 +33,29 @@ import org.springframework.stereotype.Component;
 public class DataDownloader {
 
   private final KiteConnectConfig kiteConnectConfig;
+  private final CandleRepository candleRepository;
 
   @Transactional
-  public void processDownload(BaseCandleRepository candleRepository, DataDownloadRequest downloadRequest)
+  public void processDownload(DataDownloadRequest downloadRequest)
       throws KiteException, IOException {
     log.info("Download data for " + downloadRequest);
+    String interval = downloadRequest.getInterval();
     DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
     DateRange dateRange = downloadRequest.getDateRange();
-    candleRepository.deleteByInstrumentAndTimestampBetween(downloadRequest.getInstrument(),
-        dateRange.getStartDate().toLocalDateTime(),
-        dateRange.getEndDate().toLocalDateTime());
+    candleRepository
+        .deleteByInstrumentAndTimestampBetween(interval, downloadRequest.getInstrument(),
+            dateRange.getStartDate().toLocalDateTime(),
+            dateRange.getEndDate().toLocalDateTime());
     HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
         dateRange.getStartDate().toInstant()),
         Date.from(dateRange.getEndDate().toInstant()),
         String.valueOf(downloadRequest.getInstrument().getInstrument_token()),
-        downloadRequest.getInterval(), false, true);
+        interval, false, true);
     List<BaseCandle> databaseCandles = candles.dataArrayList.stream().map(candle ->
     {
       try {
-        return buildCandle(downloadRequest.getInstrument(), dateFormat, candle, downloadRequest.getInterval());
+        return buildCandle(downloadRequest.getInstrument(), dateFormat, candle,
+            interval);
       } catch (ParseException e) {
         e.printStackTrace();
         return null;
@@ -58,12 +63,13 @@ public class DataDownloader {
     })
         .filter(Objects::nonNull)
         .collect(Collectors.toList());
-    candleRepository.saveAll(databaseCandles);
+    candleRepository.saveAll(interval, databaseCandles);
 
 
   }
 
-  private BaseCandle buildCandle(Instrument instrument, DateTimeFormatter dateFormat, HistoricalData candle,
+  private BaseCandle buildCandle(Instrument instrument, DateTimeFormatter dateFormat,
+      HistoricalData candle,
       String interval) throws ParseException {
     BaseCandle dbCandle = getBaseCandle(interval);
     dbCandle.setInstrument(instrument);
@@ -85,7 +91,10 @@ public class DataDownloader {
         return FifteenMinuteCandle.builder().build();
       case "5minute":
         return FiveMinuteCandle.builder().build();
-      default: throw new RuntimeException("Unknown interval");
+      case "minute":
+        return OneMinuteCandle.builder().build();
+      default:
+        throw new RuntimeException("Unknown interval");
     }
   }
 

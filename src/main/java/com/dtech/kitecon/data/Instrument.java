@@ -1,16 +1,13 @@
 package com.dtech.kitecon.data;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.Id;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.Id;
-import java.util.Date;
 
 @Entity
 @Data
@@ -18,6 +15,7 @@ import java.util.Date;
 @AllArgsConstructor
 @NoArgsConstructor
 public class Instrument {
+
   @Id
   private Long instrument_token;
   @Column
