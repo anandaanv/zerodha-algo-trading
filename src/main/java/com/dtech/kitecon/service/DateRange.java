@@ -11,6 +11,7 @@ import lombok.Data;
 @Builder
 @Data
 public class DateRange {
+
   private ZonedDateTime startDate;
   private ZonedDateTime endDate;
 

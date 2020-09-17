@@ -12,7 +12,8 @@ import lombok.NoArgsConstructor;
 public class FiveMinuteCandle extends BaseCandle {
 
   @Builder
-  public FiveMinuteCandle(Double open, Double high, Double low, Double close, long volume, long oi, LocalDateTime timestamp, Instrument instrument) {
+  public FiveMinuteCandle(Double open, Double high, Double low, Double close, long volume, long oi,
+      LocalDateTime timestamp, Instrument instrument) {
     super(open, high, low, close, volume, oi, timestamp, instrument);
   }
 }

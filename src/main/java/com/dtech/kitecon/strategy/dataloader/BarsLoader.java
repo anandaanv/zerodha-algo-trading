@@ -45,31 +45,32 @@ import org.ta4j.core.BaseBarSeries;
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class BarsLoader {
 
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    private final FifteenMinuteCandleRepository fifteenMinuteCandleRepository;
+  private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+  private final FifteenMinuteCandleRepository fifteenMinuteCandleRepository;
 
-    /**
-     * @return a time series from Apple Inc. bars.
-     */
+  /**
+   * @return a time series from Apple Inc. bars.
+   */
 
-    public BarSeries loadInstrumentSeries(Instrument instrument) {
+  public BarSeries loadInstrumentSeries(Instrument instrument) {
 
-        List<FifteenMinuteCandle> candles = fifteenMinuteCandleRepository.findAllByInstrument(instrument);
+    List<FifteenMinuteCandle> candles = fifteenMinuteCandleRepository
+        .findAllByInstrument(instrument);
 
-        candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
+    candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
 
-        BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
-        candles.forEach(candle -> {
-            ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
-            double open = candle.getOpen();
-            double high = candle.getHigh();
-            double low = candle.getLow();
-            double close = candle.getClose();
-            double volume = candle.getVolume();
+    BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
+    candles.forEach(candle -> {
+      ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
+      double open = candle.getOpen();
+      double high = candle.getHigh();
+      double low = candle.getLow();
+      double close = candle.getClose();
+      double volume = candle.getVolume();
 
-            series.addBar(date, open, high, low, close, volume);
-        });
-        return series;
-    }
+      series.addBar(date, open, high, low, close, volume);
+    });
+    return series;
+  }
 
 }
