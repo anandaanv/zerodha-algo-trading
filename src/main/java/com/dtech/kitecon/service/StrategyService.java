@@ -3,6 +3,7 @@ package com.dtech.kitecon.service;
 import com.dtech.kitecon.strategy.backtest.BackTestingHandler;
 import com.dtech.kitecon.strategy.backtest.BacktestSummary;
 import com.dtech.kitecon.strategy.builder.StrategyBuilder;
+import com.dtech.kitecon.strategy.sets.StrategySet;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -14,18 +15,11 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class StrategyService {
 
-  private final Set<StrategyBuilder> strategyBuilders;
   private final BackTestingHandler backTestingHandler;
-  private Map<String, StrategyBuilder> strategyBuilderMap;
-
-  @PostConstruct
-  public void buildStrategyBuilderMap() {
-    strategyBuilderMap = strategyBuilders.stream()
-        .collect(Collectors.toMap(s -> s.getName(), s -> s));
-  }
+  private final StrategySet strategySet;
 
   public BacktestSummary testStrategy(String instrument, String strategyName) {
-    return backTestingHandler.execute(instrument, strategyBuilderMap.get(strategyName));
+    return backTestingHandler.execute(instrument, strategySet.getStrategy(strategyName));
   }
 
 }

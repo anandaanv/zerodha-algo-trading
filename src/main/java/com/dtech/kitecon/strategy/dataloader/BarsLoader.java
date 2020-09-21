@@ -25,14 +25,19 @@ package com.dtech.kitecon.strategy.dataloader;
 
 import com.dtech.kitecon.data.BaseCandle;
 import com.dtech.kitecon.data.FifteenMinuteCandle;
+import com.dtech.kitecon.data.FiveMinuteCandle;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.market.fetch.DataFetchException;
+import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.FifteenMinuteCandleRepository;
+import com.dtech.kitecon.repository.FiveMinuteCandleRepository;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.BarSeries;
@@ -43,10 +48,10 @@ import org.ta4j.core.BaseBarSeries;
  */
 @Component
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
-public class BarsLoader {
+public abstract class BarsLoader {
 
   private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-  private final FifteenMinuteCandleRepository fifteenMinuteCandleRepository;
+  private final CandleRepository fifteenMinuteCandleRepository;
 
   /**
    * @return a time series from Apple Inc. bars.
@@ -54,23 +59,41 @@ public class BarsLoader {
 
   public BarSeries loadInstrumentSeries(Instrument instrument) {
 
-    List<FifteenMinuteCandle> candles = fifteenMinuteCandleRepository
-        .findAllByInstrument(instrument);
+    List<? extends BaseCandle> candles = fifteenMinuteCandleRepository
+        .findAllByInstrument("15minute", instrument);
 
+    return getBarSeries(instrument, candles);
+  }
+
+  protected BarSeries getBarSeries(Instrument instrument, List<? extends BaseCandle> candles) {
     candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
 
     BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
     candles.forEach(candle -> {
-      ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
-      double open = candle.getOpen();
-      double high = candle.getHigh();
-      double low = candle.getLow();
-      double close = candle.getClose();
-      double volume = candle.getVolume();
-
-      series.addBar(date, open, high, low, close, volume);
+      addBarToSeries(series, candle);
     });
     return series;
+  }
+
+  protected void addBarToSeries(BarSeries series, BaseCandle candle) {
+    ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
+    double open = candle.getOpen();
+    double high = candle.getHigh();
+    double low = candle.getLow();
+    double close = candle.getClose();
+    double volume = candle.getVolume();
+    series.addBar(date, open, high, low, close, volume);
+  }
+
+  /**
+   * @return a time series from Apple Inc. bars.
+   */
+  public BarSeries loadInstrumentSeries(Instrument instrument, ZonedDateTime startDate)
+      throws DataFetchException {
+
+    List<? extends BaseCandle> candles = fifteenMinuteCandleRepository
+        .findAllByInstrument("15minute", instrument);
+    return getBarSeries(instrument, candles);
   }
 
 }

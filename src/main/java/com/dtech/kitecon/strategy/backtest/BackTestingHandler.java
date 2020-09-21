@@ -17,6 +17,7 @@ import org.ta4j.core.AnalysisCriterion;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BarSeriesManager;
 import org.ta4j.core.Order;
+import org.ta4j.core.Order.OrderType;
 import org.ta4j.core.Strategy;
 import org.ta4j.core.Trade;
 import org.ta4j.core.TradingRecord;
@@ -54,14 +55,14 @@ public class BackTestingHandler {
 
     if (strategy.getTradeDirection().isBuy()) {
       BacktestResult backtestResult = runBacktestOnTa4jStrategy(tradingIdentity, barSeries,
-          strategy.getBuyStrategy(), seriesManager);
+          strategy.getBuyStrategy(), seriesManager, OrderType.BUY);
       results.add(backtestResult);
       summary.put("Buy", backtestResult.getAggregatesResults());
 
     }
     if (strategy.getTradeDirection().isSell()) {
       BacktestResult backtestResult = runBacktestOnTa4jStrategy(tradingIdentity, barSeries,
-          strategy.getSellStrategy(), seriesManager);
+          strategy.getSellStrategy(), seriesManager, OrderType.SELL);
       results.add(backtestResult);
       summary.put("Sell", backtestResult.getAggregatesResults());
     }
@@ -71,9 +72,9 @@ public class BackTestingHandler {
 
   private BacktestResult runBacktestOnTa4jStrategy(Instrument tradingIdentity,
       BarSeries barSeries, Strategy strategy,
-      BarSeriesManager seriesManager) {
+      BarSeriesManager seriesManager, OrderType orderType) {
     TradingRecord tradingRecord = seriesManager
-        .run(strategy, Order.OrderType.BUY, PrecisionNum.valueOf(1));
+        .run(strategy, orderType, PrecisionNum.valueOf(1));
     List<TradeRecord> trades = tradingRecord.getTrades().stream()
         .map(trade -> mapTradeRecord(trade, barSeries))
         .collect(Collectors.toList());
