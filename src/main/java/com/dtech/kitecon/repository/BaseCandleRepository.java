@@ -3,6 +3,7 @@ package com.dtech.kitecon.repository;
 import com.dtech.kitecon.data.BaseCandle;
 import com.dtech.kitecon.data.Instrument;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.repository.NoRepositoryBean;
@@ -11,6 +12,8 @@ import org.springframework.data.repository.NoRepositoryBean;
 public interface BaseCandleRepository<T extends BaseCandle, ID> extends JpaRepository<T, ID> {
 
   List<T> findAllByInstrument(Instrument instrument);
+
+  List<T> findAllByInstrumentAndTimestampAfter(Instrument instrument, ZonedDateTime startDate);
 
   T findFirstByInstrumentOrderByTimestampDesc(Instrument instrument);
 

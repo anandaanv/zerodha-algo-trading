@@ -37,7 +37,13 @@ public class DataFetchController {
     dataFetchService.downloadCandleData(instrument, interval, exchanges);
   }
 
-  @GetMapping("/fetch/instruments/all")
+  @GetMapping("/update-interval/{instrument}/{interval}")
+  public void updateCandleDataToLatest(@PathVariable String instrument, @PathVariable String interval) {
+    String[] exchanges = new String[]{"NSE", "NFO"};
+    dataFetchService.updateInstrumentToLatest(instrument, interval, exchanges);
+  }
+
+    @GetMapping("/fetch/instruments/all")
   public void fetchAllInstruments() throws IOException, KiteException {
     dataFetchService.downloadAllInstruments();
   }
