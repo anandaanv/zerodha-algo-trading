@@ -25,12 +25,12 @@ public class ZerodhaOrderManager implements OrderManager {
     OrderParams params = new OrderParams();
     params.exchange = "NSE";
     params.tradingsymbol = instrument.getTradingsymbol();
-    params.transactionType = orderType;
+    params.transactionType = orderType.toUpperCase();
     params.quantity = amount;
     params.price = price;
     params.product = "MIS";
-    params.orderType = "NRML";
-    params.validity = "IOC";
+    params.orderType = "LIMIT";
+    params.validity = "DAY";
     params.disclosedQuantity = amount;
     params.parentOrderId = UUID.randomUUID().toString();
     try {
