@@ -67,7 +67,6 @@ public abstract class BarsLoader {
 
   protected BarSeries getBarSeries(Instrument instrument, List<? extends BaseCandle> candles) {
     candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
-
     BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
     candles.forEach(candle -> {
       addBarToSeries(series, candle);

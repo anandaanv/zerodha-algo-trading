@@ -9,14 +9,14 @@ import com.dtech.kitecon.strategy.builder.StrategyBuilder;
 import com.dtech.kitecon.strategy.dataloader.InstrumentDataLoader;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Order.OrderType;
 
 @RequiredArgsConstructor
-@Component
 public class ProductionHandler {
 
   private final InstrumentRepository instrumentRepository;
@@ -26,9 +26,9 @@ public class ProductionHandler {
 
   String[] exchanges = new String[]{"NSE", "NFO"};
 
-  private Map<String, ProductionStrategyRunner> runners = new HashMap<>();
+  private final Timer executionTimer = new Timer();
 
-  public String startStrategy(String instrumentName, StrategyBuilder strategyBuilder,
+  public void runStrategy(String instrumentName, StrategyBuilder strategyBuilder,
       String direction) {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
@@ -38,26 +38,42 @@ public class ProductionHandler {
     if (direction.equals("Buy")) {
       TradeDirection buy = TradeDirection.Buy;
       OrderType orderType = OrderType.BUY;
-      return startExecution(tradingIdentity, strategy, barSeries, buy, orderType);
+      startExecution(tradingIdentity, strategy, barSeries, buy, orderType);
     }
     if (direction.equals("Sell")) {
       TradeDirection buy = TradeDirection.Sell;
       OrderType orderType = OrderType.SELL;
-      return startExecution(tradingIdentity, strategy, barSeries, buy, orderType);
+      startExecution(tradingIdentity, strategy, barSeries, buy, orderType);
     }
-    throw new RuntimeException("invalid data provided for trade direction");
   }
 
-  private String startExecution(Instrument tradingIdentity, TradingStrategy strategy,
+  private void startExecution(Instrument tradingIdentity, TradingStrategy strategy,
       BarSeries barSeries, TradeDirection buy, OrderType orderType) {
     AlgoTradingRecord record = new ProductionTradingRecord(orderType, ordermanager,
         tradingIdentity);
     ProductionStrategyRunner runner = new ProductionStrategyRunner(barSeries, strategy, record,
         productionSeriesManager, buy);
-    runner.startStrategy();
-    String uuid = UUID.randomUUID().toString();
-    runners.put(uuid, runner);
-    return uuid;
+    runner.exec(barSeries, strategy);
+  }
+
+
+  public void startStrategy(String instrumentName, StrategyBuilder strategyBuilder,
+      String direction) {
+    executionTimer.schedule(getTimerTask(instrumentName, strategyBuilder, direction), 0, 60 * 1000);
+  }
+
+  private TimerTask getTimerTask(String instrumentName, StrategyBuilder strategyBuilder,
+      String direction) {
+    return new TimerTask() {
+      @Override
+      public void run() {
+        runStrategy(instrumentName, strategyBuilder, direction);
+      }
+    };
+  }
+
+  public void stopStrategy() {
+    executionTimer.cancel();
   }
 
 
