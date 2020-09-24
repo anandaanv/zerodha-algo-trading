@@ -24,20 +24,15 @@
 package com.dtech.kitecon.strategy.dataloader;
 
 import com.dtech.kitecon.data.BaseCandle;
-import com.dtech.kitecon.data.FifteenMinuteCandle;
-import com.dtech.kitecon.data.FiveMinuteCandle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.market.fetch.DataFetchException;
 import com.dtech.kitecon.repository.CandleRepository;
-import com.dtech.kitecon.repository.FifteenMinuteCandleRepository;
-import com.dtech.kitecon.repository.FiveMinuteCandleRepository;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.BarSeries;
@@ -51,7 +46,7 @@ import org.ta4j.core.BaseBarSeries;
 public abstract class BarsLoader {
 
   private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-  private final CandleRepository fifteenMinuteCandleRepository;
+  private final CandleRepository candleRepository;
 
   /**
    * @return a time series from Apple Inc. bars.
@@ -59,7 +54,7 @@ public abstract class BarsLoader {
 
   public BarSeries loadInstrumentSeries(Instrument instrument) {
 
-    List<? extends BaseCandle> candles = fifteenMinuteCandleRepository
+    List<? extends BaseCandle> candles = candleRepository
         .findAllByInstrument("15minute", instrument);
 
     return getBarSeries(instrument, candles);
@@ -68,9 +63,7 @@ public abstract class BarsLoader {
   protected BarSeries getBarSeries(Instrument instrument, List<? extends BaseCandle> candles) {
     candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
     BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
-    candles.forEach(candle -> {
-      addBarToSeries(series, candle);
-    });
+    candles.forEach(candle -> addBarToSeries(series, candle));
     return series;
   }
 
@@ -90,7 +83,7 @@ public abstract class BarsLoader {
   public BarSeries loadInstrumentSeries(Instrument instrument, ZonedDateTime startDate)
       throws DataFetchException {
 
-    List<? extends BaseCandle> candles = fifteenMinuteCandleRepository
+    List<? extends BaseCandle> candles = candleRepository
         .findAllByInstrument("15minute", instrument);
     return getBarSeries(instrument, candles);
   }

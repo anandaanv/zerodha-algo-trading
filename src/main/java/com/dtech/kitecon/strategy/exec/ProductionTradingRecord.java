@@ -15,12 +15,14 @@ public class ProductionTradingRecord extends BaseTradingRecord implements AlgoTr
   private final Instrument instrument;
   private int actualQuantity = 0;
   private String orderId = null;
+  private OrderType orderType = null;
 
   public ProductionTradingRecord(OrderType orderType,
       OrderManager ordermanager, Instrument instrument) {
     super(orderType);
     this.ordermanager = ordermanager;
     this.instrument = instrument;
+    this.orderType = orderType;
   }
 
   public void operate(int index, Num price, Num amount) {
@@ -35,10 +37,10 @@ public class ProductionTradingRecord extends BaseTradingRecord implements AlgoTr
   }
 
   private OrderType getOrderType() {
-    if (getCurrentTrade().isNew()) {
-      return getCurrentTrade().getExit().getType();
+    if (getCurrentTrade().isOpened()) {
+      return orderType;
     } else {
-      return getCurrentTrade().getEntry().getType();
+      return orderType.complementType();
     }
   }
 

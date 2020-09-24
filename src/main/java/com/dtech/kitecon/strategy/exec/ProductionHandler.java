@@ -26,7 +26,23 @@ public class ProductionHandler {
 
   String[] exchanges = new String[]{"NSE", "NFO"};
 
+  private AlgoTradingRecord record;
+
   private final Timer executionTimer = new Timer();
+
+  public void initialise(String instrumentName, String direction) {
+    Instrument tradingIdentity = instrumentRepository
+        .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
+    OrderType orderType = null;
+    if (direction.equals("Buy")) {
+      orderType = OrderType.BUY;
+    }
+    if (direction.equals("Sell")) {
+      orderType = OrderType.SELL;
+    }
+    record = new ProductionTradingRecord(orderType, ordermanager,
+        tradingIdentity);
+  }
 
   public void runStrategy(String instrumentName, StrategyBuilder strategyBuilder,
       String direction) {
@@ -49,8 +65,6 @@ public class ProductionHandler {
 
   private void startExecution(Instrument tradingIdentity, TradingStrategy strategy,
       BarSeries barSeries, TradeDirection buy, OrderType orderType) {
-    AlgoTradingRecord record = new ProductionTradingRecord(orderType, ordermanager,
-        tradingIdentity);
     ProductionStrategyRunner runner = new ProductionStrategyRunner(barSeries, strategy, record,
         productionSeriesManager, buy);
     runner.exec(barSeries, strategy);
