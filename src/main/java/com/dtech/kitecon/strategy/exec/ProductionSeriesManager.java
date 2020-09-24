@@ -13,12 +13,13 @@ public class ProductionSeriesManager {
 
   public TradingRecord run(BarSeries barSeries, Strategy strategy,
       TradingRecord tradingRecord, Integer quantity) {
-    int index = barSeries.getBarData().size() - 1;
+    int index = barSeries.getEndIndex();
     log.trace("Running strategy (indexes: {} -> {}): {} (starting with {})",
         index, index, strategy,
         tradingRecord.getCurrentTrade());
 
-    if (strategy.shouldOperate(index, tradingRecord)) {
+    boolean shouldOperate = strategy.shouldOperate(index, tradingRecord);
+    if (shouldOperate) {
       tradingRecord.operate(index, barSeries.getBar(index).getClosePrice(),
           PrecisionNum.valueOf(quantity));
     }

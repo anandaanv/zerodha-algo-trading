@@ -32,15 +32,17 @@ public class ExecutionService {
     StrategyBuilder strategy = strategySet.getStrategy(strategyName);
     TradeInfo key = TradeInfo.builder().direction(direction).symbol(instrumentName).build();
     ProductionHandler handler = tradeHandlers.computeIfAbsent(key,
-        tradeInfo -> getProductionHandler(uuid));
+        tradeInfo -> getProductionHandler(uuid, instrumentName, direction));
     handler.startStrategy(instrumentName, strategy, direction);
     return uuid;
   }
 
-  private ProductionHandler getProductionHandler(String uuid) {
+  private ProductionHandler getProductionHandler(String uuid, String instrumentName,
+      String direction) {
     ProductionHandler handler = new ProductionHandler(instrumentRepository, instrumentDataLoader,
         ordermanager, productionSeriesManager);
     runners.put(uuid, handler);
+    handler.initialise(instrumentName, direction);
     return handler;
   }
 

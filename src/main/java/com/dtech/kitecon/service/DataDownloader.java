@@ -7,6 +7,8 @@ import com.dtech.kitecon.repository.CandleRepository;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
 import java.io.IOException;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
@@ -36,13 +38,15 @@ public class DataDownloader {
     DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
     DateRange dateRange = downloadRequest.getDateRange();
     Instrument instrument = downloadRequest.getInstrument();
+    ZonedDateTime startDate = dateRange.getStartDate().toLocalDate().atStartOfDay(ZoneId.systemDefault());
+    ZonedDateTime endDate = dateRange.getEndDate().toLocalDate().atStartOfDay(ZoneId.systemDefault());
     candleRepository
         .deleteByInstrumentAndTimestampBetween(interval, instrument,
-            dateRange.getStartDate().toLocalDateTime(),
-            dateRange.getEndDate().toLocalDateTime());
+            startDate.toLocalDateTime(),
+            endDate.toLocalDateTime());
     HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
-        dateRange.getStartDate().toInstant()),
-        Date.from(dateRange.getEndDate().toInstant()),
+        startDate.toInstant()),
+        Date.from(endDate.toInstant()),
         String.valueOf(instrument.getInstrument_token()),
         interval, false, true);
     List<BaseCandle> databaseCandles = candleFacade.buildCandlesFromOLSHStream(
