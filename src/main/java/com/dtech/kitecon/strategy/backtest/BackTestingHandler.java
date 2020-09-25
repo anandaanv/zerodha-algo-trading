@@ -1,15 +1,22 @@
 package com.dtech.kitecon.strategy.backtest;
 
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.data.StrategyParameters;
+import com.dtech.kitecon.misc.StrategyEnvironment;
 import com.dtech.kitecon.repository.InstrumentRepository;
+import com.dtech.kitecon.repository.StrategyParametersRepository;
+import com.dtech.kitecon.strategy.TradeDirection;
 import com.dtech.kitecon.strategy.TradingStrategy;
 import com.dtech.kitecon.strategy.builder.StrategyBuilder;
+import com.dtech.kitecon.strategy.builder.StrategyConfig;
 import com.dtech.kitecon.strategy.dataloader.InstrumentDataLoader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -38,14 +45,21 @@ import org.ta4j.core.num.PrecisionNum;
 public class BackTestingHandler {
 
   private final InstrumentRepository instrumentRepository;
+  private final StrategyParametersRepository strategyParametersRepository;
   private final InstrumentDataLoader instrumentDataLoader;
   String[] exchanges = new String[]{"NSE", "NFO"};
 
   public BacktestSummary execute(String instrumentName, StrategyBuilder strategyBuilder) {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
+    StrategyEnvironment strategyEnvironment = StrategyEnvironment.DEV;
+
+    StrategyConfig config = getStrategyConfig(instrumentName,
+        strategyBuilder, strategyEnvironment);
+
     Map<Instrument, BarSeries> BarSeriesMap = instrumentDataLoader.loadData(instrumentName);
-    TradingStrategy strategy = strategyBuilder.build(tradingIdentity, BarSeriesMap);
+
+    TradingStrategy strategy = strategyBuilder.build(tradingIdentity, BarSeriesMap, config);
 
     BarSeries barSeries = BarSeriesMap.get(tradingIdentity);
     BarSeriesManager seriesManager = new BarSeriesManager(barSeries);
@@ -68,6 +82,16 @@ public class BackTestingHandler {
     }
 
     return BacktestSummary.builder().results(results).summary(summary).build();
+  }
+
+  public StrategyConfig getStrategyConfig(String instrumentName, StrategyBuilder strategyBuilder,
+      StrategyEnvironment strategyEnvironment) {
+    List<StrategyParameters> strategyParameters = strategyParametersRepository
+        .findByStrategyNameAndInstrumentNameAndEnvironment(strategyBuilder.getName(),
+            instrumentName,
+            strategyEnvironment);
+    StrategyConfig config = StrategyConfig.builder().params(strategyParameters).build();
+    return config;
   }
 
   private BacktestResult runBacktestOnTa4jStrategy(Instrument tradingIdentity,

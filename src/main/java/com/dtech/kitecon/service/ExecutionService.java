@@ -2,6 +2,7 @@ package com.dtech.kitecon.service;
 
 import com.dtech.kitecon.market.orders.OrderManager;
 import com.dtech.kitecon.repository.InstrumentRepository;
+import com.dtech.kitecon.repository.StrategyParametersRepository;
 import com.dtech.kitecon.strategy.builder.StrategyBuilder;
 import com.dtech.kitecon.strategy.dataloader.InstrumentDataLoader;
 import com.dtech.kitecon.strategy.exec.ProductionHandler;
@@ -11,7 +12,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,6 +23,7 @@ public class ExecutionService {
   private final InstrumentDataLoader instrumentDataLoader;
   private final OrderManager ordermanager;
   private final ProductionSeriesManager productionSeriesManager;
+  private final StrategyParametersRepository strategyParametersRepository;
 
   private Map<String, ProductionHandler> runners = new HashMap<String, ProductionHandler>();
   private Map<TradeInfo, ProductionHandler> tradeHandlers = new HashMap<TradeInfo, ProductionHandler>();
@@ -40,7 +41,7 @@ public class ExecutionService {
   private ProductionHandler getProductionHandler(String uuid, String instrumentName,
       String direction) {
     ProductionHandler handler = new ProductionHandler(instrumentRepository, instrumentDataLoader,
-        ordermanager, productionSeriesManager);
+        ordermanager, productionSeriesManager, strategyParametersRepository);
     runners.put(uuid, handler);
     handler.initialise(instrumentName, direction);
     return handler;

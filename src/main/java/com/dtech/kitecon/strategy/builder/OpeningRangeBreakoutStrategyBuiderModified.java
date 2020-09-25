@@ -8,15 +8,11 @@ import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseStrategy;
 import org.ta4j.core.Strategy;
 import org.ta4j.core.indicators.EMAIndicator;
-import org.ta4j.core.indicators.SMAIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
-import org.ta4j.core.indicators.helpers.DifferenceRatioIndicator;
-import org.ta4j.core.indicators.helpers.OpenPriceIndicator;
 import org.ta4j.core.indicators.pivotpoints.TimeLevel;
 import org.ta4j.core.indicators.range.LastCandleOfPeriod;
 import org.ta4j.core.indicators.range.OpeningRangeHigh;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
-import org.ta4j.core.indicators.range.TimeOfCandle;
 import org.ta4j.core.num.PrecisionNum;
 import org.ta4j.core.trading.rules.CrossedDownIndicatorRule;
 import org.ta4j.core.trading.rules.CrossedUpIndicatorRule;
@@ -73,13 +69,15 @@ public class OpeningRangeBreakoutStrategyBuiderModified extends BaseStrategyBuil
 
   @Override
   public Strategy getBuyStrategy(Instrument tradingIdentity,
-      Map<Instrument, BarSeries> BarSeriesMap) {
+      Map<Instrument, BarSeries> BarSeriesMap,
+      Map<String, String> config) {
     return createOpeningPriceBreakoutBullish(BarSeriesMap.get(tradingIdentity));
   }
 
   @Override
   public Strategy getSellStrategy(Instrument tradingIdentity,
-      Map<Instrument, BarSeries> BarSeriesMap) {
+      Map<Instrument, BarSeries> BarSeriesMap,
+      Map<String, String> sell) {
     return createOpeningPriceBreakoutBearish(BarSeriesMap.get(tradingIdentity));
   }
 
