@@ -19,18 +19,20 @@ import org.springframework.stereotype.Component;
 
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 @Component
-public class ZerodhaDataFetch {
+public class ZerodhaDataFetch implements MarketDataFetch{
 
   private final KiteConnectConfig kiteConnectConfig;
   private final CandleFacade candleFacade;
 
   DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
 
+  @Override
   public String getProfile() throws IOException, KiteException {
     Profile profile = kiteConnectConfig.getKiteConnect().getProfile();
     return profile.userName;
   }
 
+  @Override
   public void fetch(DateRange dateRange, String instrumentToken, String interval)
       throws DataFetchException {
     try {
@@ -44,6 +46,7 @@ public class ZerodhaDataFetch {
     }
   }
 
+  @Override
   public List<BaseCandle> fetchTodaysData(Instrument instrument, String interval)
       throws DataFetchException {
     try {

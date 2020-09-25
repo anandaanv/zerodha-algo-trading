@@ -10,7 +10,8 @@ public interface StrategyBuilder {
 
   TradeDirection getTradeDirection();
 
-  TradingStrategy build(Instrument tradingIdentity, Map<Instrument, BarSeries> BarSeriesMap);
-
   String getName();
+
+  TradingStrategy build(Instrument tradingIdentity,
+      Map<Instrument, BarSeries> barSeriesMap, StrategyConfig config);
 }

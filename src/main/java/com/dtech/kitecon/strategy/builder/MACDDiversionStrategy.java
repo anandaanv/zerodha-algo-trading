@@ -38,13 +38,15 @@ public class MACDDiversionStrategy extends BaseStrategyBuilder {
 
   @Override
   protected Strategy getSellStrategy(Instrument tradingIdentity,
-      Map<Instrument, BarSeries> barSeriesMap) {
+      Map<Instrument, BarSeries> barSeriesMap,
+      Map<String, String> sell) {
     return null;
   }
 
   @Override
   public Strategy getBuyStrategy(Instrument tradingIdentity,
-      Map<Instrument, BarSeries> BarSeriesMap) {
+      Map<Instrument, BarSeries> BarSeriesMap,
+      Map<String, String> config) {
     return create3DaySmaUnderStrategy(BarSeriesMap.get(tradingIdentity));
   }
 

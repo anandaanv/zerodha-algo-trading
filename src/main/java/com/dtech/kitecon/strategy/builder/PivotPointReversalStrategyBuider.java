@@ -98,13 +98,15 @@ public class PivotPointReversalStrategyBuider extends BaseStrategyBuilder {
 
   @Override
   protected Strategy getSellStrategy(Instrument tradingIdentity,
-      Map<Instrument, BarSeries> barSeriesMap) {
+      Map<Instrument, BarSeries> barSeriesMap,
+      Map<String, String> sell) {
     return create3DaySmaUnderStrategy(barSeriesMap.get(tradingIdentity));
   }
 
   @Override
   protected Strategy getBuyStrategy(Instrument tradingIdentity,
-      Map<Instrument, BarSeries> barSeriesMap) {
+      Map<Instrument, BarSeries> barSeriesMap,
+      Map<String, String> config) {
     return create3DaySmaUnderSellStrategy(barSeriesMap.get(tradingIdentity));
   }
 
