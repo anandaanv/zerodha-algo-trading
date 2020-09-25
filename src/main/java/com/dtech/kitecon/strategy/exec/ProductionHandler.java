@@ -48,7 +48,7 @@ public class ProductionHandler {
       String direction) {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
-    Map<Instrument, BarSeries> barSeriesMap = instrumentDataLoader.loadHybridData(instrumentName);
+    Map<Instrument, BarSeries> barSeriesMap = instrumentDataLoader.loadHybridData(tradingIdentity);
     TradingStrategy strategy = strategyBuilder.build(tradingIdentity, barSeriesMap);
     BarSeries barSeries = barSeriesMap.get(tradingIdentity);
     if (direction.equals("Buy")) {

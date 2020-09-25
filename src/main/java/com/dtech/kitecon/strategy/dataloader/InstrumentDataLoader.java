@@ -4,9 +4,9 @@ import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.market.fetch.DataFetchException;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.strategy.exec.HybridDataLoader;
-import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -36,6 +36,22 @@ public class InstrumentDataLoader {
     String[] exchanges = new String[]{"NSE", "NFO"};
     ZonedDateTime startDate = ZonedDateTime.now().minus(30, ChronoUnit.DAYS);
     List<Instrument> instruments = getRelaventInstruments(instrumentName, exchanges);
+    return instruments.stream()
+        .collect(Collectors.toMap(instrument ->
+            instrument, instrument -> {
+          try {
+            return barsLoader.loadInstrumentSeriesWithLiveData(instrument, startDate);
+          } catch (DataFetchException e) {
+            log.catching(e);
+            return new BaseBarSeries();
+          }
+        }));
+  }
+
+  public Map<Instrument, BarSeries> loadHybridData(Instrument mappedInstrument) {
+    String[] exchanges = new String[]{"NSE", "NFO"};
+    ZonedDateTime startDate = ZonedDateTime.now().minus(30, ChronoUnit.DAYS);
+    List<Instrument> instruments = Collections.singletonList(mappedInstrument);
     return instruments.stream()
         .collect(Collectors.toMap(instrument ->
             instrument, instrument -> {
