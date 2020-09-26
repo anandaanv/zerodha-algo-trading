@@ -52,12 +52,10 @@ public abstract class BarsLoader {
    * @return a time series from Apple Inc. bars.
    */
 
-  public BarSeries loadInstrumentSeries(Instrument instrument) {
+  public BarSeries loadInstrumentSeries(Instrument instrument, String interval)
+      throws DataFetchException {
 
-    List<? extends BaseCandle> candles = candleRepository
-        .findAllByInstrument("15minute", instrument);
-
-    return getBarSeries(instrument, candles);
+    return loadInstrumentSeries(instrument, null, interval);
   }
 
   protected BarSeries getBarSeries(Instrument instrument, List<? extends BaseCandle> candles) {
@@ -80,11 +78,12 @@ public abstract class BarsLoader {
   /**
    * @return a time series from Apple Inc. bars.
    */
-  public BarSeries loadInstrumentSeries(Instrument instrument, ZonedDateTime startDate)
+  public BarSeries loadInstrumentSeries(Instrument instrument, ZonedDateTime startDate,
+      String interval)
       throws DataFetchException {
 
     List<? extends BaseCandle> candles = candleRepository
-        .findAllByInstrument("15minute", instrument);
+        .findAllByInstrument(interval, instrument);
     return getBarSeries(instrument, candles);
   }
 
