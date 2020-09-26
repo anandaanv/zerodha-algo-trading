@@ -24,23 +24,14 @@ public class InstrumentDataLoader {
   private final InstrumentRepository instrumentRepository;
   private final HybridDataLoader barsLoader;
 
-  public Map<Instrument, BarSeries> loadData(String instrumentName) {
+  public Map<Instrument, BarSeries> loadData(String instrumentName, String interval) {
     String[] exchanges = new String[]{"NSE", "NFO"};
-    List<Instrument> instruments = getRelaventInstruments(instrumentName, exchanges);
-    return instruments.stream()
-        .collect(Collectors.toMap(instrument ->
-            instrument, instrument -> barsLoader.loadInstrumentSeries(instrument)));
-  }
-
-  public Map<Instrument, BarSeries> loadHybridData(String instrumentName) {
-    String[] exchanges = new String[]{"NSE", "NFO"};
-    ZonedDateTime startDate = ZonedDateTime.now().minus(30, ChronoUnit.DAYS);
     List<Instrument> instruments = getRelaventInstruments(instrumentName, exchanges);
     return instruments.stream()
         .collect(Collectors.toMap(instrument ->
             instrument, instrument -> {
           try {
-            return barsLoader.loadInstrumentSeriesWithLiveData(instrument, startDate);
+            return barsLoader.loadInstrumentSeries(instrument, interval);
           } catch (DataFetchException e) {
             log.catching(e);
             return new BaseBarSeries();
@@ -48,7 +39,7 @@ public class InstrumentDataLoader {
         }));
   }
 
-  public Map<Instrument, BarSeries> loadHybridData(Instrument mappedInstrument) {
+  public Map<Instrument, BarSeries> loadHybridData(Instrument mappedInstrument, String interval) {
     String[] exchanges = new String[]{"NSE", "NFO"};
     ZonedDateTime startDate = ZonedDateTime.now().minus(30, ChronoUnit.DAYS);
     List<Instrument> instruments = Collections.singletonList(mappedInstrument);
@@ -56,7 +47,7 @@ public class InstrumentDataLoader {
         .collect(Collectors.toMap(instrument ->
             instrument, instrument -> {
           try {
-            return barsLoader.loadInstrumentSeriesWithLiveData(instrument, startDate);
+            return barsLoader.loadInstrumentSeriesWithLiveData(instrument, startDate, interval);
           } catch (DataFetchException e) {
             log.catching(e);
             return new BaseBarSeries();

@@ -11,12 +11,10 @@ import com.dtech.kitecon.strategy.TradingStrategy;
 import com.dtech.kitecon.strategy.builder.StrategyBuilder;
 import com.dtech.kitecon.strategy.builder.StrategyConfig;
 import com.dtech.kitecon.strategy.dataloader.InstrumentDataLoader;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Order.OrderType;
@@ -54,7 +52,8 @@ public class ProductionHandler {
       String direction) {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
-    Map<Instrument, BarSeries> barSeriesMap = instrumentDataLoader.loadHybridData(tradingIdentity);
+    Map<Instrument, BarSeries> barSeriesMap = instrumentDataLoader.loadHybridData(tradingIdentity,
+        "15minute");
 
     StrategyConfig config = getStrategyConfig(instrumentName,
         strategyBuilder, StrategyEnvironment.PROD);

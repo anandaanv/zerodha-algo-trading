@@ -30,11 +30,12 @@ public class HybridDataLoader extends BarsLoader {
     this.zerodhaDataFetch = zerodhaDataFetch;
   }
 
-  public BarSeries loadInstrumentSeriesWithLiveData(Instrument instrument, ZonedDateTime startDate)
+  public BarSeries loadInstrumentSeriesWithLiveData(Instrument instrument, ZonedDateTime startDate,
+      String interval)
       throws DataFetchException {
-    BarSeries barSeries = super.loadInstrumentSeries(instrument, startDate);
+    BarSeries barSeries = super.loadInstrumentSeries(instrument, startDate, interval);
     List<BaseCandle> todaysFeed = zerodhaDataFetch
-        .fetchTodaysData(instrument, "15minute");
+        .fetchTodaysData(instrument, interval);
     if (barSeries.isEmpty()) {
       return barSeries;
     }

@@ -19,7 +19,7 @@ public class StrategyController {
   @ResponseBody
   public BacktestSummary backtestStrategy(@PathVariable String strategyName,
       @PathVariable String instrument) throws InterruptedException {
-    return strategyService.testStrategy(instrument, strategyName);
+    return strategyService.testStrategy(instrument, strategyName, "15minute");
   }
 
 }

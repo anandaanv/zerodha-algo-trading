@@ -5,7 +5,6 @@ import com.dtech.kitecon.data.StrategyParameters;
 import com.dtech.kitecon.misc.StrategyEnvironment;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.repository.StrategyParametersRepository;
-import com.dtech.kitecon.strategy.TradeDirection;
 import com.dtech.kitecon.strategy.TradingStrategy;
 import com.dtech.kitecon.strategy.builder.StrategyBuilder;
 import com.dtech.kitecon.strategy.builder.StrategyConfig;
@@ -15,8 +14,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -49,7 +46,8 @@ public class BackTestingHandler {
   private final InstrumentDataLoader instrumentDataLoader;
   String[] exchanges = new String[]{"NSE", "NFO"};
 
-  public BacktestSummary execute(String instrumentName, StrategyBuilder strategyBuilder) {
+  public BacktestSummary execute(String instrumentName, StrategyBuilder strategyBuilder,
+      String interval) {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
     StrategyEnvironment strategyEnvironment = StrategyEnvironment.DEV;
@@ -57,7 +55,8 @@ public class BackTestingHandler {
     StrategyConfig config = getStrategyConfig(instrumentName,
         strategyBuilder, strategyEnvironment);
 
-    Map<Instrument, BarSeries> BarSeriesMap = instrumentDataLoader.loadData(instrumentName);
+    Map<Instrument, BarSeries> BarSeriesMap = instrumentDataLoader.loadData(instrumentName,
+        interval);
 
     TradingStrategy strategy = strategyBuilder.build(tradingIdentity, BarSeriesMap, config);
 
