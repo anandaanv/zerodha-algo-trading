@@ -9,10 +9,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.jetbrains.annotations.Nullable;
+import org.springframework.stereotype.Service;
 import org.ta4j.core.Indicator;
 import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+import org.ta4j.core.indicators.helpers.ConstantIndicator;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
 
+
+@Service
 public class IndicatorRegistry {
 
   private static Map<String, Class> indicatorMap = new HashMap<>();
@@ -20,6 +25,8 @@ public class IndicatorRegistry {
   static {
     add(OpeningRangeLow.class);
     add(SMAIndicator.class);
+    add(ClosePriceIndicator.class);
+    add(ConstantIndicator.class);
   }
 
   private static void add(Class<? extends Indicator> aClass) {
@@ -35,7 +42,7 @@ public class IndicatorRegistry {
     return key;
   }
 
-  public Class getIndicatorClass(String name) {
+  public Class<? extends Indicator> getIndicatorClass(String name) {
     return indicatorMap.get(name);
   }
 
