@@ -13,6 +13,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @ToString
 public class IndicatorConfig {
+  private String key;
   private String indicatorName;
   private List<IndicatorInput> inputs;
 }

@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.Delegate;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.BaseBarSeries;
 
 @Data
 @AllArgsConstructor
