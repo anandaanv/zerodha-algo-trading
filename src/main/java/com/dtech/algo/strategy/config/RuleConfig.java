@@ -14,6 +14,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @ToString
 public class RuleConfig {
+  private String key;
   private String ruleName;
   private List<RuleInput> inputs;
   @Default

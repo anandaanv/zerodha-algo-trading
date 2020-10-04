@@ -1,4 +1,4 @@
-package com.dtech.algo.indicators;
+package com.dtech.algo.rules;
 
 import com.dtech.algo.registry.common.ConstructorArgs;
 import java.util.List;
@@ -15,7 +15,7 @@ import lombok.ToString;
 @EqualsAndHashCode
 @Data
 @ToString
-public class IndicatorConstructor {
+public class RuleConstructor {
 
   private List<ConstructorArgs> args;
 

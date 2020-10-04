@@ -1,4 +1,4 @@
-package com.dtech.algo.indicators;
+package com.dtech.algo.registry.common;
 
 import java.util.List;
 import lombok.AllArgsConstructor;
