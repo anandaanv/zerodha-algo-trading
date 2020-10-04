@@ -2,6 +2,7 @@ package com.dtech.algo.indicators;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.dtech.algo.registry.common.ConstructorArgs;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
@@ -11,7 +12,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.ta4j.core.indicators.pivotpoints.TimeLevel;
-import org.ta4j.core.indicators.range.OpeningRangeHigh;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
 
 class IndicatorRegistryTest {
