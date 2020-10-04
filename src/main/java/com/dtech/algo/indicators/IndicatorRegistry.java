@@ -15,6 +15,8 @@ import org.ta4j.core.indicators.SMAIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.indicators.helpers.ConstantIndicator;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
+import org.ta4j.core.num.DoubleNum;
+import org.ta4j.core.num.Num;
 
 
 @Service
@@ -83,7 +85,9 @@ public class IndicatorRegistry {
     Class<?> type = parameter.getType();
     if (type.isPrimitive()) {
       return type.getName();
-    } else {
+    } else if (type.isAssignableFrom(DoubleNum.class)) {
+      return camelToLower(Num.class.getSimpleName());
+    } {
       return camelToLower(type.getSimpleName());
     }
   }
