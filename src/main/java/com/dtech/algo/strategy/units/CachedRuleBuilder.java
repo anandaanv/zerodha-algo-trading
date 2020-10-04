@@ -86,7 +86,7 @@ public class CachedRuleBuilder implements RuleBuilder {
 
   private Class resolveClass(RuleInput input) {
     if (input.getType() == RuleInputType.Number) {
-      return Object.class;
+      return Num.class;
     } else if (input.getType() == RuleInputType.Rule) {
       return Rule.class;
     } else if (input.getType() == RuleInputType.Indicator) {
