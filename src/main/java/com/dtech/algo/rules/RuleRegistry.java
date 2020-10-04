@@ -13,7 +13,9 @@ import org.ta4j.core.trading.rules.AndRule;
 import org.ta4j.core.trading.rules.BooleanIndicatorRule;
 import org.ta4j.core.trading.rules.BooleanRule;
 import org.ta4j.core.trading.rules.CrossedDownIndicatorRule;
+import org.ta4j.core.trading.rules.CrossedUpIndicatorRule;
 import org.ta4j.core.trading.rules.IsHighestRule;
+import org.ta4j.core.trading.rules.UnderIndicatorRule;
 
 
 @Service
@@ -25,7 +27,9 @@ public class RuleRegistry extends BaseRegistry {
     add(AndRule.class);
     add(BooleanIndicatorRule.class);
     add(CrossedDownIndicatorRule.class);
+    add(CrossedUpIndicatorRule.class);
     add(IsHighestRule.class);
+    add(UnderIndicatorRule.class);
   }
 
   private static void add(Class<? extends Rule> aClass) {
