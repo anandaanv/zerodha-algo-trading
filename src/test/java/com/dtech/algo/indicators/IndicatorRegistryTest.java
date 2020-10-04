@@ -55,4 +55,21 @@ class IndicatorRegistryTest {
         .name("s-m-a-indicator").build();
     assertEquals(registryIndicatorInfo, indicatorInfo);
   }
+
+  @Test
+  void getIndicatorInfoConstant() {
+    IndicatorRegistry registry = new IndicatorRegistry();
+    IndicatorInfo registryIndicatorInfo = registry.getIndicatorInfo("constant-indicator");
+    ConstructorArgs args[] = new ConstructorArgs[2];
+    args[0] = new ConstructorArgs("bar-series", "args0", null);
+    args[1] = new ConstructorArgs("num", "args1", null);
+    List<ConstructorArgs> targs = Arrays.asList(args);
+    IndicatorConstructor con = IndicatorConstructor.builder()
+        .args(targs)
+        .build();
+    IndicatorInfo indicatorInfo = IndicatorInfo.builder()
+        .constructors(Collections.singletonList(con))
+        .name("constant-indicator").build();
+    assertEquals(registryIndicatorInfo, indicatorInfo);
+  }
 }
