@@ -2,6 +2,9 @@ package com.dtech.algo.indicators;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -13,6 +16,8 @@ import org.ta4j.core.indicators.range.OpeningRangeLow;
 
 class IndicatorRegistryTest {
 
+  private ObjectWriter objectMapper = new ObjectMapper().writerWithDefaultPrettyPrinter();
+
   @Test
   void getIndicatorClass() {
     IndicatorRegistry registry = new IndicatorRegistry();
@@ -21,7 +26,7 @@ class IndicatorRegistryTest {
   }
 
   @Test
-  void getIndicatorInfo() {
+  void getIndicatorInfo() throws JsonProcessingException {
     IndicatorRegistry registry = new IndicatorRegistry();
     IndicatorInfo registryIndicatorInfo = registry.getIndicatorInfo("opening-range-low");
     ConstructorArgs args[] = new ConstructorArgs[3];
@@ -36,11 +41,12 @@ class IndicatorRegistryTest {
     IndicatorInfo indicatorInfo = IndicatorInfo.builder()
         .constructors(Collections.singletonList(con))
         .name("opening-range-low").build();
+    System.out.println(objectMapper.writeValueAsString(indicatorInfo));
     assertEquals(registryIndicatorInfo, indicatorInfo);
   }
 
   @Test
-  void getIndicatorInfoSma() {
+  void getIndicatorInfoSma() throws JsonProcessingException {
     IndicatorRegistry registry = new IndicatorRegistry();
     IndicatorInfo registryIndicatorInfo = registry.getIndicatorInfo("s-m-a-indicator");
     ConstructorArgs args[] = new ConstructorArgs[2];
@@ -53,11 +59,12 @@ class IndicatorRegistryTest {
     IndicatorInfo indicatorInfo = IndicatorInfo.builder()
         .constructors(Collections.singletonList(con))
         .name("s-m-a-indicator").build();
+    System.out.println(objectMapper.writeValueAsString(indicatorInfo));
     assertEquals(registryIndicatorInfo, indicatorInfo);
   }
 
   @Test
-  void getIndicatorInfoConstant() {
+  void getIndicatorInfoConstant() throws JsonProcessingException {
     IndicatorRegistry registry = new IndicatorRegistry();
     IndicatorInfo registryIndicatorInfo = registry.getIndicatorInfo("constant-indicator");
     ConstructorArgs args[] = new ConstructorArgs[2];
@@ -70,6 +77,7 @@ class IndicatorRegistryTest {
     IndicatorInfo indicatorInfo = IndicatorInfo.builder()
         .constructors(Collections.singletonList(con))
         .name("constant-indicator").build();
+    System.out.println(objectMapper.writeValueAsString(indicatorInfo));
     assertEquals(registryIndicatorInfo, indicatorInfo);
   }
 }
