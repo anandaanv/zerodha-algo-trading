@@ -13,6 +13,9 @@ import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.IndicatorConfig;
 import com.dtech.algo.strategy.config.IndicatorInput;
 import com.dtech.algo.strategy.config.IndicatorInputType;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
@@ -50,8 +53,10 @@ class CachedIndicatorBuilderTest {
   @InjectMocks
   private CachedIndicatorBuilder indicatorBuilder;
 
+  private ObjectWriter objectMapper = new ObjectMapper().writerWithDefaultPrettyPrinter();
+
   @Test
-  void getIndicatorConstant() throws StrategyException {
+  void getIndicatorConstant() throws StrategyException, JsonProcessingException {
     Mockito.doReturn("10")
         .when(constantsCache).get("value");
     Mockito.doReturn(new ExtendedBarSeries())
@@ -66,13 +71,14 @@ class CachedIndicatorBuilderTest {
     barSeries.setName("basebar");
     barSeries.setType(IndicatorInputType.BarSeries);
     config.setInputs(Arrays.asList(barSeries, input));
+    System.out.println(objectMapper.writeValueAsString(config));
     Indicator indicator = indicatorBuilder.getIndicator(config);
     Num value = (Num) indicator.getValue(0);
     assertEquals(value.doubleValue(), 10.0, 0.1);
   }
 
   @Test
-  void getIndicatorSMA() throws StrategyException {
+  void getIndicatorSMA() throws StrategyException, JsonProcessingException {
     String barCount = "bar-count";
     Mockito.doReturn("10")
         .when(constantsCache).get(barCount);
@@ -100,6 +106,7 @@ class CachedIndicatorBuilderTest {
     barCountInput.setName(barCount);
     barCountInput.setType(IndicatorInputType.Integer);
     config.setInputs(Arrays.asList(closePriceInput, barCountInput));
+    System.out.println(objectMapper.writeValueAsString(config));
     Indicator indicator = indicatorBuilder.getIndicator(config);
     Num value = (Num) indicator.getValue(10);
     assertEquals(value.doubleValue(), 5.5, 0.1);
