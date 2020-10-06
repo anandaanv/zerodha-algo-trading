@@ -11,7 +11,6 @@ import lombok.ToString;
 @Data
 @AllArgsConstructor
 @Builder
-@NoArgsConstructor
 @ToString
 public class BarSeriesConfig {
   private Interval interval;

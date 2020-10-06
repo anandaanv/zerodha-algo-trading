@@ -10,7 +10,6 @@ import lombok.ToString;
 @Data
 @AllArgsConstructor
 @Builder
-@NoArgsConstructor
 @ToString
 public class RuleConfig {
   private String key;
