@@ -6,6 +6,7 @@ import com.dtech.algo.strategy.builder.cache.ConstantsCache;
 import com.dtech.algo.strategy.builder.cache.IndicatorCache;
 import com.dtech.algo.strategy.builder.cache.RuleCache;
 import com.dtech.algo.strategy.builder.ifc.RuleBuilder;
+import com.dtech.algo.strategy.config.FollowUpRuleConfig;
 import com.dtech.algo.strategy.config.RuleConfig;
 import com.dtech.algo.strategy.config.RuleInput;
 import com.dtech.algo.strategy.config.RuleInputType;
@@ -45,10 +46,25 @@ public class CachedRuleBuilder implements RuleBuilder {
         Class[] classes = resolveClasses(inputs, this::resolveClass);
         Constructor<? extends Rule> constructor = indicatorClass.getConstructor(classes);
         Rule indicator = constructor.newInstance(parameters);
+
+        if (config.getFollowUpRules() != null && !config.getFollowUpRules().isEmpty()) {
+          for (FollowUpRuleConfig rule : config.getFollowUpRules()) {
+            indicator = addFollowUpRules(indicator, rule);
+          }
+        }
         return indicator;
       } catch (Exception ex) {
         throw new StrategyException("Error occured while constructing an indicator", ex);
       }
+    }
+  }
+
+  private Rule addFollowUpRules(Rule indicator, FollowUpRuleConfig rule) throws StrategyException {
+    switch (rule.getFollowUpRuleType()) {
+      case And: return indicator.and(getRule(rule.getFollowUpRule()));
+      case Or: return indicator.or(getRule(rule.getFollowUpRule()));
+      case Xor: return indicator.xor(getRule(rule.getFollowUpRule()));
+      default: return indicator;
     }
   }
 
