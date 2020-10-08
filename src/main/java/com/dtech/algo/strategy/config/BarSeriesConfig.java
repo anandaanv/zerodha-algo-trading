@@ -16,4 +16,5 @@ public class BarSeriesConfig {
   private Interval interval;
   private SeriesType seriesType;
   private String instrument;
+  private String name;
 }

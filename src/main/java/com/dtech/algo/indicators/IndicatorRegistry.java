@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.Indicator;
+import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.SMAIndicator;
 import org.ta4j.core.indicators.candles.DojiIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
@@ -28,6 +29,7 @@ public class IndicatorRegistry extends BaseRegistry {
     add(ClosePriceIndicator.class);
     add(ConstantIndicator.class);
     add(DojiIndicator.class);
+    add(RSIIndicator.class);
   }
 
   private static void add(Class<? extends Indicator> aClass) {

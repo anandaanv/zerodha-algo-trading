@@ -45,16 +45,17 @@ public class CachedRuleBuilder implements RuleBuilder {
         Object[] parameters = resolveParameters(inputs, this::resolveValue);
         Class[] classes = resolveClasses(inputs, this::resolveClass);
         Constructor<? extends Rule> constructor = indicatorClass.getConstructor(classes);
-        Rule indicator = constructor.newInstance(parameters);
+        Rule generatedRule = constructor.newInstance(parameters);
 
         if (config.getFollowUpRules() != null && !config.getFollowUpRules().isEmpty()) {
           for (FollowUpRuleConfig rule : config.getFollowUpRules()) {
-            indicator = addFollowUpRules(indicator, rule);
+            generatedRule = addFollowUpRules(generatedRule, rule);
           }
         }
-        return indicator;
+        ruleCache.put(config.getKey(), generatedRule);
+        return generatedRule;
       } catch (Exception ex) {
-        throw new StrategyException("Error occured while constructing an indicator", ex);
+        throw new StrategyException("Error occured while constructing an rule" + config, ex);
       }
     }
   }

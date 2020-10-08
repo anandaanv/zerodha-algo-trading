@@ -19,4 +19,5 @@ public class TradeStrategyImpl implements TradeStrategy {
 
   private TradeDirection direction;
 
+  private String strategyName;
 }
