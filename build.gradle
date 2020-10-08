@@ -28,6 +28,7 @@ dependencies {
     compile 'com.zerodhatech.kiteconnect:kiteconnect:3.1.2'
     compile group: 'com.google.guava', name: 'guava', version: '29.0-jre'
     compile 'com.dheemantech.ta4j:ta4j-core:0.13'
+    compile 'com.dheemantech.ta4j:ta4j-examples:0.13'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'mysql:mysql-connector-java'
     annotationProcessor 'org.projectlombok:lombok'
