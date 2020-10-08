@@ -48,6 +48,7 @@ public class CachedIndicatorBuilder implements IndicatorBuilder {
         Class[] classes = resolveClasses(inputs, this::resolveClass);
         Constructor<? extends Indicator> constructor = indicatorClass.getConstructor(classes);
         Indicator indicator = constructor.newInstance(parameters);
+        indicatorCache.put(key, indicator);
         return indicator;
       } catch (Exception ex) {
         throw new StrategyException("Error occured while constructing an indicator", ex);

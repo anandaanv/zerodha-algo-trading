@@ -8,6 +8,5 @@ import java.lang.reflect.InvocationTargetException;
 import org.ta4j.core.Indicator;
 
 public interface IndicatorBuilder {
-  Indicator getIndicator(IndicatorConfig config)
-      throws NoSuchMethodException, IllegalAccessException, InvocationTargetException, InstantiationException, StrategyException;
+  Indicator getIndicator(IndicatorConfig config) throws StrategyException;
 }

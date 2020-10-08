@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ThreadLocalCache<K, V> {
 
-  private static ThreadLocal<Map<Object, Object>> threadLocal = new ThreadLocal<>();
+  private ThreadLocal<Map<Object, Object>> threadLocal = new ThreadLocal<>();
 
   private Map<K, V> getThreadLocal() {
     if(threadLocal.get() == null) {
