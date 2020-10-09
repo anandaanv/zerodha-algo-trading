@@ -24,6 +24,7 @@ import org.mockito.Spy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.TestPropertySource;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BarSeriesManager;
 import org.ta4j.core.TradingRecord;
@@ -31,6 +32,7 @@ import org.ta4j.core.analysis.criteria.TotalProfitCriterion;
 import ta4jexamples.loaders.CsvTradesLoader;
 
 @SpringBootTest(classes = {KiteconApplication.class})
+@TestPropertySource(properties = "application-test.properties")
 class FinalStrategyBuilderTest {
 
   BarSeries barSeries = CsvTradesLoader.loadBitstampSeries();
