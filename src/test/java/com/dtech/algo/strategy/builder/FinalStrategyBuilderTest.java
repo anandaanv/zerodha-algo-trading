@@ -15,6 +15,7 @@ import java.util.*;
 
 import com.dtech.kitecon.strategy.TradeDirection;
 import org.jetbrains.annotations.NotNull;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
@@ -29,6 +30,7 @@ import org.ta4j.core.BarSeries;
 import org.ta4j.core.BarSeriesManager;
 import org.ta4j.core.TradingRecord;
 import org.ta4j.core.analysis.criteria.TotalProfitCriterion;
+import org.ta4j.core.num.Num;
 import ta4jexamples.loaders.CsvTradesLoader;
 
 @SpringBootTest(classes = {KiteconApplication.class})
@@ -72,9 +74,7 @@ class FinalStrategyBuilderTest {
     constantsMap.put(constantFive, "5");
     constantsMap.put(constantNinetyFive, "95");
 
-    constantsMap.entrySet().forEach(entry -> {
-      constantsCache.put(entry.getKey(), entry.getValue());
-    });
+    constantsMap.forEach((key, value) -> constantsCache.put(key, value));
 //    constantsMap.entrySet().forEach(entry -> {
 //      Mockito.doReturn(entry.getValue())
 //              .when(constantsCache).get(entry.getKey());
@@ -140,11 +140,16 @@ class FinalStrategyBuilderTest {
     TradeStrategy tradeStrategy = strategyBuilder.buildStrategy(config);
     BarSeriesManager seriesManager = new BarSeriesManager(barSeries);
     TradingRecord tradingRecord = seriesManager.run(tradeStrategy);
-    System.out.println("Number of trades for the strategy: " + tradingRecord.getTradeCount());
 
+    Num profit = new TotalProfitCriterion().calculate(barSeries, tradingRecord);
+    Assertions.assertEquals(tradingRecord.getTradeCount(), 5);
+    Assertions.assertEquals(profit.doubleValue(), 1.329, 0.001);
+
+    System.out.println("Number of trades for the strategy: " + tradingRecord.getTradeCount());
     // Analysis
     System.out.println(
-            "Total profit for the strategy: " + new TotalProfitCriterion().calculate(barSeries, tradingRecord));  }
+            "Total profit for the strategy: " + profit);
+  }
 
   @NotNull
   private RuleConfig getRuleConfig(RuleInput RuleInput1, RuleInput secondRuleInput, String ruleKey,
