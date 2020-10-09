@@ -32,9 +32,7 @@ public class FinalStrategyBuilder implements StrategyBuilder {
   public TradeStrategy buildStrategy(StrategyConfig strategyConfig) throws StrategyException {
     // initialize constants
     Map<String, String> constants = strategyConfig.getConstants();
-    constants.entrySet().forEach(entry -> {
-      constantsCache.put(entry.getKey(), entry.getValue());
-    });
+    constants.forEach(constantsCache::put);
 
     // initialize indicators
     List<IndicatorConfig> indicators = strategyConfig.getIndicators();
@@ -74,7 +72,7 @@ public class FinalStrategyBuilder implements StrategyBuilder {
   private Rule joinRules(Rule firstRule, String operation, String nextRule) throws StrategyException {
     Rule secondRule = getRuleFromCache(nextRule);
     switch (operation) {
-        case "ANR": return firstRule.and(secondRule);
+        case "AND": return firstRule.and(secondRule);
         case "OR": return firstRule.or(secondRule);
         case "XOR": return firstRule.xor(secondRule);
         default: return firstRule;
