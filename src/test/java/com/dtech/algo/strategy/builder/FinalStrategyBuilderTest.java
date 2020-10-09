@@ -32,7 +32,6 @@ import org.ta4j.core.analysis.criteria.TotalProfitCriterion;
 import ta4jexamples.loaders.CsvTradesLoader;
 
 @SpringBootTest(classes = {KiteconApplication.class})
-@TestPropertySource(properties = "application-test.properties")
 class FinalStrategyBuilderTest {
 
   BarSeries barSeries = CsvTradesLoader.loadBitstampSeries();
