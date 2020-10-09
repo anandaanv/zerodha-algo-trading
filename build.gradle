@@ -29,7 +29,7 @@ dependencies {
     compile group: 'com.google.guava', name: 'guava', version: '29.0-jre'
     compile 'com.dheemantech.ta4j:ta4j-core:0.13'
     compile 'com.dheemantech.ta4j:ta4j-examples:0.13'
-    compile 'com.h2database:h2:1.4.194'
+    compile 'com.h2database:h2'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'mysql:mysql-connector-java'
     annotationProcessor 'org.projectlombok:lombok'
@@ -38,4 +38,6 @@ dependencies {
 
 test {
     useJUnitPlatform()
+    testLogging.events ("STANDARD_ERROR")
+    testLogging.events ("STANDARD_OUT")
 }
