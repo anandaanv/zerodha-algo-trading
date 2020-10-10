@@ -41,23 +41,23 @@ public class DataFetchService {
   public void downloadAllInstruments() throws KiteException, IOException {
     Map<Long, Instrument> databaseInstruments = instrumentRepository.findAll()
         .stream()
-        .collect(Collectors.toMap(Instrument::getInstrument_token, instrument -> instrument));
+        .collect(Collectors.toMap(Instrument::getInstrumentToken, instrument -> instrument));
     List<com.zerodhatech.models.Instrument> instruments = kiteConnectConfig.getKiteConnect()
         .getInstruments();
     List<Instrument> newInstruments = instruments.stream()
         .filter(instrument -> !databaseInstruments.containsKey(instrument.instrument_token))
         .map(instrument -> Instrument.builder()
-            .instrument_token(instrument.instrument_token)
-            .instrument_type(instrument.instrument_type)
+            .instrumentToken(instrument.instrument_token)
+            .instrumentType(instrument.instrument_type)
             .strike(instrument.strike)
-            .exchange_token(instrument.exchange_token)
+            .exchangeToken(instrument.exchange_token)
             .tradingsymbol(instrument.tradingsymbol)
             .name(instrument.name)
-            .last_price(instrument.last_price)
+            .lastPrice(instrument.last_price)
             .expiry(instrument.getExpiry() == null ? null : dateToLocalDate(instrument))
-            .tick_size(instrument.tick_size)
-            .lot_size(instrument.lot_size)
-            .instrument_type(instrument.instrument_type)
+            .tickSize(instrument.tick_size)
+            .lotSize(instrument.lot_size)
+            .instrumentType(instrument.instrument_type)
             .segment(instrument.segment)
             .exchange(instrument.exchange)
             .build()).collect(Collectors.toList());

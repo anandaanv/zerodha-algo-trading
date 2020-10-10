@@ -1,5 +1,6 @@
 package com.dtech.kitecon.repository;
 
+import com.dtech.algo.series.InstrumentType;
 import com.dtech.kitecon.data.Instrument;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -17,6 +18,9 @@ public interface InstrumentRepository extends JpaRepository<Instrument, Long> {
 
   List<Instrument> findAllByTradingsymbolStartingWithAndExchangeIn(String symbol,
       String[] exchanges);
+
+  List<Instrument> findAllByExchangeAndInstrumentTypeAndTradingsymbolStartingWith(String exchange,
+                                                                   String instrumentType, String tradingSymbol);
 
   Instrument findByTradingsymbolAndExchangeIn(String symbol, String[] exchanges);
 

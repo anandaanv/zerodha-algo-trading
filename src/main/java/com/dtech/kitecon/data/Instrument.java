@@ -17,25 +17,25 @@ import lombok.NoArgsConstructor;
 public class Instrument {
 
   @Id
-  private Long instrument_token;
+  private Long instrumentToken;
   @Column
-  private Long exchange_token;
+  private Long exchangeToken;
   @Column
   private String tradingsymbol;
   @Column
   private String name;
   @Column
-  private Double last_price;
+  private Double lastPrice;
   @Column
   private LocalDateTime expiry;
   @Column
   private String strike;
   @Column
-  private Double tick_size;
+  private Double tickSize;
   @Column
-  private Integer lot_size;
+  private Integer lotSize;
   @Column
-  private String instrument_type;
+  private String instrumentType;
   @Column
   private String segment;
   @Column
