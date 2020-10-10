@@ -1,7 +1,7 @@
 package com.dtech.algo.series;
 
 public enum SeriesType {
-  Cash,
+  EQUITY,
   Future,
   PutPlus1,
   PutPlus2,
@@ -14,5 +14,5 @@ public enum SeriesType {
   CallPlus3,
   CallMinus1,
   CallMinus2,
-  CallMinus3
+  CallMinus3;
   }

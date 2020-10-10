@@ -56,7 +56,7 @@ public class ZerodhaDataFetch implements MarketDataFetch{
       HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
           startDate.toInstant()),
           Date.from(endDate.toInstant()),
-          String.valueOf(instrument.getInstrument_token()),
+          String.valueOf(instrument.getInstrumentToken()),
           interval, false, true);
       List<BaseCandle> baseCandles = candleFacade
           .buildCandlesFromOLSHStream(interval, dateFormat, instrument, candles);
