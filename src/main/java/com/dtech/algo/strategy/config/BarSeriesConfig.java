@@ -10,6 +10,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 
+import java.time.LocalDate;
+
 @Data
 @AllArgsConstructor
 @Builder
@@ -21,4 +23,6 @@ public class BarSeriesConfig {
   private Exchange exchange;
   private String instrument;
   private String name;
+  private LocalDate startDate;
+  private LocalDate endDate;
 }

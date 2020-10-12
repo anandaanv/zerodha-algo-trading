@@ -2,15 +2,18 @@ package com.dtech.kitecon.repository;
 
 import com.dtech.kitecon.data.BaseCandle;
 import com.dtech.kitecon.data.Instrument;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-import javax.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
+import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@SuppressWarnings("ALL")
 @Service
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 public class CandleRepository {
@@ -37,9 +40,11 @@ public class CandleRepository {
     return getDelegate(interval).findFirstByInstrumentOrderByTimestampDesc(instrument);
   }
 
-  public BaseCandle findFirstByInstrumentOrderByTimestamp(String interval, Instrument instrument) {
-    return getDelegate(interval).findFirstByInstrumentOrderByTimestamp(instrument);
+  public List<BaseCandle> findAllByInstrumentAndTimestampBetween(String interval, Instrument instrument,
+                                                          LocalDateTime startDate, LocalDateTime endDate) {
+    return getDelegate(interval).findAllByInstrumentAndTimestampBetween(instrument, startDate, endDate);
   }
+
 
   public void deleteByInstrument(String interval, Instrument instrument) {
     getDelegate(interval).deleteByInstrument(instrument);
