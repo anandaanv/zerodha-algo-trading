@@ -13,7 +13,7 @@ public interface BaseCandleRepository<T extends BaseCandle, ID> extends JpaRepos
 
   List<T> findAllByInstrument(Instrument instrument);
 
-  List<T> findAllByInstrumentAndTimestampAfter(Instrument instrument, ZonedDateTime startDate);
+  List<T> findAllByInstrumentAndTimestampBetween(Instrument instrument, LocalDateTime startDate, LocalDateTime endDate);
 
   T findFirstByInstrumentOrderByTimestampDesc(Instrument instrument);
 

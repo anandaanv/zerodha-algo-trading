@@ -6,7 +6,6 @@ plugins {
 
 group = 'com.dtech'
 version = '0.0.1-SNAPSHOT'
-sourceCompatibility = '11'
 
 configurations {
     compileOnly {
@@ -25,6 +24,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     compileOnly 'org.projectlombok:lombok'
+    compile 'javax.cache:cache-api'
+    compile 'org.ehcache:ehcache'
     compile 'com.zerodhatech.kiteconnect:kiteconnect:3.1.2'
     compile group: 'com.google.guava', name: 'guava', version: '29.0-jre'
     compile 'com.dheemantech.ta4j:ta4j-core:0.13'
