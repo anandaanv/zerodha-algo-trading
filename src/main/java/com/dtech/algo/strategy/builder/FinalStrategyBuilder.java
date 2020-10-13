@@ -20,7 +20,7 @@ import java.util.Map;
 
 @RequiredArgsConstructor
 @Service
-public class FinalStrategyBuilder implements StrategyBuilder {
+public class FinalStrategyBuilder implements StrategyBuilderIfc {
 
   private final ConstantsCache constantsCache;
 
