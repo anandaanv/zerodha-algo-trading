@@ -53,8 +53,6 @@ class BackTestingHandlerJsonTest {
         componentHelper.setupBarSeries(sbin);
         StrategyConfig strategyConfig = componentHelper.buildSimpleSmaStrategy();
         List<BarSeriesConfig> barSeriesConfigs = Collections.singletonList(barSeriesConfig);
-        strategyConfig.setBarSeriesConfigs(barSeriesConfigs);
-        strategyConfig.setBarSeriesToTrade(sbin);
 
         BacktestInput backtestInput = BacktestInput.builder()
                 .barSeriesConfigs(barSeriesConfigs)
