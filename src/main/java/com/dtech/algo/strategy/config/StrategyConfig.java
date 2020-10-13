@@ -21,6 +21,10 @@ public class StrategyConfig {
   // Trade direction - buy/ sell
   private TradeDirection direction;
 
+  private List<BarSeriesConfig> barSeriesConfigs;
+
+  private String barSeriesToTrade;
+
   private Map<String, String> constants;
 
   private List<IndicatorConfig> indicators;

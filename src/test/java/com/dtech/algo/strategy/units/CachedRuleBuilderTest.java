@@ -42,10 +42,10 @@ class CachedRuleBuilderTest {
   private IndicatorCache indicatorCache;
 
   @Mock
-  private ConstantsCache constantsCache;
+  private RuleCache ruleCache;
 
   @Mock
-  private RuleCache ruleCache;
+  private ConstantsCache constantsCache;
 
   @Spy
   private RuleRegistry indicatorRegistry = new RuleRegistry();
@@ -68,10 +68,10 @@ class CachedRuleBuilderTest {
     RuleInput input = new RuleInput();
     input.setName("doji");
     input.setType(RuleInputType.Indicator);
-    config.setInputs(Arrays.asList(input));
+    config.setInputs(Collections.singletonList(input));
     System.out.println(objectMapper.writeValueAsString(config));
     Rule rule = ruleBuilder.getRule(config);
-    Boolean value = rule.isSatisfied(10);
+    boolean value = rule.isSatisfied(10);
     assertTrue(value);
   }
 
@@ -97,7 +97,7 @@ class CachedRuleBuilderTest {
     config.setInputs(Arrays.asList(input, num));
     System.out.println(objectMapper.writeValueAsString(config));
     Rule rule = ruleBuilder.getRule(config);
-    Boolean value = rule.isSatisfied(10);
+    boolean value = rule.isSatisfied(10);
     assertTrue(value);
   }
 
@@ -151,7 +151,7 @@ class CachedRuleBuilderTest {
     System.out.println(objectMapper.writeValueAsString(underIndicatorConfig));
 
     Rule rule = ruleBuilder.getRule(underIndicatorConfig);
-    Boolean value = rule.isSatisfied(10);
+    boolean value = rule.isSatisfied(10);
     assertTrue(value);
   }
 }
