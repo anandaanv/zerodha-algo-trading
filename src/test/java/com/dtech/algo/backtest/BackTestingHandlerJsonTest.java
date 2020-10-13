@@ -1,7 +1,6 @@
 package com.dtech.algo.backtest;
 
 import com.dtech.algo.exception.StrategyException;
-import com.dtech.algo.strategy.TradeStrategy;
 import com.dtech.algo.strategy.builder.StrategyBuilderIfc;
 import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
 import com.dtech.algo.strategy.builder.cache.ConstantsCache;
@@ -13,9 +12,7 @@ import com.dtech.algo.strategy.units.CachedIndicatorBuilder;
 import com.dtech.kitecon.KiteconApplication;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Spy;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -59,7 +56,13 @@ class BackTestingHandlerJsonTest {
         strategyConfig.setBarSeriesConfigs(barSeriesConfigs);
         strategyConfig.setBarSeriesToTrade(sbin);
 
-        BacktestResult backtestResult = backTestingHandlerJson.execute(strategyConfig);
+        BacktestInput backtestInput = BacktestInput.builder()
+                .barSeriesConfigs(barSeriesConfigs)
+                .barSeriesName(sbin)
+                .strategyConfig(strategyConfig)
+                .build();
+
+        BacktestResult backtestResult = backTestingHandlerJson.execute(backtestInput);
         double totalProfit = backtestResult.getAggregatesResults().get("TotalProfit");
         Assertions.assertEquals(totalProfit, 1.329, 0.001);
 

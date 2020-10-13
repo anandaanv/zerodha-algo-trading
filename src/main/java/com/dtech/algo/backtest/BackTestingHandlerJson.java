@@ -7,7 +7,6 @@ import com.dtech.algo.strategy.builder.StrategyBuilderIfc;
 import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
 import com.dtech.algo.strategy.config.StrategyConfig;
-import com.dtech.kitecon.data.Instrument;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.*;
@@ -28,11 +27,12 @@ public class BackTestingHandlerJson {
   private final StrategyBuilderIfc strategyBuilder;
 
 
-  public BacktestResult execute(StrategyConfig strategyConfig) throws StrategyException {
-    List<BarSeriesConfig> barSeriesConfigs = strategyConfig.getBarSeriesConfigs();
+  public BacktestResult execute(BacktestInput backtestInput) throws StrategyException {
+    List<BarSeriesConfig> barSeriesConfigs = backtestInput.getBarSeriesConfigs();
     barSeriesConfigs.forEach(barSeriesLoader::loadBarSeries);
     IntervalBarSeries barSeriesToTrade = barSeriesLoader.loadBarSeries(
-            BarSeriesConfig.builder().name(strategyConfig.getBarSeriesToTrade()).build());
+            BarSeriesConfig.builder().name(backtestInput.getBarSeriesName()).build());
+    StrategyConfig strategyConfig = backtestInput.getStrategyConfig();
     TradeStrategy tradeStrategy = strategyBuilder.buildStrategy(strategyConfig);
     OrderType orderType = strategyConfig.getDirection().isBuy()? OrderType.BUY : OrderType.SELL;
     return runBacktestOnTa4jStrategy(barSeriesToTrade, tradeStrategy, orderType);
