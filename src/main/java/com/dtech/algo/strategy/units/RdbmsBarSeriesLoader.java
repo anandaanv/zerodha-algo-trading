@@ -3,6 +3,7 @@ package com.dtech.algo.strategy.units;
 import com.dtech.algo.series.ExtendedBarSeries;
 import com.dtech.algo.series.Interval;
 import com.dtech.algo.series.IntervalBarSeries;
+import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
 import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
 import com.dtech.kitecon.data.BaseCandle;
@@ -26,15 +27,23 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
 
     private final CandleRepository candleRepository;
     private final InstrumentRepository instrumentRepository;
+    private final BarSeriesCache barSeriesCache;
 
     @Override
     public IntervalBarSeries loadBarSeries(BarSeriesConfig barSeriesConfig) {
+        String key = barSeriesConfig.getName();
+        IntervalBarSeries barSeries = barSeriesCache.get(key);
+        if(barSeries != null) {
+            return barSeries;
+        }
         Instrument instrument = resolveInstrument(barSeriesConfig);
         List<BaseCandle> candles = candleRepository.findAllByInstrumentAndTimestampBetween(getIntervalMapping(barSeriesConfig),
                 instrument,
                 barSeriesConfig.getStartDate().atStartOfDay(),
                 barSeriesConfig.getEndDate().plusDays(1).atStartOfDay());
-        return getBarSeries(instrument, candles, barSeriesConfig);
+        IntervalBarSeries intervalBarSeries = getBarSeries(instrument, candles, barSeriesConfig);
+        barSeriesCache.put(key, intervalBarSeries);
+        return intervalBarSeries;
     }
 
     @NotNull

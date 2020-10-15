@@ -1,6 +1,7 @@
 package com.dtech.algo.strategy.units;
 
 import com.dtech.algo.series.*;
+import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
 import com.dtech.kitecon.data.BaseCandle;
 import com.dtech.kitecon.data.FifteenMinuteCandle;
@@ -28,6 +29,9 @@ class RdbmsBarSeriesLoaderTest {
 
     @Mock
     private CandleRepository candleRepository;
+
+    @Mock
+    private BarSeriesCache barSeriesCache;
 
     @InjectMocks RdbmsBarSeriesLoader rdbmsBarSeriesLoader;
 
