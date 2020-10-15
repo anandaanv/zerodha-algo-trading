@@ -1,5 +1,5 @@
 plugins {
-    id 'org.springframework.boot' version '2.4.0-SNAPSHOT'
+    id 'org.springframework.boot' version '2.3.4.RELEASE'
     id 'io.spring.dependency-management' version '1.0.10.RELEASE'
     id 'java'
 }
@@ -31,12 +31,13 @@ dependencies {
     compile group: 'com.google.guava', name: 'guava', version: '29.0-jre'
     compile 'com.dheemantech.ta4j:ta4j-core:0.13'
     compile 'com.dheemantech.ta4j:ta4j-examples:0.13'
-    compile 'com.h2database:h2'
+    testCompile 'com.h2database:h2'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     runtimeOnly 'mysql:mysql-connector-java'
     annotationProcessor 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    compile group: 'de.codecentric', name: 'spring-boot-admin-starter-server', version: '2.3.0'
 }
 
 test {
