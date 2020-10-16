@@ -23,7 +23,7 @@ import org.ta4j.core.num.PrecisionNum;
 
 @Component
 @RequiredArgsConstructor
-public class CachedRuleBuilder implements RuleBuilder {
+public class CachedRuleBuilder extends AbstractObjectBuilder implements RuleBuilder {
 
   private final IndicatorCache indicatorCache;
   private final RuleCache ruleCache;
@@ -67,25 +67,6 @@ public class CachedRuleBuilder implements RuleBuilder {
       case Xor: return indicator.xor(getRule(rule.getFollowUpRule()));
       default: return indicator;
     }
-  }
-
-  private Class[] resolveClasses(List<RuleInput> inputs, Function<RuleInput, Class> function) {
-    Class[] params = new Class[inputs.size()];
-    for (int i = 0, inputsSize = inputs.size(); i < inputsSize; i++) {
-      RuleInput input = inputs.get(i);
-      params[i] = function.apply(input);
-    }
-    return params;
-  }
-
-
-  private <T> T[] resolveParameters(List<RuleInput> inputs, Function<RuleInput, T> function) {
-    T[] params = (T[]) new Object[inputs.size()];
-    for (int i = 0, inputsSize = inputs.size(); i < inputsSize; i++) {
-      RuleInput input = inputs.get(i);
-      params[i] = function.apply(input);
-    }
-    return params;
   }
 
   private Object resolveValue(RuleInput input) {

@@ -22,7 +22,7 @@ import org.ta4j.core.num.PrecisionNum;
 
 @Component
 @RequiredArgsConstructor
-public class CachedIndicatorBuilder implements IndicatorBuilder {
+public class CachedIndicatorBuilder extends AbstractObjectBuilder implements IndicatorBuilder {
 
   private final IndicatorCache indicatorCache;
 
@@ -55,24 +55,6 @@ public class CachedIndicatorBuilder implements IndicatorBuilder {
     }
   }
 
-  private Class[] resolveClasses(List<IndicatorInput> inputs, Function<IndicatorInput, Class> function) {
-    Class[] params = new Class[inputs.size()];
-    for (int i = 0, inputsSize = inputs.size(); i < inputsSize; i++) {
-      IndicatorInput input = inputs.get(i);
-      params[i] = function.apply(input);
-    }
-    return params;
-  }
-
-
-  private <T> T[] resolveParameters(List<IndicatorInput> inputs, Function<IndicatorInput, T> function) {
-    T[] params = (T[]) new Object[inputs.size()];
-    for (int i = 0, inputsSize = inputs.size(); i < inputsSize; i++) {
-      IndicatorInput input = inputs.get(i);
-      params[i] = function.apply(input);
-    }
-    return params;
-  }
 
   private Object resolveValue(IndicatorInput input) {
     String name = input.getName();
