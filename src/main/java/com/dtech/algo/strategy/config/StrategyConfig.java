@@ -14,6 +14,7 @@ import lombok.ToString;
 @AllArgsConstructor
 @Builder
 @ToString
+@NoArgsConstructor
 public class StrategyConfig {
   // Strategy name
   private String strategyName;

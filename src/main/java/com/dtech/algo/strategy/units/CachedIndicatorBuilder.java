@@ -42,7 +42,6 @@ public class CachedIndicatorBuilder implements IndicatorBuilder {
       try {
         String name = config.getIndicatorName();
         Class<? extends Indicator> indicatorClass = registry.getIndicatorClass(name);
-        IndicatorInfo indicatorInfo = registry.getIndicatorInfo(name);
         List<IndicatorInput> inputs = config.getInputs();
         Object[] parameters = resolveParameters(inputs, this::resolveValue);
         Class[] classes = resolveClasses(inputs, this::resolveClass);
@@ -51,7 +50,7 @@ public class CachedIndicatorBuilder implements IndicatorBuilder {
         indicatorCache.put(key, indicator);
         return indicator;
       } catch (Exception ex) {
-        throw new StrategyException("Error occured while constructing an indicator", ex);
+        throw new StrategyException("Error occurred while constructing an indicator", ex);
       }
     }
   }
@@ -79,15 +78,13 @@ public class CachedIndicatorBuilder implements IndicatorBuilder {
     String name = input.getName();
     if (input.getType() == IndicatorInputType.Number) {
       Double value = Double.valueOf(constantsCache.get(name));
-      Num num = PrecisionNum.valueOf(value);
-      return num;
+      return PrecisionNum.valueOf(value);
     } else if (input.getType() == IndicatorInputType.BarSeries) {
       return barSeriesCache.get(name);
     }  else if (input.getType() == IndicatorInputType.Indicator) {
       return indicatorCache.get(name);
     }  else if (input.getType() == IndicatorInputType.Integer) {
-      Integer value = Integer.valueOf(constantsCache.get(name));
-      return value;
+      return Integer.valueOf(constantsCache.get(name));
     }
     return null;
   }

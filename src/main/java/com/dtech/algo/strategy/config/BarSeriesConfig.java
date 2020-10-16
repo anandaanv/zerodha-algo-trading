@@ -16,6 +16,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Builder
 @ToString
+@NoArgsConstructor
 public class BarSeriesConfig {
   private Interval interval;
   private SeriesType seriesType;

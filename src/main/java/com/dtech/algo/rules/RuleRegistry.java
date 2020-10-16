@@ -3,9 +3,7 @@ package com.dtech.algo.rules;
 import com.dtech.algo.registry.common.BaseRegistry;
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.Rule;
@@ -17,13 +15,14 @@ import org.ta4j.core.trading.rules.IsHighestRule;
 import org.ta4j.core.trading.rules.OverIndicatorRule;
 import org.ta4j.core.trading.rules.UnderIndicatorRule;
 
+import javax.annotation.PostConstruct;
+
 
 @Service
-public class RuleRegistry extends BaseRegistry {
+public class RuleRegistry extends BaseRegistry<Rule, RuleInfo> {
 
-  private static Map<String, Class> indicatorMap = new HashMap<>();
-
-  static {
+  @PostConstruct
+  public void initialise() {
     add(AndRule.class);
     add(BooleanIndicatorRule.class);
     add(CrossedDownIndicatorRule.class);
@@ -33,17 +32,11 @@ public class RuleRegistry extends BaseRegistry {
     add(OverIndicatorRule.class);
   }
 
-  private static void add(Class<? extends Rule> aClass) {
-    String simpleName = aClass.getSimpleName();
-    String key = camelToLower(simpleName);
-    indicatorMap.put(key, aClass);
-  }
-
   public Class<? extends Rule> getRuleClass(String name) {
-    return indicatorMap.get(name);
+    return registryMap.get(name);
   }
 
-  public RuleInfo getRuleInfo(String name) {
+  public RuleInfo getObjectInfo(String name) {
     Class aClass = getRuleClass(name);
     String className = camelToLower(aClass.getSimpleName());
     Constructor[] constructors = aClass.getConstructors();

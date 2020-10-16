@@ -17,6 +17,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 import java.util.Arrays;
 import java.util.Collections;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -55,6 +57,10 @@ class CachedRuleBuilderTest {
 
   private ObjectWriter objectMapper = new ObjectMapper().writerWithDefaultPrettyPrinter();
 
+  @BeforeEach
+  public void before() {
+    indicatorRegistry.initialise();
+  }
 
   @Test
   void getBooleanRule() throws JsonProcessingException, StrategyException {
