@@ -3,6 +3,7 @@ package com.dtech.algo.indicators;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.dtech.algo.registry.common.ConstructorArgs;
+import com.dtech.algo.strategy.helper.ComponentHelper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
@@ -19,6 +20,8 @@ import org.ta4j.core.indicators.range.OpeningRangeLow;
 class IndicatorRegistryTest {
 
   private ObjectWriter objectMapper = new ObjectMapper().writerWithDefaultPrettyPrinter();
+
+  private ComponentHelper componentHelper = new ComponentHelper(null, null, null, null);
 
   @Test
   void getIndicatorClass() {
@@ -51,16 +54,7 @@ class IndicatorRegistryTest {
   void getIndicatorInfoSma() throws JsonProcessingException {
     IndicatorRegistry registry = getIndicatorRegistry();
     IndicatorInfo registryIndicatorInfo = registry.getObjectInfo("s-m-a-indicator");
-    ConstructorArgs[] args = new ConstructorArgs[2];
-    args[0] = new ConstructorArgs("indicator", "args0", null);
-    args[1] = new ConstructorArgs("int", "args1", null);
-    List<ConstructorArgs> targs = Arrays.asList(args);
-    IndicatorConstructor con = IndicatorConstructor.builder()
-        .args(targs)
-        .build();
-    IndicatorInfo indicatorInfo = IndicatorInfo.builder()
-        .constructors(Collections.singletonList(con))
-        .name("s-m-a-indicator").build();
+    IndicatorInfo indicatorInfo = componentHelper.getConstantIndicatorInfo("indicator", "int", "s-m-a-indicator");
     System.out.println(objectMapper.writeValueAsString(indicatorInfo));
     assertEquals(registryIndicatorInfo, indicatorInfo);
   }
@@ -69,16 +63,7 @@ class IndicatorRegistryTest {
   void getIndicatorInfoConstant() throws JsonProcessingException {
     IndicatorRegistry registry = getIndicatorRegistry();
     IndicatorInfo registryIndicatorInfo = registry.getObjectInfo("constant-indicator");
-    ConstructorArgs[] args = new ConstructorArgs[2];
-    args[0] = new ConstructorArgs("bar-series", "args0", null);
-    args[1] = new ConstructorArgs("num", "args1", null);
-    List<ConstructorArgs> targs = Arrays.asList(args);
-    IndicatorConstructor con = IndicatorConstructor.builder()
-        .args(targs)
-        .build();
-    IndicatorInfo indicatorInfo = IndicatorInfo.builder()
-        .constructors(Collections.singletonList(con))
-        .name("constant-indicator").build();
+    IndicatorInfo indicatorInfo = componentHelper.getConstantIndicatorInfo("bar-series", "num", "constant-indicator");
     System.out.println(objectMapper.writeValueAsString(indicatorInfo));
     assertEquals(registryIndicatorInfo, indicatorInfo);
   }

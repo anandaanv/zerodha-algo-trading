@@ -38,6 +38,12 @@ class RuleRegistryTest {
     RuleRegistry registry = getRuleRegistry();
     String ruleName = "and-rule";
     RuleInfo registryIndicatorInfo = registry.getObjectInfo(ruleName);
+    RuleInfo indicatorInfo = getGenericRuleInfo(ruleName);
+    System.out.println(objectMapper.writeValueAsString(registryIndicatorInfo));
+    assertEquals(registryIndicatorInfo, indicatorInfo);
+  }
+
+  public RuleInfo getGenericRuleInfo(String ruleName) {
     ConstructorArgs[] args = new ConstructorArgs[2];
     args[0] = new ConstructorArgs("rule", "arg0", null);
     args[1] = new ConstructorArgs("rule", "arg1", null);
@@ -48,8 +54,7 @@ class RuleRegistryTest {
     RuleInfo indicatorInfo = RuleInfo.builder()
         .constructors(Collections.singletonList(con))
         .name(ruleName).build();
-    System.out.println(objectMapper.writeValueAsString(registryIndicatorInfo));
-    assertEquals(registryIndicatorInfo, indicatorInfo);
+    return indicatorInfo;
   }
 
   @Test

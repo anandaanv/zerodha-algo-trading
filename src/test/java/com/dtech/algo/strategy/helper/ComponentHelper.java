@@ -1,6 +1,11 @@
 package com.dtech.algo.strategy.helper;
 
 import com.dtech.algo.exception.StrategyException;
+import com.dtech.algo.indicators.IndicatorConstructor;
+import com.dtech.algo.indicators.IndicatorInfo;
+import com.dtech.algo.registry.common.ConstructorArgs;
+import com.dtech.algo.rules.RuleConstructor;
+import com.dtech.algo.rules.RuleInfo;
 import com.dtech.algo.series.ExtendedBarSeries;
 import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
 import com.dtech.algo.strategy.builder.cache.ConstantsCache;
@@ -199,5 +204,32 @@ public class ComponentHelper {
                 .exit(Arrays.asList(shortSmaUnderLongSma, "AND", rsiCrossedUpFive, "AND", shortSmaUnderClosePrice))
                 .strategyName("rsi-strategy")
                 .build();
+    }
+
+    public IndicatorInfo getConstantIndicatorInfo(String indicatorType, String num, String indicatorName) {
+        ConstructorArgs[] args = new ConstructorArgs[2];
+        args[0] = new ConstructorArgs(indicatorType, "args0", null);
+        args[1] = new ConstructorArgs(num, "args1", null);
+        List<ConstructorArgs> targs = Arrays.asList(args);
+        IndicatorConstructor con = IndicatorConstructor.builder()
+                .args(targs)
+                .build();
+        return IndicatorInfo.builder()
+                .constructors(Collections.singletonList(con))
+                .name(indicatorName).build();
+    }
+
+    public RuleInfo getGenericRuleInfo(String ruleName) {
+        ConstructorArgs[] args = new ConstructorArgs[2];
+        args[0] = new ConstructorArgs("rule", "arg0", null);
+        args[1] = new ConstructorArgs("rule", "arg1", null);
+        List<ConstructorArgs> targs = Arrays.asList(args);
+        RuleConstructor con = RuleConstructor.builder()
+                .args(targs)
+                .build();
+        RuleInfo indicatorInfo = RuleInfo.builder()
+                .constructors(Collections.singletonList(con))
+                .name(ruleName).build();
+        return indicatorInfo;
     }
 }
