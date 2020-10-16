@@ -35,10 +35,10 @@ class IndicatorRegistryTest {
     IndicatorRegistry registry = getIndicatorRegistry();
     IndicatorInfo registryIndicatorInfo = registry.getObjectInfo("opening-range-low");
     ConstructorArgs[] args = new ConstructorArgs[3];
-    args[0] = new ConstructorArgs("bar-series", "args0", null);
+    args[0] = new ConstructorArgs("bar-series", "args0", Collections.emptyList());
     args[1] = new ConstructorArgs("time-level", "args1",
         Arrays.stream(TimeLevel.values()).map(TimeLevel::name).collect(Collectors.toList()));
-    args[2] = new ConstructorArgs("int", "args2", null);
+    args[2] = new ConstructorArgs("int", "args2", Collections.emptyList());
     List<ConstructorArgs> targs = Arrays.asList(args);
     IndicatorConstructor con = IndicatorConstructor.builder()
         .args(targs)

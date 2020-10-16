@@ -11,6 +11,7 @@ import com.dtech.algo.rules.RuleRegistry;
 import com.dtech.algo.strategy.config.IndicatorConfig;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -25,13 +26,13 @@ public class MetadataController {
     private final IndicatorRegistry indicatorRegistry;
     private final RuleRegistry ruleRegistry;
 
-    @PostMapping("/meta/indicator-detail")
+    @GetMapping("/meta/indicator-detail")
     public Map<String, IndicatorInfo> getIndicatorDetails() throws StrategyException {
         return indicatorRegistry.getAllObjectNames().stream()
                 .collect(Collectors.toMap(name -> name, name -> indicatorRegistry.getObjectInfo(name)));
     }
 
-    @PostMapping("/meta/rule-detail")
+    @GetMapping("/meta/rule-detail")
     public Map<String, RuleInfo> getRuleDetails() throws StrategyException {
         return ruleRegistry.getAllObjectNames().stream()
                 .collect(Collectors.toMap(name -> name, name -> ruleRegistry.getObjectInfo(name)));

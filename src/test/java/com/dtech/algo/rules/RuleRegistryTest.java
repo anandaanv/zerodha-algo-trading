@@ -45,8 +45,8 @@ class RuleRegistryTest {
 
   public RuleInfo getGenericRuleInfo(String ruleName) {
     ConstructorArgs[] args = new ConstructorArgs[2];
-    args[0] = new ConstructorArgs("rule", "arg0", null);
-    args[1] = new ConstructorArgs("rule", "arg1", null);
+    args[0] = new ConstructorArgs("rule", "arg0", Collections.emptyList());
+    args[1] = new ConstructorArgs("rule", "arg1", Collections.emptyList());
     List<ConstructorArgs> targs = Arrays.asList(args);
     RuleConstructor con = RuleConstructor.builder()
         .args(targs)
@@ -63,7 +63,7 @@ class RuleRegistryTest {
     String ruleName = "boolean-indicator-rule";
     RuleInfo registryIndicatorInfo = registry.getObjectInfo(ruleName);
     ConstructorArgs[] args = new ConstructorArgs[1];
-    args[0] = new ConstructorArgs("indicator", "arg0", null);
+    args[0] = new ConstructorArgs("indicator", "arg0", Collections.emptyList());
     List<ConstructorArgs> targs = Arrays.asList(args);
     RuleConstructor con = RuleConstructor.builder()
         .args(targs)
