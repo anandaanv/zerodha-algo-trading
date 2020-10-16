@@ -8,11 +8,13 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Builder
 @AllArgsConstructor
+@NoArgsConstructor
 public class StrategyConfig {
-  private final List<StrategyParameters> params;
+  private List<StrategyParameters> params;
 
   public Map<String, String> getConfig(String key) {
     return params.stream().filter(strategyParameters -> strategyParameters.getStrategyType().equals(key))

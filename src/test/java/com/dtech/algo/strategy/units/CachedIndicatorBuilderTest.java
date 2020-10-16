@@ -57,6 +57,7 @@ class CachedIndicatorBuilderTest {
 
   @Test
   void getIndicatorConstant() throws StrategyException, JsonProcessingException {
+    indicatorRegistry.initialize();
     Mockito.doReturn("10")
         .when(constantsCache).get("value");
     Mockito.doReturn(new ExtendedBarSeries())
@@ -79,6 +80,7 @@ class CachedIndicatorBuilderTest {
 
   @Test
   void getIndicatorSMA() throws StrategyException, JsonProcessingException {
+    indicatorRegistry.initialize();
     String barCount = "bar-count";
     Mockito.doReturn("10")
         .when(constantsCache).get(barCount);

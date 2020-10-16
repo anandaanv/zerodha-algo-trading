@@ -10,6 +10,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.ta4j.core.indicators.pivotpoints.TimeLevel;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
@@ -20,16 +22,16 @@ class IndicatorRegistryTest {
 
   @Test
   void getIndicatorClass() {
-    IndicatorRegistry registry = new IndicatorRegistry();
+    IndicatorRegistry registry = getIndicatorRegistry();
     Class indicatorClass = registry.getIndicatorClass("opening-range-low");
     assertEquals(OpeningRangeLow.class, indicatorClass);
   }
 
   @Test
   void getIndicatorInfo() throws JsonProcessingException {
-    IndicatorRegistry registry = new IndicatorRegistry();
-    IndicatorInfo registryIndicatorInfo = registry.getIndicatorInfo("opening-range-low");
-    ConstructorArgs args[] = new ConstructorArgs[3];
+    IndicatorRegistry registry = getIndicatorRegistry();
+    IndicatorInfo registryIndicatorInfo = registry.getObjectInfo("opening-range-low");
+    ConstructorArgs[] args = new ConstructorArgs[3];
     args[0] = new ConstructorArgs("bar-series", "args0", null);
     args[1] = new ConstructorArgs("time-level", "args1",
         Arrays.stream(TimeLevel.values()).map(TimeLevel::name).collect(Collectors.toList()));
@@ -47,9 +49,9 @@ class IndicatorRegistryTest {
 
   @Test
   void getIndicatorInfoSma() throws JsonProcessingException {
-    IndicatorRegistry registry = new IndicatorRegistry();
-    IndicatorInfo registryIndicatorInfo = registry.getIndicatorInfo("s-m-a-indicator");
-    ConstructorArgs args[] = new ConstructorArgs[2];
+    IndicatorRegistry registry = getIndicatorRegistry();
+    IndicatorInfo registryIndicatorInfo = registry.getObjectInfo("s-m-a-indicator");
+    ConstructorArgs[] args = new ConstructorArgs[2];
     args[0] = new ConstructorArgs("indicator", "args0", null);
     args[1] = new ConstructorArgs("int", "args1", null);
     List<ConstructorArgs> targs = Arrays.asList(args);
@@ -65,9 +67,9 @@ class IndicatorRegistryTest {
 
   @Test
   void getIndicatorInfoConstant() throws JsonProcessingException {
-    IndicatorRegistry registry = new IndicatorRegistry();
-    IndicatorInfo registryIndicatorInfo = registry.getIndicatorInfo("constant-indicator");
-    ConstructorArgs args[] = new ConstructorArgs[2];
+    IndicatorRegistry registry = getIndicatorRegistry();
+    IndicatorInfo registryIndicatorInfo = registry.getObjectInfo("constant-indicator");
+    ConstructorArgs[] args = new ConstructorArgs[2];
     args[0] = new ConstructorArgs("bar-series", "args0", null);
     args[1] = new ConstructorArgs("num", "args1", null);
     List<ConstructorArgs> targs = Arrays.asList(args);
@@ -79,5 +81,12 @@ class IndicatorRegistryTest {
         .name("constant-indicator").build();
     System.out.println(objectMapper.writeValueAsString(indicatorInfo));
     assertEquals(registryIndicatorInfo, indicatorInfo);
+  }
+
+  @NotNull
+  private IndicatorRegistry getIndicatorRegistry() {
+    IndicatorRegistry registry = new IndicatorRegistry();
+    registry.initialize();
+    return registry;
   }
 }

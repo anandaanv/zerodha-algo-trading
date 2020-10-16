@@ -2,17 +2,18 @@ package com.dtech.algo.backtest;
 
 import com.dtech.algo.strategy.config.BarSeriesConfig;
 import com.dtech.algo.strategy.config.StrategyConfig;
-import lombok.Builder;
-import lombok.Value;
+import lombok.*;
 
 import java.util.List;
 
-@Value
+@Data
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class BacktestInput {
 
-    List<BarSeriesConfig> barSeriesConfigs;
-    String barSeriesName;
-    StrategyConfig strategyConfig;
+    private List<BarSeriesConfig> barSeriesConfigs;
+    private String barSeriesName;
+    private StrategyConfig strategyConfig;
 
 }
