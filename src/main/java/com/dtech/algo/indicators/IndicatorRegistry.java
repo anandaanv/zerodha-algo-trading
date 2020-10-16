@@ -48,9 +48,4 @@ public class IndicatorRegistry extends BaseRegistry<Indicator, IndicatorInfo> {
             .name(className)
             .build();
   }
-
-  public List<String> getAllIndicators() {
-    return null;
-  }
-
 }

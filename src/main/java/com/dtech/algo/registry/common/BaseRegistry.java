@@ -5,10 +5,7 @@ import com.google.common.base.CaseFormat;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Parameter;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import org.jetbrains.annotations.Nullable;
@@ -63,5 +60,9 @@ public abstract class BaseRegistry<T, I> {
         String simpleName = aClass.getSimpleName();
         String key = camelToLower(simpleName);
         registryMap.put(key, aClass);
+    }
+
+    public Collection<String> getAllObjectNames() {
+        return registryMap.keySet();
     }
 }
