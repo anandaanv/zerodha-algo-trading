@@ -43,7 +43,7 @@ public abstract class BaseRegistry<T, I> {
             return Arrays.stream(enumConstants).map(Enum::name)
                     .collect(Collectors.toList());
         }
-        return null;
+        return Collections.emptyList();
     }
 
     protected List<ConstructorArgs> mapConstructorArgs(Constructor<T> constructor) {

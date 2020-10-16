@@ -208,8 +208,8 @@ public class ComponentHelper {
 
     public IndicatorInfo getConstantIndicatorInfo(String indicatorType, String num, String indicatorName) {
         ConstructorArgs[] args = new ConstructorArgs[2];
-        args[0] = new ConstructorArgs(indicatorType, "args0", null);
-        args[1] = new ConstructorArgs(num, "args1", null);
+        args[0] = new ConstructorArgs(indicatorType, "args0", Collections.emptyList());
+        args[1] = new ConstructorArgs(num, "args1", Collections.emptyList());
         List<ConstructorArgs> targs = Arrays.asList(args);
         IndicatorConstructor con = IndicatorConstructor.builder()
                 .args(targs)
@@ -221,8 +221,8 @@ public class ComponentHelper {
 
     public RuleInfo getGenericRuleInfo(String ruleName) {
         ConstructorArgs[] args = new ConstructorArgs[2];
-        args[0] = new ConstructorArgs("rule", "arg0", null);
-        args[1] = new ConstructorArgs("rule", "arg1", null);
+        args[0] = new ConstructorArgs("rule", "arg0", Collections.emptyList());
+        args[1] = new ConstructorArgs("rule", "arg1", Collections.emptyList());
         List<ConstructorArgs> targs = Arrays.asList(args);
         RuleConstructor con = RuleConstructor.builder()
                 .args(targs)
