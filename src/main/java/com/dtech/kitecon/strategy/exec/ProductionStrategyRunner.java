@@ -25,7 +25,7 @@ public class ProductionStrategyRunner {
   public void exec(BarSeries barSeries, TradingStrategy tradingStrategy) {
     Strategy strategy = getStrategy(tradingStrategy);
     log.info("Running strategy for" + this.record);
-    productionSeriesManager.run(barSeries, strategy, this.record, 200);
+    productionSeriesManager.run(barSeries, strategy, this.record, 2);
   }
 
   private Strategy getStrategy(TradingStrategy tradingStrategy) {
