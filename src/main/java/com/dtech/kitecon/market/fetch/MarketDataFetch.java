@@ -9,6 +9,8 @@ import java.util.List;
 
 public interface MarketDataFetch {
 
+
+
   String getProfile() throws IOException, KiteException;
 
   void fetch(DateRange dateRange, String instrumentToken, String interval)
