@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
+import org.springframework.test.annotation.DirtiesContext;
 
 import java.time.LocalDate;
 
@@ -21,7 +22,7 @@ import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 @SpringBootTest(classes = KiteconApplication.class)
-class LatestBarSeriesProviderTest {
+class LatestBarSeriesProviderFromCacheTest {
 
     @MockBean
     private BarSeriesLoader delegate;
@@ -30,17 +31,20 @@ class LatestBarSeriesProviderTest {
     private LatestBarSeriesProvider barSeriesProvider;
 
     @Test
-    void loadBarSeries() throws StrategyException {
+    @DirtiesContext
+    void loadBarSeriesFromCache() throws StrategyException {
         LocalDate date = LocalDate.now().minusDays(10);
         ExtendedBarSeries barSeries = new ExtendedBarSeries();
         Mockito.doReturn(barSeries)
                 .when(delegate).loadBarSeries(Mockito.any(BarSeriesConfig.class));
 
         IntervalBarSeries intervalBarSeries = barSeriesProvider.loadBarSeries(getBarSeriesConfigSbinCash15Min(date, date));
+        IntervalBarSeries intervalBarSeries2 = barSeriesProvider.loadBarSeries(getBarSeriesConfigSbinCash15Min(date, date));
         Mockito.verify(delegate, times(1))
                 .loadBarSeries(ArgumentMatchers.argThat(argument ->
                         argument.getEndDate().equals(LocalDate.now())));
-        assertEquals(barSeries, intervalBarSeries);
+        assertEquals(barSeries, intervalBarSeries2);
+        assertEquals(intervalBarSeries, intervalBarSeries2);
 
     }
 
