@@ -12,6 +12,7 @@ import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeries;
@@ -23,6 +24,7 @@ import java.util.List;
 
 @RequiredArgsConstructor
 @Service
+@Primary
 public class RdbmsBarSeriesLoader implements BarSeriesLoader {
 
     private final CandleRepository candleRepository;
