@@ -6,6 +6,7 @@ import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -20,6 +21,7 @@ public class LatestBarSeriesProvider implements BarSeriesLoader {
 
     private final BarSeriesLoader delegate;
 
+    @Cacheable(cacheNames = "barSeries")
     public IntervalBarSeries loadBarSeries(BarSeriesConfig barSeriesConfig) throws StrategyException {
         try {
             BarSeriesConfig refSeries = barSeriesConfig.clone();
