@@ -17,7 +17,7 @@ import java.time.Period;
  */
 @RequiredArgsConstructor
 @Component
-public class LatestBarSeriesProvider implements BarSeriesLoader {
+public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
 
     private final BarSeriesLoader delegate;
 
