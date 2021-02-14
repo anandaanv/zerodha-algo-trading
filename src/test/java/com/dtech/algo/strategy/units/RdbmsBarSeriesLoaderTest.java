@@ -61,14 +61,6 @@ class RdbmsBarSeriesLoaderTest {
     }
 
     @Test
-    void getBarSeries() {
-    }
-
-    @Test
-    void addBarToSeries() {
-    }
-
-    @Test
     void resolveInstrument() {
         Instrument sbin = Instrument.builder()
                 .name("SBIN").build();

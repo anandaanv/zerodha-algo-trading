@@ -29,7 +29,7 @@ public class BackTestingHandlerJson {
 
   public BacktestResult execute(BacktestInput backtestInput) throws StrategyException {
     List<BarSeriesConfig> barSeriesConfigs = backtestInput.getBarSeriesConfigs();
-    barSeriesConfigs.forEach(barSeriesLoader::loadBarSeries);
+//    barSeriesConfigs.forEach(barSeriesLoader::loadBarSeries);
     IntervalBarSeries barSeriesToTrade = barSeriesLoader.loadBarSeries(
             BarSeriesConfig.builder().name(backtestInput.getBarSeriesName()).build());
     StrategyConfig strategyConfig = backtestInput.getStrategyConfig();

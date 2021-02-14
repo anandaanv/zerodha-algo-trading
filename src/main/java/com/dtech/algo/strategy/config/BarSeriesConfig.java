@@ -17,7 +17,7 @@ import java.time.LocalDate;
 @Builder
 @ToString
 @NoArgsConstructor
-public class BarSeriesConfig {
+public class BarSeriesConfig implements Cloneable {
   private Interval interval;
   private SeriesType seriesType;
   private InstrumentType instrumentType;
@@ -26,4 +26,8 @@ public class BarSeriesConfig {
   private String name;
   private LocalDate startDate;
   private LocalDate endDate;
+
+  public BarSeriesConfig clone() throws CloneNotSupportedException {
+    return (BarSeriesConfig) super.clone();
+  }
 }

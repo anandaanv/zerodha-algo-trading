@@ -111,7 +111,7 @@ public class ComponentHelper {
         indicatorConfigs.add(closePriceIndicator);
     }
 
-    public String setupBarSeries(String barSeriesName) {
+    public String setupBarSeries(String barSeriesName) throws StrategyException {
         ExtendedBarSeries series = ExtendedBarSeries.builder()
                 .delegate(barSeries)
                 .build();
