@@ -1,6 +1,8 @@
 package com.dtech.algo.series;
 
+import com.dtech.algo.strategy.sync.CandleSyncExecutor;
 import com.dtech.algo.strategy.sync.CandleSyncJob;
+import com.dtech.algo.strategy.sync.CandleSyncToken;
 import lombok.*;
 import lombok.experimental.Delegate;
 import org.ta4j.core.BarSeries;
@@ -24,7 +26,7 @@ public class ExtendedBarSeries implements IntervalBarSeries {
     private SeriesType seriesType;
     private String instrument;
 
-    private CandleSyncJob candleSyncJob;
+    private CandleSyncExecutor syncExecutor;
 
     @Override
     public void addBarWithTimeValidation(ZonedDateTime endTime, Number openPrice, Number highPrice, Number lowPrice, Number closePrice,
@@ -47,6 +49,9 @@ public class ExtendedBarSeries implements IntervalBarSeries {
         }
         BaseBar bar = new BaseBar(Duration.ofDays(1), endTime, numOf(openPrice), numOf(highPrice), numOf(lowPrice),
                 numOf(closePrice), numOf(volume), numOf(0));
+        if(replace == false && this.getBarCount() > 0) {
+            syncExecutor.submit(new CandleSyncToken(bar, instrument, interval));
+        }
         this.addBar(bar, replace);
     }
 
