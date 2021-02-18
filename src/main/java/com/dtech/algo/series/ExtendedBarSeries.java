@@ -41,7 +41,7 @@ public class ExtendedBarSeries implements IntervalBarSeries {
         }
         BaseBar bar = new BaseBar(Duration.ofDays(1), endTime, numOf(openPrice), numOf(highPrice), numOf(lowPrice),
                 numOf(closePrice), numOf(volume), numOf(0));
-        if(replace == false && this.getBarCount() > 0) {
+        if(replace == false && this.getBarCount() > 0 && syncExecutor != null) {
             syncExecutor.submit(new CandleSyncToken(bar, instrument, interval));
         }
         this.addBar(bar, replace);
