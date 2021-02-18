@@ -5,6 +5,7 @@ import com.dtech.algo.strategy.sync.CandleSyncJob;
 import com.dtech.algo.strategy.sync.CandleSyncToken;
 import lombok.*;
 import lombok.experimental.Delegate;
+import org.jetbrains.annotations.NotNull;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBar;
 
@@ -33,16 +34,7 @@ public class ExtendedBarSeries implements IntervalBarSeries {
                                          Number volume) {
         // FIXME - we don't have implementation that covers week and months as of now..
         //  Algotrading doens't really deal in that range.
-        int timeMinute = endTime.getMinute();
-        int timeHour = endTime.getHour();
-        int offset = getOffset(interval);
-        if (interval == Interval.OneHour || interval == Interval.FourHours) {
-            endTime = endTime.truncatedTo(ChronoUnit.DAYS)
-                    .plusHours(((timeHour / offset) + 1) * offset);
-        } else {
-            endTime = endTime.truncatedTo(ChronoUnit.HOURS)
-                    .plusMinutes(((timeMinute / offset) + 1) * offset);
-        }
+        endTime = calculateActualEndTime(endTime);
         boolean replace = false;
         if(this.getBarCount() > 0 && endTime.equals(getLastBar().getEndTime())) {
             replace = true;
@@ -53,6 +45,20 @@ public class ExtendedBarSeries implements IntervalBarSeries {
             syncExecutor.submit(new CandleSyncToken(bar, instrument, interval));
         }
         this.addBar(bar, replace);
+    }
+
+    private ZonedDateTime calculateActualEndTime(ZonedDateTime endTime) {
+        int timeMinute = endTime.getMinute();
+        int timeHour = endTime.getHour();
+        int offset = getOffset(interval);
+        if (interval == Interval.OneHour || interval == Interval.FourHours) {
+            endTime = endTime.truncatedTo(ChronoUnit.DAYS)
+                    .plusHours(((timeHour / offset) + 1) * offset);
+        } else {
+            endTime = endTime.truncatedTo(ChronoUnit.HOURS)
+                    .plusMinutes(((timeMinute / offset) + 1) * offset);
+        }
+        return endTime;
     }
 
     private int getOffset(Interval interval) {
