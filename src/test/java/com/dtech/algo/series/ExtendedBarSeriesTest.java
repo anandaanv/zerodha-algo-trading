@@ -88,7 +88,7 @@ class ExtendedBarSeriesTest {
         extendedBarSeries.addBarWithTimeValidation(time.plusMinutes(15), 1.0, 2.0, 3.0, 4.0, 5.0);
         Assertions.assertEquals(extendedBarSeries.getBar(0).getEndTime(), time.plusMinutes(3));
         Assertions.assertEquals(extendedBarSeries.getBar(1).getEndTime(), time.plusMinutes(18));
-        Mockito.verify(candleSyncExecutor, Mockito.times(2)).submit(Mockito.any());
+        Mockito.verify(candleSyncExecutor, Mockito.times(1)).submit(Mockito.any());
     }
 
 }
