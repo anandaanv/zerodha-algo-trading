@@ -1,19 +1,17 @@
 package com.dtech.kitecon.service;
 
-import com.dtech.kitecon.data.BaseCandle;
-import com.dtech.kitecon.data.DailyCandle;
-import com.dtech.kitecon.data.FifteenMinuteCandle;
-import com.dtech.kitecon.data.FiveMinuteCandle;
-import com.dtech.kitecon.data.Instrument;
-import com.dtech.kitecon.data.OneMinuteCandle;
+import com.dtech.algo.series.Interval;
+import com.dtech.kitecon.data.*;
 import com.zerodhatech.models.HistoricalData;
+import org.springframework.stereotype.Component;
+import org.ta4j.core.BaseBar;
+
 import java.text.ParseException;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import org.springframework.stereotype.Component;
 
 @Component
 public class CandleFacade {
@@ -32,6 +30,23 @@ public class CandleFacade {
     dbCandle.setTimestamp(ZonedDateTime.parse(candle.timeStamp, dateFormat).toLocalDateTime());
     return dbCandle;
   }
+
+
+  public BaseCandle buildCandle(Instrument instrument, BaseBar baseBar,
+                                Interval interval) {
+    BaseCandle dbCandle = getBaseCandle(interval.toString());
+    dbCandle.setInstrument(instrument);
+    dbCandle.setOpen(baseBar.getOpenPrice().doubleValue());
+    dbCandle.setHigh(baseBar.getHighPrice().doubleValue());
+    dbCandle.setLow(baseBar.getLowPrice().doubleValue());
+    dbCandle.setClose(baseBar.getClosePrice().doubleValue());
+    dbCandle.setVolume(baseBar.getVolume().longValue());
+    dbCandle.setOi(0L);
+    dbCandle.setTimestamp(baseBar.getEndTime().toLocalDateTime());
+    return dbCandle;
+  }
+
+
 
   private BaseCandle getBaseCandle(String interval) {
     switch (interval) {
