@@ -34,4 +34,9 @@ public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
         }
     }
 
+
+    @Override
+    public void updateBarSeries(DataTick tick) {
+
+    }
 }
