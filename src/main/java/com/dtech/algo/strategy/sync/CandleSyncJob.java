@@ -16,14 +16,12 @@ public class CandleSyncJob implements Runnable {
     private final CandleRepository candleRepository;
     private final CandleFacade candleFacade;
 
-    private final BaseBar baseBar;
-    private final String instrument;
-    private final Interval interval;
+    private final CandleSyncToken syncToken;
 
     @Override
     public void run() {
-        Long instrument = Long.valueOf(this.instrument);
-        insertNewCandle(instrument, this.baseBar, this.interval);
+        Long instrument = Long.valueOf(syncToken.getInstrument());
+        insertNewCandle(instrument, syncToken.getBaseBar(), syncToken.getInterval());
     }
 
     protected void insertNewCandle(Long instrument, BaseBar baseBar, Interval interval) {

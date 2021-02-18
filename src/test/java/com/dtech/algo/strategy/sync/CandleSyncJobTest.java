@@ -3,6 +3,7 @@ package com.dtech.algo.strategy.sync;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.service.CandleFacade;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -18,6 +19,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
 class CandleSyncJobTest {
@@ -31,17 +34,21 @@ class CandleSyncJobTest {
     @Mock
     private CandleRepository candleRepository;
 
+    @BeforeEach
+    public void setup() {
+        Mockito.doNothing().when(candleRepository).saveAll(any(), any());
+    }
+
     @Test
     void queueNewCandle() throws InterruptedException {
         Long instrument = 1L;
-        CandleSyncJob syncJob = new CandleSyncJob(candleRepository, candleFacade, baseBar1, instrument.toString(), Interval.FifteenMinute);
+        CandleSyncToken syncToken = new CandleSyncToken(baseBar1, instrument.toString(), Interval.FifteenMinute);
+        CandleSyncJob syncJob = new CandleSyncJob(candleRepository, candleFacade, syncToken);
         ExecutorService service = Executors.newFixedThreadPool(1);
-        service.submit(syncJob);
         CandleSyncJob job = Mockito.spy(syncJob);
         job.run();
-        service.shutdown();
-        service.awaitTermination(100, TimeUnit.MILLISECONDS);
         Mockito.verify(job, Mockito.times(1)).insertNewCandle(instrument, baseBar1, Interval.FifteenMinute);
+        Mockito.verify(candleRepository, Mockito.times(1)).saveAll(eq(Interval.FifteenMinute.toString()), Mockito.any());
     }
 }
 

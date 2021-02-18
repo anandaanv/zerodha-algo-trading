@@ -1,5 +1,9 @@
 package com.dtech.algo.strategy.sync;
 
+import com.dtech.kitecon.repository.CandleRepository;
+import com.dtech.kitecon.service.CandleFacade;
+import lombok.RequiredArgsConstructor;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
@@ -9,7 +13,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@RequiredArgsConstructor
 public class CandleSyncExecutor {
+
+    private final CandleRepository candleRepository;
+    private final CandleFacade candleFacade;
 
     private ExecutorService executorService;
 
@@ -18,8 +26,12 @@ public class CandleSyncExecutor {
         executorService = Executors.newFixedThreadPool(1);
     }
 
-    public void submit(CandleSyncJob job) {
-        executorService.submit(job);
+    public void submit(CandleSyncToken job) {
+        executorService.submit(getSyncJob(job));
+    }
+
+    protected CandleSyncJob getSyncJob(CandleSyncToken job) {
+        return new CandleSyncJob(candleRepository, candleFacade, job);
     }
 
     @PreDestroy
@@ -27,4 +39,5 @@ public class CandleSyncExecutor {
         executorService.shutdown();
         executorService.awaitTermination(5, TimeUnit.MINUTES);
     }
+
 }
