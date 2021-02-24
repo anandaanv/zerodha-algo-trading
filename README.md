@@ -3,6 +3,7 @@ A codebase to connect zerodha connect along with algo trading library to use pow
 
 **IMP: Any new code additions should go to package `com.dtech.algo`. This package is supposed to have 100% code coverage production ready.**
 
+**I am looking for React/ Flutter developers to build a frontend app for this project**
 
 Mission - 
 Its not just zerodha, but this algo trading can apply to various platforms. What we are trying to do - 
