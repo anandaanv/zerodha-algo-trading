@@ -1,9 +1,9 @@
 # zerodha-algo-trading
 A codebase to connect zerodha connect along with algo trading library to use power of algo trading with zerodha
 
-**IMP: Any new code additions should go to package `com.dtech.algo`. This package is supposed to have 100% code coverage production ready.**
-
-**I am looking for React/ Flutter developers to build a frontend app for this project**
+<div style="background:green; padding:10px;">
+Any new code additions should go to package <span style="background:grey;">com.dtech.algo</span>. This package is supposed to have 100% code coverage production ready.
+</div>
 
 We started with simple MVP for fetching data from Zerodha and putting trades. When it was successful, we went ahead with 
 building a fully working algo trading app.
@@ -32,5 +32,11 @@ These are few things from the top of my mind, and the list is ever-growing!!
 ### Do we follow any development practices?
 Yes, we follow TDD, or at least we expect reasonable coverage on the code that we write 
 We have CI setup with github actions, and the code health is tracked on it.
-   
+
+<span style="background:green; padding:10px;">
+I am looking for React/ Flutter developers to build a frontend app for this project
+</span>
+
 > We welcome all sort of contributions, including your time and money!!
+ 
+ 
