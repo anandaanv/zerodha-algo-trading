@@ -5,29 +5,28 @@ A codebase to connect zerodha connect along with algo trading library to use pow
 
 **I am looking for React/ Flutter developers to build a frontend app for this project**
 
-Mission - 
-Its not just zerodha, but this algo trading can apply to various platforms. What we are trying to do - 
+We started with simple MVP for fetching data from Zerodha and putting trades. When it was successful, we went ahead with 
+building a fully working algo trading app.
 
-1. Initialize framework to download historical data with with zerodha.
-2. Initialize the framework to fetch a stock data along with its related scripts, like future and options. 
-   While making any trading decisions, it very important to keen an eye on various not technical parameters - like Open interest, Future premium, Option chain etc, and also analyzing the movements of all these parameters remains very important for any day-trader. 
-3. We try to keep it simple, and provide a StrategyBuilder and a BackTesting framework which includes all of these parameters, and makes it very easy for any strategy writer to make decisions.
-   
-   Powered by Ta4j, we have more than 200 Technical indicators, and we will keep ono contributing Ta4j to grow the list.
-   
-Present status - 
-1. User can download avauilable data from Zerodha. You can create an application in zeordha that will login and redirect you back to our platform.
-2. You can download all present instruments on exchange.
-3. When you try to download a script from NSE, we also download its related data from NFO.
-4. You can build a strategy using our Base-class and quickly backtest the same using another API provided. It returns evry good Json Response. 
+* What do we want to build?
 
-Backlog - 
-1. Current DataLoader loads NFO data for only current month. say e.g. If you take INFY, there can be many option series expring every month say current price is 700, then there will be series like INFYOCT19700CE, INFYSEP19700CE, INFYNOV19700CE, all those series should be counted as single series. 
-    How to do that? Create a separate relationship table, that scans the instruments and finds out the relationships in Base script and derivatives and their Instruments. 
-    Upon data requestm we can fetch all derivatives from same script, and merge the hostorical data based on expiry. This will make it very easier to backtest the data for any script.
- 2. Ability to provide the option scripts as PEITM1, PEITM2, PEITM3 where PEITM1 is PutInTheMoneyNearest1, PEITM2 is PutInTheMoneyNearest2 and so on. This will make the strategy builders not to rely on extracting the names form scripts, but they can build a strategy based on standard variables. 
-    This can actually help us to write our own scripting language in future. 
- 3. Analyze and link missing edges in the tool
- 4. Ability to put trade on behalf of user once a strategy is live.
+We want to build a solution where users can build a strategies that can 
+together work on different segments and make a comparison analysis in Equity, Derivatives before 
+Putting trade. E.g. I want to buy SBIN Fut, but the best criteria to make that call is 
+analysing open interest in the nearest In the money Put. We want to build that level of mechanism, which no one provides as of now.
+
+* What do we have as of now?
+
+After first MVP, now we have built a server side architecture to make fully configurable strategies using 
+  different bar-series for technical analysis and different bar-series for trades. So now you can make a trade in 
+  SBIN Fut Or SBI Cash by analysing Open interest in SBIN call and puts, or PE ratio,
+
+* What is pending?
+
+We have a huge backlog, because we want to build a market ready product. Some of them are 
+1. Build a usable web/mobile app that can be used by our users to build strategy
+2. Integrate with zerodha websockets for now for putting trades in realtime.
+3. Take the library to next level with integrating with different brokers.
+These are few things from the top of my mind, and the list is ever-growing!!
    
-   
+**We welcome all sort of contributions, including your time and money!!**
