@@ -1,35 +1,33 @@
 package com.dtech.algo.rules;
 
 import com.dtech.algo.registry.common.BaseRegistry;
+import org.reflections.Reflections;
+import org.reflections.scanners.SubTypesScanner;
+import org.springframework.stereotype.Service;
+import org.ta4j.core.Rule;
+import org.ta4j.core.indicators.AbstractIndicator;
+import org.ta4j.core.trading.rules.*;
+
+import javax.annotation.PostConstruct;
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
-import org.springframework.stereotype.Service;
-import org.ta4j.core.Rule;
-import org.ta4j.core.trading.rules.AndRule;
-import org.ta4j.core.trading.rules.BooleanIndicatorRule;
-import org.ta4j.core.trading.rules.CrossedDownIndicatorRule;
-import org.ta4j.core.trading.rules.CrossedUpIndicatorRule;
-import org.ta4j.core.trading.rules.IsHighestRule;
-import org.ta4j.core.trading.rules.OverIndicatorRule;
-import org.ta4j.core.trading.rules.UnderIndicatorRule;
-
-import javax.annotation.PostConstruct;
 
 
 @Service
 public class RuleRegistry extends BaseRegistry<Rule, RuleInfo> {
 
+  public static Set<Class<? extends AbstractRule>> getClassesFromPackage(String packageName) {
+    Reflections reflections = new Reflections(packageName, new SubTypesScanner(false));
+    return reflections.getSubTypesOf(AbstractRule.class);
+  }
+
   @PostConstruct
   public void initialise() {
-    add(AndRule.class);
-    add(BooleanIndicatorRule.class);
-    add(CrossedDownIndicatorRule.class);
-    add(CrossedUpIndicatorRule.class);
-    add(IsHighestRule.class);
-    add(UnderIndicatorRule.class);
-    add(OverIndicatorRule.class);
+    Set<Class<? extends AbstractRule>> indicators = getClassesFromPackage("org.ta4j.core.trading.rules");
+    indicators.stream().forEach(this::add);
   }
 
   public Class<? extends Rule> getRuleClass(String name) {
