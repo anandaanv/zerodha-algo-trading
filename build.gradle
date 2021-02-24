@@ -39,6 +39,9 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     compile group: 'de.codecentric', name: 'spring-boot-admin-starter-server', version: '2.3.0'
 
+    compile group: 'org.reflections', name: 'reflections', version: '0.9.10'
+
+
     //mapstruct
     implementation 'org.mapstruct:mapstruct:1.4.1.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.4.1.Final'
