@@ -7,7 +7,7 @@ public class PnLCalculator {
   @Test
   void calculatePnL() {
     double amount = 50000.0;
-    double tentativePrice = 240.0;
+    double tentativePrice = 240;
     double marginPercentage = 21.0;
     double buyProfit = 250.0;
     double sellProfit = 118.0;

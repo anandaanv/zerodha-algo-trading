@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseStrategy;
 import org.ta4j.core.Strategy;
+import org.ta4j.core.indicators.SMAIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.indicators.helpers.DifferenceRatioIndicator;
 import org.ta4j.core.indicators.pivotpoints.TimeLevel;
@@ -16,12 +17,7 @@ import org.ta4j.core.indicators.range.OpeningRangeHigh;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
 import org.ta4j.core.indicators.range.PercentageIndicator;
 import org.ta4j.core.num.PrecisionNum;
-import org.ta4j.core.trading.rules.CrossedDownIndicatorRule;
-import org.ta4j.core.trading.rules.CrossedUpIndicatorRule;
-import org.ta4j.core.trading.rules.IsEqualRule;
-import org.ta4j.core.trading.rules.StopGainRule;
-import org.ta4j.core.trading.rules.TrailingStopLossRule;
-import org.ta4j.core.trading.rules.UnderIndicatorRule;
+import org.ta4j.core.trading.rules.*;
 
 @Component
 public class OpeningRangeBreakoutStrategyBuilder extends BaseStrategyBuilder {
@@ -42,10 +38,12 @@ public class OpeningRangeBreakoutStrategyBuilder extends BaseStrategyBuilder {
     PercentageIndicator openingRangeLow = openingRangeLow(series, config);
     LastCandleOfPeriod last = new LastCandleOfPeriod(series, TimeLevel.DAY, 2);
     ClosePriceIndicator close = new ClosePriceIndicator(series);
+    SMAIndicator sma = new SMAIndicator(close, 50);
 
     return new BaseStrategy(
         new CrossedUpIndicatorRule(close, openingRangeHigh)
-            .and(verifySizeOfOpeningCandle(openingRangeHigh, openingRangeLow, config)),
+            .and(verifySizeOfOpeningCandle(openingRangeHigh, openingRangeLow, config))
+            .and(new OverIndicatorRule(close, sma)),
         new CrossedDownIndicatorRule(close, openingRangeLow)
             .or(new TrailingStopLossRule(close, PrecisionNum.valueOf(config.trailingStoplossPercentage)))
             .or(new StopGainRule(close, config.targetGainPercentage))
@@ -75,9 +73,12 @@ public class OpeningRangeBreakoutStrategyBuilder extends BaseStrategyBuilder {
     PercentageIndicator openingRangeLow = openingRangeLow(series, config);
     LastCandleOfPeriod last = new LastCandleOfPeriod(series, TimeLevel.DAY, 2);
     ClosePriceIndicator close = new ClosePriceIndicator(series);
+    SMAIndicator sma = new SMAIndicator(close, 50);
+
     return new BaseStrategy(
         new CrossedDownIndicatorRule(close, openingRangeLow)
-            .and(verifySizeOfOpeningCandle(openingRangeHigh, openingRangeLow, config)),
+            .and(verifySizeOfOpeningCandle(openingRangeHigh, openingRangeLow, config))
+            .and(new UnderIndicatorRule(close, sma)),
         new CrossedUpIndicatorRule(close, openingRangeHigh)
             .or(new TrailingStopLossRule(close, PrecisionNum.valueOf(config.trailingStoplossPercentage)))
             .or(new StopGainRule(close, config.targetGainPercentage))
