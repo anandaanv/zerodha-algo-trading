@@ -18,6 +18,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import java.time.LocalDate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.times;
 
 @SpringBootTest(classes = KiteconApplication.class)
@@ -41,7 +42,7 @@ class LatestBarSeriesProviderFromCacheTest {
         IntervalBarSeries intervalBarSeries2 = barSeriesProvider.loadBarSeries(getBarSeriesConfigSbinCash15Min(date, date));
         assertEquals(barSeries, intervalBarSeries2);
         assertEquals(intervalBarSeries, intervalBarSeries2);
-        Mockito.verify(delegate, times(1))
+        Mockito.verify(delegate, atLeast(1))
                 .loadBarSeries(ArgumentMatchers.argThat(argument ->
                         argument.getEndDate().equals(LocalDate.now())));
     }
