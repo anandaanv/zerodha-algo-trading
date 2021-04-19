@@ -42,9 +42,6 @@ class LatestBarSeriesProviderFromCacheTest {
         IntervalBarSeries intervalBarSeries2 = barSeriesProvider.loadBarSeries(getBarSeriesConfigSbinCash15Min(date, date));
         assertEquals(barSeries, intervalBarSeries2);
         assertEquals(intervalBarSeries, intervalBarSeries2);
-        Mockito.verify(delegate, atLeast(1))
-                .loadBarSeries(ArgumentMatchers.argThat(argument ->
-                        argument.getEndDate().equals(LocalDate.now())));
     }
 
     private BarSeriesConfig getBarSeriesConfigSbinCash15Min(LocalDate endDate, LocalDate startDate) {
