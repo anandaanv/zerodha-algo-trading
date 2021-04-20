@@ -1,0 +1,1 @@
+java -jar /code/build/libs/kitecon-0.0.1-SNAPSHOT.jar
