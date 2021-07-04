@@ -35,4 +35,3 @@ We have CI setup with github actions, and the code health is tracked on it.
    
 > We welcome all sort of contributions, including your time and money!!
 
-https://cakexpo.com
