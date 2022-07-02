@@ -4,5 +4,6 @@ public enum IndicatorInputType {
   BarSeries,
   Indicator,
   Number,
+  TimeLevel,
   Integer;
 }
