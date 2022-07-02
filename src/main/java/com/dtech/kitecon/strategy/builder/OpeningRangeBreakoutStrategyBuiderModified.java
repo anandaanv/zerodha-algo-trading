@@ -13,14 +13,14 @@ import org.ta4j.core.indicators.pivotpoints.TimeLevel;
 import org.ta4j.core.indicators.range.LastCandleOfPeriod;
 import org.ta4j.core.indicators.range.OpeningRangeHigh;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
-import org.ta4j.core.num.PrecisionNum;
-import org.ta4j.core.trading.rules.CrossedDownIndicatorRule;
-import org.ta4j.core.trading.rules.CrossedUpIndicatorRule;
-import org.ta4j.core.trading.rules.IsEqualRule;
-import org.ta4j.core.trading.rules.OverIndicatorRule;
-import org.ta4j.core.trading.rules.StopGainRule;
-import org.ta4j.core.trading.rules.TrailingStopLossRule;
-import org.ta4j.core.trading.rules.UnderIndicatorRule;
+import org.ta4j.core.num.DecimalNum;
+import org.ta4j.core.rules.CrossedDownIndicatorRule;
+import org.ta4j.core.rules.CrossedUpIndicatorRule;
+import org.ta4j.core.rules.IsEqualRule;
+import org.ta4j.core.rules.OverIndicatorRule;
+import org.ta4j.core.rules.StopGainRule;
+import org.ta4j.core.rules.TrailingStopLossRule;
+import org.ta4j.core.rules.UnderIndicatorRule;
 
 @Component
 public class OpeningRangeBreakoutStrategyBuiderModified extends BaseStrategyBuilder {
@@ -41,7 +41,7 @@ public class OpeningRangeBreakoutStrategyBuiderModified extends BaseStrategyBuil
             .and(new UnderIndicatorRule(ema20, close))
             .and(new OverIndicatorRule(ema5, entry)),
         new CrossedDownIndicatorRule(close, exit)
-            .or(new TrailingStopLossRule(close, PrecisionNum.valueOf(1)))
+            .or(new TrailingStopLossRule(close, DecimalNum.valueOf(1)))
             .or(new StopGainRule(close, 5))
             .or(new IsEqualRule(close, last))
     );
@@ -61,7 +61,7 @@ public class OpeningRangeBreakoutStrategyBuiderModified extends BaseStrategyBuil
             .and(new OverIndicatorRule(ema20, close))
             .and(new UnderIndicatorRule(ema5, entry)),
         new CrossedUpIndicatorRule(close, exit)
-            .or(new TrailingStopLossRule(close, PrecisionNum.valueOf(1)))
+            .or(new TrailingStopLossRule(close, DecimalNum.valueOf(1)))
             .or(new StopGainRule(close, 5))
             .or(new IsEqualRule(close, last))
     );

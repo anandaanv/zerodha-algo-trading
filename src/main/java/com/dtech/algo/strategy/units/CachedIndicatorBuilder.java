@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Indicator;
-import org.ta4j.core.num.PrecisionNum;
+import org.ta4j.core.num.DecimalNum;
 
 @Component
 @RequiredArgsConstructor
@@ -59,7 +59,7 @@ public class CachedIndicatorBuilder extends AbstractObjectBuilder<Indicator, Ind
         String name = input.getName();
         if (input.getType() == IndicatorInputType.Number) {
             Double value = Double.valueOf(constantsCache.get(name));
-            return PrecisionNum.valueOf(value);
+            return DecimalNum.valueOf(value);
         } else if (input.getType() == IndicatorInputType.BarSeries) {
             return barSeriesCache.get(name);
         } else if (input.getType() == IndicatorInputType.Indicator) {

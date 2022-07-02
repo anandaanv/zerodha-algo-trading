@@ -2,6 +2,7 @@ package com.dtech.algo.backtest;
 
 import lombok.Builder;
 import lombok.Value;
+import org.ta4j.core.Position;
 
 import java.util.List;
 import java.util.Map;
@@ -11,6 +12,6 @@ import java.util.Map;
 public class BacktestResult {
 
   Map<String, Double> aggregatesResults;
-  List<TradeRecord> tradingRecord;
+  List<Position> tradingRecord;
 
 }

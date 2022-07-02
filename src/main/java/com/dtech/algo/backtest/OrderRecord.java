@@ -3,7 +3,8 @@ package com.dtech.algo.backtest;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import org.ta4j.core.Order.OrderType;
+import org.ta4j.core.Trade.TradeType;
+import org.ta4j.core.Trade;
 
 import java.time.ZonedDateTime;
 
@@ -15,7 +16,7 @@ public class OrderRecord {
   /**
    * Type of the order
    */
-  private OrderType type;
+  private TradeType type;
 
   /**
    * The index the order was executed

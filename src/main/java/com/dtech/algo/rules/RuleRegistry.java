@@ -6,7 +6,7 @@ import org.reflections.scanners.SubTypesScanner;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.Rule;
 import org.ta4j.core.indicators.AbstractIndicator;
-import org.ta4j.core.trading.rules.*;
+import org.ta4j.core.rules.*;
 
 import javax.annotation.PostConstruct;
 import java.lang.reflect.Constructor;
@@ -26,7 +26,7 @@ public class RuleRegistry extends BaseRegistry<Rule, RuleInfo> {
 
   @PostConstruct
   public void initialise() {
-    Set<Class<? extends AbstractRule>> indicators = getClassesFromPackage("org.ta4j.core.trading.rules");
+    Set<Class<? extends AbstractRule>> indicators = getClassesFromPackage("org.ta4j.core.rules");
     indicators.stream().forEach(this::add);
   }
 
