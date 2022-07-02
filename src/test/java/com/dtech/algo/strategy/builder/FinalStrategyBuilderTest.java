@@ -19,7 +19,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.ta4j.core.BarSeriesManager;
 import org.ta4j.core.TradingRecord;
-import org.ta4j.core.analysis.criteria.TotalProfitCriterion;
+import org.ta4j.core.analysis.criteria.pnl.GrossProfitCriterion;
 import org.ta4j.core.num.Num;
 
 @SpringBootTest(classes = {KiteconApplication.class})
@@ -54,11 +54,11 @@ class FinalStrategyBuilderTest {
     BarSeriesManager seriesManager = new BarSeriesManager(componentHelper.getBarSeries());
     TradingRecord tradingRecord = seriesManager.run(tradeStrategy);
 
-    Num profit = new TotalProfitCriterion().calculate(componentHelper.getBarSeries(), tradingRecord);
-    Assertions.assertEquals(tradingRecord.getTradeCount(), 5);
-    Assertions.assertEquals(profit.doubleValue(), 1.329, 0.001);
+    Num profit = new GrossProfitCriterion().calculate(componentHelper.getBarSeries(), tradingRecord);
+    Assertions.assertEquals(tradingRecord.getPositionCount(), 5);
+    Assertions.assertEquals(profit.doubleValue(), 281.73, 0.001);
 
-    System.out.println("Number of trades for the strategy: " + tradingRecord.getTradeCount());
+    System.out.println("Number of trades for the strategy: " + tradingRecord.getPositionCount());
     // Analysis
     System.out.println(
             "Total profit for the strategy: " + profit);

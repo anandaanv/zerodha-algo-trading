@@ -12,10 +12,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.ta4j.core.indicators.pivotpoints.TimeLevel;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
+
+import javax.validation.constraints.NotNull;
 
 class IndicatorRegistryTest {
 

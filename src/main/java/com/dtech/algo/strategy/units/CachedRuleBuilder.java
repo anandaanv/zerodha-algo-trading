@@ -16,7 +16,7 @@ import org.ta4j.core.Indicator;
 import org.ta4j.core.Rule;
 import org.ta4j.core.TradingRecord;
 import org.ta4j.core.num.Num;
-import org.ta4j.core.num.PrecisionNum;
+import org.ta4j.core.num.DecimalNum;
 
 import java.lang.reflect.Constructor;
 import java.util.List;
@@ -78,7 +78,7 @@ public class CachedRuleBuilder extends AbstractObjectBuilder<Rule, RuleConfig> i
         } else if (input.getType() == RuleInputType.Rule) {
             return ruleCache.get(name);
         } else if (input.getType() == RuleInputType.Number) {
-            Num value = PrecisionNum.valueOf(Integer.valueOf(constantsCache.get(name)));
+            Num value = DecimalNum.valueOf(Integer.valueOf(constantsCache.get(name)));
             return value;
         }
         return null;

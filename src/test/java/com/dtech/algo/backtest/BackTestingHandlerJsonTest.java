@@ -62,7 +62,7 @@ class BackTestingHandlerJsonTest {
 
         BacktestResult backtestResult = backTestingHandlerJson.execute(backtestInput);
         double totalProfit = backtestResult.getAggregatesResults().get("TotalProfit");
-        Assertions.assertEquals(totalProfit, 1.329, 0.001);
+        Assertions.assertEquals(totalProfit, 281.73, 0.001);
 
     }
 

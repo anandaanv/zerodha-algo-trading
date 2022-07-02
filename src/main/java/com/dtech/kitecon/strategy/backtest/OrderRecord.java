@@ -4,7 +4,7 @@ import java.time.ZonedDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import org.ta4j.core.Order.OrderType;
+import org.ta4j.core.Trade.TradeType;
 
 @Data
 @AllArgsConstructor
@@ -14,7 +14,7 @@ public class OrderRecord {
   /**
    * Type of the order
    */
-  private OrderType type;
+  private TradeType type;
 
   /**
    * The index the order was executed

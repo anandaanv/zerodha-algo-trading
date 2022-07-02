@@ -20,12 +20,12 @@ import org.ta4j.core.indicators.pivotpoints.PivotLevel;
 import org.ta4j.core.indicators.pivotpoints.PivotPointIndicator;
 import org.ta4j.core.indicators.pivotpoints.StandardReversalIndicator;
 import org.ta4j.core.indicators.pivotpoints.TimeLevel;
-import org.ta4j.core.num.PrecisionNum;
-import org.ta4j.core.trading.rules.OverIndicatorRule;
-import org.ta4j.core.trading.rules.StopGainRule;
-import org.ta4j.core.trading.rules.StopLossRule;
-import org.ta4j.core.trading.rules.TrailingStopLossRule;
-import org.ta4j.core.trading.rules.UnderIndicatorRule;
+import org.ta4j.core.num.DecimalNum;
+import org.ta4j.core.rules.OverIndicatorRule;
+import org.ta4j.core.rules.StopGainRule;
+import org.ta4j.core.rules.StopLossRule;
+import org.ta4j.core.rules.TrailingStopLossRule;
+import org.ta4j.core.rules.UnderIndicatorRule;
 
 @Component
 public class PivotPointReversalStrategyBuider extends BaseStrategyBuilder {
@@ -59,7 +59,7 @@ public class PivotPointReversalStrategyBuider extends BaseStrategyBuilder {
 
     Rule exitRule = new StopGainRule(closePrice, 5)
         .or(new StopLossRule(closePrice, 2))
-        .or(new TrailingStopLossRule(closePrice, PrecisionNum.valueOf(1)));
+        .or(new TrailingStopLossRule(closePrice, DecimalNum.valueOf(1)));
 
     return new BaseStrategy(
         entryRule, exitRule
@@ -86,7 +86,7 @@ public class PivotPointReversalStrategyBuider extends BaseStrategyBuilder {
 
     Rule exitRule = new StopGainRule(closePrice, -2.5)
         .or(new StopLossRule(closePrice, -0.7))
-        .or(new TrailingStopLossRule(closePrice, PrecisionNum.valueOf(1)));
+        .or(new TrailingStopLossRule(closePrice, DecimalNum.valueOf(1)));
 
     return new BaseStrategy(entryRule, exitRule);
   }

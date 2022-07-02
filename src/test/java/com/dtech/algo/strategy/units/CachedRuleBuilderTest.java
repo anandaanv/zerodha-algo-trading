@@ -29,7 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.ta4j.core.Rule;
 import org.ta4j.core.indicators.candles.DojiIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
-import org.ta4j.core.num.PrecisionNum;
+import org.ta4j.core.num.DecimalNum;
 
 @ExtendWith(MockitoExtension.class)
 class CachedRuleBuilderTest {
@@ -87,7 +87,7 @@ class CachedRuleBuilderTest {
     String closeOffset = "close-offset";
     Mockito.doReturn(this.closePriceIndicator)
         .when(indicatorCache).get(closePriceIndicatorName);
-    Mockito.doReturn(PrecisionNum.valueOf(10.0))
+    Mockito.doReturn(DecimalNum.valueOf(10.0))
         .when(closePriceIndicator).getValue(10);
     Mockito.doReturn("12")
         .when(constantsCache).get(closeOffset);
@@ -114,7 +114,7 @@ class CachedRuleBuilderTest {
     String number8 = "number-8";
     Mockito.doReturn(this.closePriceIndicator)
         .when(indicatorCache).get(closePriceIndicatorName);
-    Mockito.doReturn(PrecisionNum.valueOf(10.0))
+    Mockito.doReturn(DecimalNum.valueOf(10.0))
         .when(closePriceIndicator).getValue(10);
     Mockito.doReturn("12")
         .when(constantsCache).get(number12);

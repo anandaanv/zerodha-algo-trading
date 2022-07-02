@@ -17,7 +17,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 import lombok.RequiredArgsConstructor;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.Order.OrderType;
+import org.ta4j.core.Trade.TradeType;
 
 @RequiredArgsConstructor
 public class ProductionHandler {
@@ -37,12 +37,12 @@ public class ProductionHandler {
   public void initialise(String instrumentName, String direction) {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
-    OrderType orderType = null;
+    TradeType orderType = null;
     if (direction.equals("Buy")) {
-      orderType = OrderType.BUY;
+      orderType = TradeType.BUY;
     }
     if (direction.equals("Sell")) {
-      orderType = OrderType.SELL;
+      orderType = TradeType.SELL;
     }
     record = new ProductionTradingRecord(orderType, ordermanager,
         tradingIdentity);
@@ -62,18 +62,18 @@ public class ProductionHandler {
     BarSeries barSeries = barSeriesMap.get(tradingIdentity);
     if (direction.equals("Buy")) {
       TradeDirection buy = TradeDirection.Buy;
-      OrderType orderType = OrderType.BUY;
+      TradeType orderType = TradeType.BUY;
       startExecution(tradingIdentity, strategy, barSeries, buy, orderType);
     }
     if (direction.equals("Sell")) {
       TradeDirection buy = TradeDirection.Sell;
-      OrderType orderType = OrderType.SELL;
+      TradeType orderType = TradeType.SELL;
       startExecution(tradingIdentity, strategy, barSeries, buy, orderType);
     }
   }
 
   private void startExecution(Instrument tradingIdentity, TradingStrategy strategy,
-      BarSeries barSeries, TradeDirection buy, OrderType orderType) {
+      BarSeries barSeries, TradeDirection buy, TradeType orderType) {
     ProductionStrategyRunner runner = new ProductionStrategyRunner(barSeries, strategy, record,
         productionSeriesManager, buy);
     runner.exec(barSeries, strategy);

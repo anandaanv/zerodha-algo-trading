@@ -16,8 +16,8 @@ import org.ta4j.core.indicators.range.LastCandleOfPeriod;
 import org.ta4j.core.indicators.range.OpeningRangeHigh;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
 import org.ta4j.core.indicators.range.PercentageIndicator;
-import org.ta4j.core.num.PrecisionNum;
-import org.ta4j.core.trading.rules.*;
+import org.ta4j.core.num.DecimalNum;
+import org.ta4j.core.rules.*;
 
 @Component
 public class OpeningRangeBreakoutStrategyBuilder extends BaseStrategyBuilder {
@@ -45,7 +45,7 @@ public class OpeningRangeBreakoutStrategyBuilder extends BaseStrategyBuilder {
             .and(verifySizeOfOpeningCandle(openingRangeHigh, openingRangeLow, config))
             .and(new OverIndicatorRule(close, sma)),
         new CrossedDownIndicatorRule(close, openingRangeLow)
-            .or(new TrailingStopLossRule(close, PrecisionNum.valueOf(config.trailingStoplossPercentage)))
+            .or(new TrailingStopLossRule(close, DecimalNum.valueOf(config.trailingStoplossPercentage)))
             .or(new StopGainRule(close, config.targetGainPercentage))
             .or(new IsEqualRule(close, last))
     );
@@ -56,14 +56,14 @@ public class OpeningRangeBreakoutStrategyBuilder extends BaseStrategyBuilder {
       PercentageIndicator openingRangeLow,
       OrbConfig config) {
     return new UnderIndicatorRule(new DifferenceRatioIndicator(openingRangeHigh, openingRangeLow),
-        PrecisionNum.valueOf(config.maxSizeOfOpeningCandle));
+        DecimalNum.valueOf(config.maxSizeOfOpeningCandle));
   }
 
   @NotNull
   private PercentageIndicator openingRangeLow(BarSeries series,
       OrbConfig config) {
     OpeningRangeLow low = new OpeningRangeLow(series, TimeLevel.DAY, config.numOpeningCandles);
-    return new PercentageIndicator(low, PrecisionNum.valueOf(0 - config.falseBreakoutOffset));
+    return new PercentageIndicator(low, DecimalNum.valueOf(0 - config.falseBreakoutOffset));
   }
 
   private Strategy createOpeningPriceBreakoutBearish(BarSeries series,
@@ -80,7 +80,7 @@ public class OpeningRangeBreakoutStrategyBuilder extends BaseStrategyBuilder {
             .and(verifySizeOfOpeningCandle(openingRangeHigh, openingRangeLow, config))
             .and(new UnderIndicatorRule(close, sma)),
         new CrossedUpIndicatorRule(close, openingRangeHigh)
-            .or(new TrailingStopLossRule(close, PrecisionNum.valueOf(config.trailingStoplossPercentage)))
+            .or(new TrailingStopLossRule(close, DecimalNum.valueOf(config.trailingStoplossPercentage)))
             .or(new StopGainRule(close, config.targetGainPercentage))
             .or(new IsEqualRule(close, last))
     );
@@ -89,7 +89,7 @@ public class OpeningRangeBreakoutStrategyBuilder extends BaseStrategyBuilder {
   @NotNull
   private PercentageIndicator openingRangeHigh(BarSeries series, OrbConfig config) {
     OpeningRangeHigh high = new OpeningRangeHigh(series, TimeLevel.DAY, config.numOpeningCandles);
-    return new PercentageIndicator(high, PrecisionNum.valueOf(config.falseBreakoutOffset));
+    return new PercentageIndicator(high, DecimalNum.valueOf(config.falseBreakoutOffset));
   }
 
   @Override

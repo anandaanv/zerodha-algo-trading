@@ -10,10 +10,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
 import org.ta4j.core.Rule;
-import org.ta4j.core.trading.rules.AndRule;
+import org.ta4j.core.rules.AndRule;
+
+import javax.validation.constraints.NotNull;
 
 class RuleRegistryTest {
 
