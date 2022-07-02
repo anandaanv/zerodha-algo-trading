@@ -113,4 +113,42 @@ class CachedIndicatorBuilderTest {
     Num value = (Num) indicator.getValue(10);
     assertEquals(value.doubleValue(), 5.5, 0.1);
   }
+
+  @Test
+  void getIndicatorKingsCandle() throws StrategyException, JsonProcessingException {
+    indicatorRegistry.initialize();
+    String barCount = "bar-count";
+    String timeLevelDay = "DAY";
+    Mockito.doReturn("10")
+            .when(constantsCache).get(barCount);
+    BarSeries baseBarSeries = new BaseBarSeries();
+    ZonedDateTime now = ZonedDateTime.now().minus(1, ChronoUnit.DAYS);
+    for(int x = 0; x < 100; x++) {
+      baseBarSeries.addBar(now.plus(x, ChronoUnit.MINUTES), x, x, x, x, x);
+    }
+    ExtendedBarSeries series = ExtendedBarSeries.builder()
+            .delegate(baseBarSeries)
+            .build();
+    String baseBar = "basebar";
+    Mockito.doReturn(series)
+            .when(barSeriesCache).get("basebar");
+    String kingsCandle = "kings-candle-upside";
+    IndicatorConfig config = new IndicatorConfig();
+    config.setKey(kingsCandle);
+    config.setIndicatorName("kings-candle-upside");
+    IndicatorInput closePriceInput = new IndicatorInput();
+    closePriceInput.setName(baseBar);
+    closePriceInput.setType(IndicatorInputType.BarSeries);
+    IndicatorInput timeLevelInput = new IndicatorInput();
+    timeLevelInput.setName(timeLevelDay);
+    timeLevelInput.setType(IndicatorInputType.TimeLevel);
+    IndicatorInput barCountInput = new IndicatorInput();
+    barCountInput.setName(barCount);
+    barCountInput.setType(IndicatorInputType.Integer);
+    config.setInputs(Arrays.asList(closePriceInput, timeLevelInput, barCountInput));
+    System.out.println(objectMapper.writeValueAsString(config));
+    Indicator indicator = indicatorBuilder.getIndicator(config);
+    Num value = (Num) indicator.getValue(10);
+    assertEquals(value.doubleValue(), 9.9, 0.1);
+  }
 }

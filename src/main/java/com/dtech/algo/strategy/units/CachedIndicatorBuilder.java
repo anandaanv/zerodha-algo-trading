@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.Indicator;
+import org.ta4j.core.indicators.pivotpoints.TimeLevel;
 import org.ta4j.core.num.DecimalNum;
 
 @Component
@@ -64,6 +65,8 @@ public class CachedIndicatorBuilder extends AbstractObjectBuilder<Indicator, Ind
             return barSeriesCache.get(name);
         } else if (input.getType() == IndicatorInputType.Indicator) {
             return indicatorCache.get(name);
+        }else if (input.getType() == IndicatorInputType.TimeLevel) {
+            return TimeLevel.valueOf(name);
         } else if (input.getType() == IndicatorInputType.Integer) {
             return Integer.valueOf(constantsCache.get(name));
         }
@@ -77,6 +80,8 @@ public class CachedIndicatorBuilder extends AbstractObjectBuilder<Indicator, Ind
             return BarSeries.class;
         } else if (input.getType() == IndicatorInputType.Integer) {
             return int.class;
+        } else if (input.getType() == IndicatorInputType.TimeLevel) {
+            return TimeLevel.class;
         } else if (input.getType() == IndicatorInputType.Indicator) {
             return Indicator.class;
         }
