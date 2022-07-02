@@ -46,7 +46,7 @@ class BackTestingHandlerJsonTest {
 
     @Test
     void execute() throws StrategyException, JsonProcessingException {
-        String sbin = "sbin";
+        String sbin = "sbin15min";
         BarSeriesConfig barSeriesConfig = getBarSeriesConfigSbinCash15Min(LocalDate.now(), LocalDate.now());
         componentHelper.setupBarSeries(sbin);
         StrategyConfig strategyConfig = componentHelper.buildSimpleSmaStrategy();
