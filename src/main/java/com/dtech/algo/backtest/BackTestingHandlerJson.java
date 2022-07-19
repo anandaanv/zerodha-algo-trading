@@ -8,6 +8,8 @@ import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
 import com.dtech.algo.strategy.config.StrategyConfig;
 import lombok.RequiredArgsConstructor;
+import org.reflections.Reflections;
+import org.reflections.scanners.SubTypesScanner;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.*;
 import org.ta4j.core.Trade.TradeType;
@@ -16,12 +18,17 @@ import org.ta4j.core.analysis.criteria.pnl.AverageLossCriterion;
 import org.ta4j.core.analysis.criteria.pnl.AverageProfitCriterion;
 import org.ta4j.core.analysis.criteria.pnl.GrossProfitCriterion;
 import org.ta4j.core.analysis.criteria.pnl.ProfitLossCriterion;
+import org.ta4j.core.indicators.AbstractIndicator;
 import org.ta4j.core.num.DecimalNum;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.dtech.algo.indicators.IndicatorRegistry.getClassesFromPackage;
 
 @RequiredArgsConstructor
 @Component
@@ -69,29 +76,57 @@ public class BackTestingHandlerJson {
 //        .build();
 //  }
 
+  public static Set<Class<? extends AbstractAnalysisCriterion>> getClassesFromPackage(String packageName) {
+    Reflections reflections = new Reflections(packageName, new SubTypesScanner(false));
+    return reflections.getSubTypesOf(AbstractAnalysisCriterion.class);
+  }
+
   private Map<String, Double> backtest(BarSeries series, TradingRecord tradingRecord) {
     //FIXME Criterion should have a method to get name. This map population is pathetic.
     Map<String, Double> backtestresultsMap = new LinkedHashMap<>();
-    backtestresultsMap.put("AverageProfitableTrades",
-        calculateCriterion(new AverageLossCriterion(), series, tradingRecord));
-    backtestresultsMap.put("AverageProfit",
-        calculateCriterion(new AverageProfitCriterion(), series, tradingRecord));
-    backtestresultsMap.put("BuyAndHold",
-        calculateCriterion(new BuyAndHoldReturnCriterion(), series, tradingRecord));
-    backtestresultsMap.put("LinearTransactionCost",
-        calculateCriterion(new LinearTransactionCostCriterion(5000, 0.005), series, tradingRecord));
-    backtestresultsMap.put("MaximumDrawdown",
-        calculateCriterion(new MaximumDrawdownCriterion(), series, tradingRecord));
-    backtestresultsMap.put("NumberOfBars",
-        calculateCriterion(new NumberOfBarsCriterion(), series, tradingRecord));
-    backtestresultsMap.put("NumberOfTrades",
-        calculateCriterion(new NumberOfPositionsCriterion(), series, tradingRecord));
-    backtestresultsMap.put("RewardRiskRatio",
-        calculateCriterion(new ReturnOverMaxDrawdownCriterion(), series, tradingRecord));
-    backtestresultsMap.put("TotalProfit",
-        calculateCriterion(new GrossProfitCriterion(), series, tradingRecord));
-    backtestresultsMap.put("ProfitLoss",
-        calculateCriterion(new ProfitLossCriterion(), series, tradingRecord));
+
+    Set<Class<? extends AbstractAnalysisCriterion>> criterias = getClassesFromPackage("org.ta4j.core.analysis.criteria.pnl");
+    criterias.addAll(getClassesFromPackage("org.ta4j.core.analysis.criteria"));
+    criterias.forEach(criteria -> {
+      try {
+        AbstractAnalysisCriterion constructor = criteria.getDeclaredConstructor().newInstance();
+        if (constructor != null) {
+          backtestresultsMap.put(criteria.getSimpleName(),
+                  calculateCriterion(constructor, series, tradingRecord));
+        }
+      } catch (InstantiationException e) {
+        e.printStackTrace();
+      } catch (IllegalAccessException e) {
+        e.printStackTrace();
+      } catch (InvocationTargetException e) {
+        e.printStackTrace();
+      } catch (NoSuchMethodException e) {
+        e.printStackTrace();
+      }
+    });
+//
+//
+//
+//    backtestresultsMap.put("AverageProfitableTrades",
+//        calculateCriterion(new AverageLossCriterion(), series, tradingRecord));
+//    backtestresultsMap.put("AverageProfit",
+//        calculateCriterion(new AverageProfitCriterion(), series, tradingRecord));
+//    backtestresultsMap.put("BuyAndHold",
+//        calculateCriterion(new BuyAndHoldReturnCriterion(), series, tradingRecord));
+//    backtestresultsMap.put("LinearTransactionCost",
+//        calculateCriterion(new LinearTransactionCostCriterion(5000, 0.005), series, tradingRecord));
+//    backtestresultsMap.put("MaximumDrawdown",
+//        calculateCriterion(new MaximumDrawdownCriterion(), series, tradingRecord));
+//    backtestresultsMap.put("NumberOfBars",
+//        calculateCriterion(new NumberOfBarsCriterion(), series, tradingRecord));
+//    backtestresultsMap.put("NumberOfTrades",
+//        calculateCriterion(new NumberOfPositionsCriterion(), series, tradingRecord));
+//    backtestresultsMap.put("RewardRiskRatio",
+//        calculateCriterion(new ReturnOverMaxDrawdownCriterion(), series, tradingRecord));
+//    backtestresultsMap.put("TotalProfit",
+//        calculateCriterion(new GrossProfitCriterion(), series, tradingRecord));
+//    backtestresultsMap.put("ProfitLoss",
+//        calculateCriterion(new ProfitLossCriterion(), series, tradingRecord));
     return backtestresultsMap;
   }
 

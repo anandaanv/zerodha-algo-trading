@@ -61,7 +61,7 @@ class BackTestingHandlerJsonTest {
         System.out.println(objectMapper.writeValueAsString(backtestInput));
 
         BacktestResult backtestResult = backTestingHandlerJson.execute(backtestInput);
-        double totalProfit = backtestResult.getAggregatesResults().get("TotalProfit");
+        double totalProfit = backtestResult.getAggregatesResults().get("NetProfitCriterion");
         Assertions.assertEquals(totalProfit, 281.73, 0.001);
 
     }
