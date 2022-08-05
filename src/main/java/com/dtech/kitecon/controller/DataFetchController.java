@@ -25,7 +25,7 @@ public class DataFetchController {
 
   @GetMapping("/fetch/{instrument}")
   public void fetchData(@PathVariable String instrument) {
-    List<String> intervals = Arrays.asList("day", "15minute", "5minute");
+    List<String> intervals = Arrays.asList("day", "15minute", "5minute", "1minute");
     String[] exchanges = new String[]{"NSE", "NFO"};
     intervals
         .forEach(interval -> dataFetchService.downloadCandleData(instrument, interval, exchanges));
