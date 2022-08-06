@@ -10,10 +10,10 @@ import org.hibernate.annotations.Type;
 import javax.persistence.*;
 import java.time.ZonedDateTime;
 
-@Entity(name = "order")
 @Getter
 @Setter
 @NoArgsConstructor
+@Entity(name = "order")
 public class Order implements RealTradeOrder {
     @Id
     @GeneratedValue
@@ -85,3 +85,4 @@ public class Order implements RealTradeOrder {
     private OrderStatus orderStatus;
 
 }
+
