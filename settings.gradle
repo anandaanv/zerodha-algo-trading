@@ -3,13 +3,9 @@
  */
 pluginManagement {
     repositories {
-//        mavenLocal()
+        mavenLocal()
         maven { url 'https://repo.spring.io/milestone' }
         maven { url 'https://repo.spring.io/snapshot' }
-        maven {
-            name 'ta4j-snapshot'
-            url 'http://oss.sonatype.org/content/repositories/snapshots'
-        }
         gradlePluginPortal()
     }
     resolutionStrategy {
