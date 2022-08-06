@@ -6,6 +6,7 @@ import com.zerodhatech.models.User;
 import java.io.IOException;
 import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -41,6 +42,11 @@ public class KiteConnectConfig {
     User user = kiteConnect.generateSession(requestToken, secret);
     kiteConnect.setAccessToken(user.accessToken);
     kiteConnect.setPublicToken(user.publicToken);
+  }
+
+  @Bean
+  public KiteConnect getKiteConnect() {
+    return kiteConnect;
   }
 
 }

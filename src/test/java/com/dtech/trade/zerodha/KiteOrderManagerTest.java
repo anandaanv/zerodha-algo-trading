@@ -1,5 +1,6 @@
 package com.dtech.trade.zerodha;
 
+import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.market.Provider;
 import com.dtech.kitecon.market.orders.OrderException;
@@ -23,13 +24,16 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 
 @ExtendWith(MockitoExtension.class)
-class ZerodhaOrderManagerTest {
+class KiteOrderManagerTest {
 
     @Mock
     private KiteConnect kiteConnect;
 
+    @Mock
+    private KiteConnectConfig kiteConnectConfig;
+
     @InjectMocks
-    private ZerodhaOrderManager zerodhaOrderManager;
+    private KiteOrderManager kiteOrderManager;
 
     @Test
     void placeIntradayLimitsOrder() throws IOException, KiteException, OrderException {
@@ -72,12 +76,14 @@ class ZerodhaOrderManagerTest {
                     argument.exchange.equals(instrument.getExchange()) &&
                     argument.disclosedQuantity.equals(quantity);
         }), eq("regular"))).thenReturn(kiteOrder);
-        RealTradeOrder realTradeOrder = zerodhaOrderManager.placeIntradayLimitsOrder(orderToPlace);
+        Mockito.when(kiteConnectConfig.getKiteConnect()).thenReturn(kiteConnect);
+
+        RealTradeOrder realTradeOrder = kiteOrderManager.placeIntradayLimitsOrder(orderToPlace);
         assertEquals(realTradeOrder.getExchangeOrderId(), "001");
     }
 
     @Test
     void getProvider() {
-        assertEquals(zerodhaOrderManager.getProvider(), Provider.ZERODHA);
+        assertEquals(kiteOrderManager.getProvider(), Provider.ZERODHA);
     }
 }

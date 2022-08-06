@@ -15,7 +15,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Service
 public class ActiveOrderManager {
-    protected final OrderRepository repository;
+
+//    protected final OrderRepository repository;
     protected final List<OrderManager> orderManagerList;
 
     protected Map<Provider, OrderManager> orderManagers = new HashMap<>();
