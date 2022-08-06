@@ -55,3 +55,10 @@ test {
     testLogging.events ("STANDARD_ERROR")
     testLogging.events ("STANDARD_OUT")
 }
+
+task installTa4j(type: Exec) {
+    workingDir rootProject.getProjectDir().getAbsolutePath() + "/.."
+    commandLine "mvn", "install -Dmaven.test.skip=true"
+}
+
+//build.dependsOn installTa4j

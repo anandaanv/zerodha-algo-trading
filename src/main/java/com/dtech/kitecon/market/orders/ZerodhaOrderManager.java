@@ -11,10 +11,12 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 @Component
+@Qualifier("zerodhaOrderManagerOld")
 public class ZerodhaOrderManager implements OrderManager {
   private final KiteConnectConfig kiteConnectConfig;
 
