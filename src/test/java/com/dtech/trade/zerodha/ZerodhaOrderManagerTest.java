@@ -74,7 +74,6 @@ class ZerodhaOrderManagerTest {
         }), eq("regular"))).thenReturn(kiteOrder);
         RealTradeOrder realTradeOrder = zerodhaOrderManager.placeIntradayLimitsOrder(orderToPlace);
         assertEquals(realTradeOrder.getExchangeOrderId(), "001");
-
     }
 
     @Test
