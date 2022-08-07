@@ -27,8 +27,6 @@ public class ExtendedBarSeries implements IntervalBarSeries {
     private SeriesType seriesType;
     private String instrument;
 
-    private CandleSyncExecutor syncExecutor;
-
     @Override
     public void addBarWithTimeValidation(ZonedDateTime endTime, Number openPrice, Number highPrice, Number lowPrice, Number closePrice,
                                          Number volume) {
@@ -41,9 +39,9 @@ public class ExtendedBarSeries implements IntervalBarSeries {
         }
         BaseBar bar = new BaseBar(Duration.ofDays(1), endTime, numOf(openPrice), numOf(highPrice), numOf(lowPrice),
                 numOf(closePrice), numOf(volume), numOf(0));
-        if(replace == false && this.getBarCount() > 0 && syncExecutor != null) {
-            syncExecutor.submit(new CandleSyncToken(bar, instrument, interval));
-        }
+//        if(replace == false && this.getBarCount() > 0 && syncExecutor != null) {
+//            syncExecutor.submit(new CandleSyncToken(bar, instrument, interval));
+//        }
         this.addBar(bar, replace);
     }
 
