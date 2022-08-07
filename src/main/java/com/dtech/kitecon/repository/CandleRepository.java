@@ -27,6 +27,10 @@ public class CandleRepository {
         .collect(Collectors.toMap(BaseCandleRepository::getInterval, t -> t));
   }
 
+  public List<String> getAllIntervals() {
+    return repositories.keySet().stream().collect(Collectors.toList());
+  }
+
   private BaseCandleRepository getDelegate(String interval) {
     return repositories.get(interval);
   }
