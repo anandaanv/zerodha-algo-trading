@@ -5,6 +5,7 @@ import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
+import com.zerodhatech.kiteconnect.kitehttp.exceptions.InputException;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
 import java.io.IOException;
@@ -45,14 +46,18 @@ public class DataDownloader {
         .deleteByInstrumentAndTimeframeAndTimestampBetween(instrument, interval,
             startDate.toLocalDateTime(),
             endDate.toLocalDateTime());
-    HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
-        startDate.toInstant()),
-        Date.from(endDate.toInstant()),
-        String.valueOf(instrument.getInstrumentToken()),
-        interval.getKiteKey(), false, true);
-    List<Candle> databaseCandles = candleFacade.buildCandlesFromOLSHStream(
-        interval, dateFormat, instrument, candles);
-    candleRepository.saveAll(databaseCandles);
+    try {
+      HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
+                      startDate.toInstant()),
+              Date.from(endDate.toInstant()),
+              String.valueOf(instrument.getInstrumentToken()),
+              interval.getKiteKey(), false, true);
+      List<Candle> databaseCandles = candleFacade.buildCandlesFromOLSHStream(
+              interval, dateFormat, instrument, candles);
+      candleRepository.saveAll(databaseCandles);
+    } catch (InputException ex) {
+      log.error(ex.message);
+    }
 
   }
 
