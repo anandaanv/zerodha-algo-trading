@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.ta4j.core.Rule;
 import org.ta4j.core.rules.AndRule;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 
 class RuleRegistryTest {
 

@@ -1,9 +1,15 @@
 plugins {
-    id 'org.springframework.boot' version '2.3.7.RELEASE'
-    id 'io.spring.dependency-management' version '1.0.10.RELEASE'
     id 'java'
+    id 'org.springframework.boot' version '3.3.2'
+    id 'io.spring.dependency-management' version '1.1.6'
     id "com.github.johnrengelman.processes" version "0.5.0"
-    id "org.springdoc.openapi-gradle-plugin" version "1.3.1"
+    id("org.springdoc.openapi-gradle-plugin") version "1.9.0"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 group = 'com.dtech'
@@ -23,31 +29,40 @@ repositories {
     maven {
         name 'ta4j-snapshot'
         url 'http://oss.sonatype.org/content/repositories/snapshots'
+        allowInsecureProtocol = true
+    }
+    maven { url 'https://jitpack.io' }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
     }
 }
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    compileOnly 'org.projectlombok:lombok'
+    implementation 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
-    compile 'javax.cache:cache-api'
-    compile 'org.ehcache:ehcache'
-    compile 'com.zerodhatech.kiteconnect:kiteconnect:3.1.2'
-    compile group: 'com.google.guava', name: 'guava', version: '29.0-jre'
-    compile 'com.dheemantech.ta4j:ta4j-core:0.18-SNAPSHOT'
-    compile 'com.dheemantech.ta4j:ta4j-examples:0.18-SNAPSHOT'
-    testCompile 'com.h2database:h2'
+    implementation 'javax.cache:cache-api'
+    implementation 'org.ehcache:ehcache'
+    implementation 'com.zerodhatech.kiteconnect:kiteconnect:3.4.0'
+    implementation group: 'com.google.guava', name: 'guava', version: '29.0-jre'
+    implementation 'com.dheemantech.ta4j:ta4j-core:0.18-SNAPSHOT'
+    implementation 'com.dheemantech.ta4j:ta4j-examples:0.18-SNAPSHOT'
+    testImplementation 'com.h2database:h2'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
-    runtimeOnly 'mysql:mysql-connector-java'
-    annotationProcessor 'org.projectlombok:lombok'
-    testAnnotationProcessor 'org.projectlombok:lombok'
+    implementation group: 'mysql', name: 'mysql-connector-java', version: '8.0.33'
+    compileOnly 'org.projectlombok:lombok:1.18.34'
+    annotationProcessor 'org.projectlombok:lombok:1.18.34'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.34'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    compile group: 'de.codecentric', name: 'spring-boot-admin-starter-server', version: '2.3.0'
+    implementation group: 'de.codecentric', name: 'spring-boot-admin-starter-server', version: '2.3.0'
 
-    compile group: 'org.reflections', name: 'reflections', version: '0.9.10'
+    implementation group: 'org.reflections', name: 'reflections', version: '0.9.10'
 
-    compile "org.springdoc:springdoc-openapi-ui:1.5.2"
+    implementation group: 'org.springdoc', name: 'springdoc-openapi-starter-webmvc-ui', version: '2.6.0'
 
     //mapstruct
     implementation 'org.mapstruct:mapstruct:1.4.1.Final'

@@ -3,8 +3,7 @@ package com.dtech.algo.strategy.units;
 import com.dtech.algo.series.*;
 import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
-import com.dtech.kitecon.data.BaseCandle;
-import com.dtech.kitecon.data.FifteenMinuteCandle;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
@@ -42,7 +41,7 @@ class RdbmsBarSeriesLoaderTest {
         LocalDate date = LocalDate.now();
         LocalDateTime time = date.atStartOfDay();
         Mockito.doReturn(Collections.singletonList(get15MinCandle(sbin)))
-                .when(candleRepository).findAllByInstrumentAndTimestampBetween("15minute", sbin, time, time.plusDays(1));
+                .when(candleRepository).findAllByInstrumentAndTimeframeAndTimestampBetween(sbin, Interval.FifteenMinute, time, time.plusDays(1));
         Mockito.doReturn(Collections.singletonList(sbin))
                 .when(instrumentRepository)
                 .findAllByExchangeAndInstrumentTypeAndTradingsymbolStartingWith(Exchange.NSE.name(), InstrumentType.EQ.name(), "SBIN");
@@ -55,9 +54,9 @@ class RdbmsBarSeriesLoaderTest {
 
     }
 
-    private BaseCandle get15MinCandle(Instrument instrument) {
-        return new FifteenMinuteCandle(100.0, 100.0, 92.0, 109.0, 10000,
-                100, LocalDateTime.now(), instrument);
+    private Candle get15MinCandle(Instrument instrument) {
+        return new Candle(100.0, 100.0, 92.0, 109.0, 10000L,
+                100L, LocalDateTime.now(), instrument, Interval.FifteenMinute);
     }
 
     @Test

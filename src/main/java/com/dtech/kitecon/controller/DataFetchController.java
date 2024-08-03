@@ -1,6 +1,7 @@
 package com.dtech.kitecon.controller;
 
 
+import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.service.DataFetchService;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import java.io.IOException;
@@ -25,20 +26,20 @@ public class DataFetchController {
 
   @GetMapping("/fetch/{instrument}")
   public void fetchData(@PathVariable String instrument) {
-    List<String> intervals = Arrays.asList("day", "15minute", "5minute", "1minute");
+    List<Interval> intervals = Arrays.stream(Interval.values()).toList();
     String[] exchanges = new String[]{"NSE", "NFO"};
     intervals
         .forEach(interval -> dataFetchService.downloadCandleData(instrument, interval, exchanges));
   }
 
   @GetMapping("/fetch-interval/{instrument}/{interval}")
-  public void fetchDataInterval(@PathVariable String instrument, @PathVariable String interval) {
+  public void fetchDataInterval(@PathVariable String instrument, @PathVariable Interval interval) {
     String[] exchanges = new String[]{"NSE", "NFO"};
     dataFetchService.downloadCandleData(instrument, interval, exchanges);
   }
 
   @GetMapping("/update-interval/{instrument}/{interval}")
-  public void updateCandleDataToLatest(@PathVariable String instrument, @PathVariable String interval) {
+  public void updateCandleDataToLatest(@PathVariable String instrument, @PathVariable Interval interval) {
     String[] exchanges = new String[]{"NSE", "NFO"};
     dataFetchService.updateInstrumentToLatest(instrument, interval, exchanges);
   }

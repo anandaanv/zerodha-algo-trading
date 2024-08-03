@@ -2,7 +2,7 @@ package com.dtech.algo.entities;
 
 import com.dtech.kitecon.data.Instrument;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
 
 @Entity(name = "strategy")
 public class StrategyEntity {
@@ -16,7 +16,7 @@ public class StrategyEntity {
     @Column
     private String barSeriesConfig;
 
-    @Column
+    @Column(name = "order_id")
     private String order;
 
     @JoinColumn

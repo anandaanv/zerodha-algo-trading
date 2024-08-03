@@ -19,7 +19,7 @@ import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.indicators.helpers.ConstantIndicator;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 
 
 @Service

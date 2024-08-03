@@ -1,17 +1,15 @@
 package com.dtech.algo.strategy.units;
 
 import com.dtech.algo.series.ExtendedBarSeries;
-import com.dtech.algo.series.Interval;
 import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
 import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
-import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import lombok.RequiredArgsConstructor;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
@@ -39,8 +37,8 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
             return barSeries;
         }
         Instrument instrument = resolveInstrument(barSeriesConfig);
-        List<BaseCandle> candles = candleRepository.findAllByInstrumentAndTimestampBetween(getIntervalMapping(barSeriesConfig),
-                instrument,
+        List<Candle> candles = candleRepository.findAllByInstrumentAndTimeframeAndTimestampBetween(
+                instrument, barSeriesConfig.getInterval(),
                 barSeriesConfig.getStartDate().atStartOfDay(),
                 barSeriesConfig.getEndDate().plusDays(1).atStartOfDay());
         IntervalBarSeries intervalBarSeries = getBarSeries(instrument, candles, barSeriesConfig);
@@ -48,25 +46,8 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
         return intervalBarSeries;
     }
 
-    @NotNull
-    private String getIntervalMapping(BarSeriesConfig barSeriesConfig) {
-        Interval interval = barSeriesConfig.getInterval();
-        switch (interval) {
-            case Day:
-                return "day";
-            case FifteenMinute:
-                return "15minute";
-            case FiveMinute:
-                return "5minute";
-            case OneMinute:
-                return "minute";
-            default:
-                return interval.name().toLowerCase();
-        }
-    }
-
-    protected IntervalBarSeries getBarSeries(Instrument instrument, List<? extends BaseCandle> candles, BarSeriesConfig barSeriesConfig) {
-        candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
+    protected IntervalBarSeries getBarSeries(Instrument instrument, List<? extends Candle> candles, BarSeriesConfig barSeriesConfig) {
+        candles.sort(Comparator.comparing(Candle::getTimestamp));
         BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
         candles.forEach(candle -> addBarToSeries(series, candle));
         return ExtendedBarSeries.builder()
@@ -77,7 +58,7 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
                 .build();
     }
 
-    protected void addBarToSeries(BarSeries series, BaseCandle candle) {
+    protected void addBarToSeries(BarSeries series, Candle candle) {
         ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
         double open = candle.getOpen();
         double high = candle.getHigh();

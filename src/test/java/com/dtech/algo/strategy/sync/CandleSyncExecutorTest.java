@@ -3,7 +3,6 @@ package com.dtech.algo.strategy.sync;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.service.CandleFacade;
-import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

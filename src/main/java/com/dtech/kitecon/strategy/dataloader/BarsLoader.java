@@ -23,7 +23,8 @@
  *******************************************************************************/
 package com.dtech.kitecon.strategy.dataloader;
 
-import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.algo.series.Interval;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.market.fetch.DataFetchException;
 import com.dtech.kitecon.repository.CandleRepository;
@@ -52,20 +53,20 @@ public abstract class BarsLoader {
    * @return a time series from Apple Inc. bars.
    */
 
-  public BarSeries loadInstrumentSeries(Instrument instrument, String interval)
+  public BarSeries loadInstrumentSeries(Instrument instrument, Interval interval)
       throws DataFetchException {
 
     return loadInstrumentSeries(instrument, null, interval);
   }
 
-  protected BarSeries getBarSeries(Instrument instrument, List<? extends BaseCandle> candles) {
-    candles.sort(Comparator.comparing(BaseCandle::getTimestamp));
+  protected BarSeries getBarSeries(Instrument instrument, List<? extends Candle> candles) {
+    candles.sort(Comparator.comparing(Candle::getTimestamp));
     BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
     candles.forEach(candle -> addBarToSeries(series, candle));
     return series;
   }
 
-  protected void addBarToSeries(BarSeries series, BaseCandle candle) {
+  protected void addBarToSeries(BarSeries series, Candle candle) {
     ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
     double open = candle.getOpen();
     double high = candle.getHigh();
@@ -79,11 +80,10 @@ public abstract class BarsLoader {
    * @return a time series from Apple Inc. bars.
    */
   public BarSeries loadInstrumentSeries(Instrument instrument, ZonedDateTime startDate,
-      String interval)
+      Interval interval)
       throws DataFetchException {
 
-    List<? extends BaseCandle> candles = candleRepository
-        .findAllByInstrument(interval, instrument);
+    List<Candle> candles = candleRepository.findAllByInstrumentAndTimeframe(instrument, interval);
     return getBarSeries(instrument, candles);
   }
 

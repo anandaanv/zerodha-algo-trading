@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.ta4j.core.indicators.pivotpoints.TimeLevel;
 import org.ta4j.core.indicators.range.OpeningRangeLow;
 
-import javax.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotNull;
 
 class IndicatorRegistryTest {
 

@@ -3,7 +3,7 @@ package com.dtech.trade.instrument;
 import com.dtech.algo.series.ExtendedBarSeries;
 import com.dtech.algo.series.Interval;
 import com.dtech.algo.series.SeriesType;
-import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +12,7 @@ import org.ta4j.core.BaseBarSeries;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,19 +24,18 @@ public class InstrumentBarSeriesManager {
     private final Instrument instrument;
     private final CandleRepository candleRepository;
 
-    final Map<String, List<? extends BaseCandle>> candleMap = new HashMap<>();
-    final Map<String, BarSeries> barSeriesMap = new HashMap<>();
+    final Map<Interval, List<Candle>> candleMap = new HashMap<>();
+    final Map<Interval, BarSeries> barSeriesMap = new HashMap<>();
 
 
     public void initialize() {
-        candleRepository.getAllIntervals().forEach(
+        Arrays.stream(values()).forEach(
                 interval -> {
-                    List<? extends BaseCandle> allCandles = candleRepository.findAllByInstrument(interval,
-                            instrument);
+                    List<Candle> allCandles = candleRepository.findAllByInstrumentAndTimeframe(instrument, interval);
                     candleMap.put(interval, allCandles);
                     BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
                     ExtendedBarSeries barSeries = ExtendedBarSeries.builder()
-                            .interval(getIntervalByName(interval))
+                            .interval(getIntervalByName(interval.getKiteKey()))
                             .seriesType(SeriesType.EQUITY) // FIXME Hardcode it for now. we will soon need to make it
                             // read from Instrument.
                             .delegate(series)
@@ -46,7 +46,7 @@ public class InstrumentBarSeriesManager {
                 });
     }
 
-    protected void addBarToSeries(ExtendedBarSeries series, BaseCandle candle) {
+    protected void addBarToSeries(ExtendedBarSeries series, Candle candle) {
         ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
         double open = candle.getOpen();
         double high = candle.getHigh();
@@ -58,9 +58,9 @@ public class InstrumentBarSeriesManager {
 
     Interval getIntervalByName(String name) {
         switch (name) {
-            case "1minute":
+            case "minute":
                 return OneMinute;
-            case "1Hour":
+            case "hour":
                 return OneHour;
             case "5minute":
                 return FiveMinute;

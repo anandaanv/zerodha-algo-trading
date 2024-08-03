@@ -16,10 +16,11 @@ import java.util.stream.Collectors;
 @Component
 public class CandleFacade {
 
-  public BaseCandle buildCandle(Instrument instrument, DateTimeFormatter dateFormat,
-      HistoricalData candle,
-      String interval) throws ParseException {
-    BaseCandle dbCandle = getBaseCandle(interval);
+  public Candle buildCandle(Instrument instrument, DateTimeFormatter dateFormat,
+                            HistoricalData candle,
+                            Interval interval) throws ParseException {
+    Candle dbCandle = new Candle();
+    dbCandle.setTimeframe(interval);
     dbCandle.setInstrument(instrument);
     dbCandle.setOpen(candle.open);
     dbCandle.setHigh(candle.high);
@@ -32,9 +33,10 @@ public class CandleFacade {
   }
 
 
-  public BaseCandle buildCandle(Instrument instrument, BaseBar baseBar,
-                                Interval interval) {
-    BaseCandle dbCandle = getBaseCandle(interval.toString());
+  public Candle buildCandle(Instrument instrument, BaseBar baseBar,
+                            Interval interval) {
+    Candle dbCandle = new Candle();
+    dbCandle.setTimeframe(interval);
     dbCandle.setInstrument(instrument);
     dbCandle.setOpen(baseBar.getOpenPrice().doubleValue());
     dbCandle.setHigh(baseBar.getHighPrice().doubleValue());
@@ -46,26 +48,9 @@ public class CandleFacade {
     return dbCandle;
   }
 
-
-
-  private BaseCandle getBaseCandle(String interval) {
-    switch (interval) {
-      case "day":
-        return DailyCandle.builder().build();
-      case "15minute":
-        return FifteenMinuteCandle.builder().build();
-      case "5minute":
-        return FiveMinuteCandle.builder().build();
-      case "minute":
-        return OneMinuteCandle.builder().build();
-      default:
-        throw new RuntimeException("Unknown interval");
-    }
-  }
-
-  public List<BaseCandle> buildCandlesFromOLSHStream(String interval, DateTimeFormatter dateFormat,
-      Instrument instrument, HistoricalData candles) {
-    List<BaseCandle> databaseCandles = candles.dataArrayList.stream().map(candle ->
+  public List<Candle> buildCandlesFromOLSHStream(Interval interval, DateTimeFormatter dateFormat,
+                                                 Instrument instrument, HistoricalData candles) {
+    List<Candle> databaseCandles = candles.dataArrayList.stream().map(candle ->
     {
       try {
         return this.buildCandle(instrument, dateFormat, candle,

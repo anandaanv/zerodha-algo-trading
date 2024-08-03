@@ -8,7 +8,7 @@ import org.ta4j.core.Rule;
 import org.ta4j.core.indicators.AbstractIndicator;
 import org.ta4j.core.rules.*;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.lang.reflect.Constructor;
 import java.util.Arrays;
 import java.util.List;

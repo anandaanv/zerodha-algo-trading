@@ -1,7 +1,7 @@
 package com.dtech.algo.strategy.sync;
 
 import com.dtech.algo.series.Interval;
-import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.service.CandleFacade;
@@ -27,7 +27,7 @@ public class CandleSyncJob implements Runnable {
     protected void insertNewCandle(Long instrument, BaseBar baseBar, Interval interval) {
         Instrument ins = new Instrument();
         ins.setInstrumentToken(instrument);
-        BaseCandle baseCandle = candleFacade.buildCandle(ins, baseBar, interval);
-        candleRepository.saveAll(interval.toString(), Collections.singletonList(baseCandle));
+        Candle candle = candleFacade.buildCandle(ins, baseBar, interval);
+        candleRepository.saveAll(Collections.singletonList(candle));
     }
 }

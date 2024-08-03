@@ -5,7 +5,7 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@javax.annotation.Generated(value = "io.com.dtech.swagger.codegen.v3.generators.java.SpringCodegen", date = "2020-12-24T18:29:06.738Z[GMT]")
+@jakarta.annotation.Generated(value = "io.com.dtech.swagger.codegen.v3.generators.java.SpringCodegen", date = "2020-12-24T18:29:06.738Z[GMT]")
 @Configuration
 public class SwaggerUiConfiguration implements WebMvcConfigurer {
     @Override

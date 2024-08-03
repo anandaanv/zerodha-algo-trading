@@ -1,5 +1,6 @@
 package com.dtech.kitecon.strategy.backtest;
 
+import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.data.StrategyParameters;
 import com.dtech.kitecon.misc.StrategyEnvironment;
@@ -32,7 +33,7 @@ public class BackTestingHandler {
   String[] exchanges = new String[]{"NSE", "NFO"};
 
   public BacktestSummary execute(String instrumentName, StrategyBuilder strategyBuilder,
-      String interval) {
+      Interval interval) {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
     StrategyEnvironment strategyEnvironment = StrategyEnvironment.DEV;
