@@ -1,7 +1,8 @@
 package com.dtech.kitecon.strategy.exec;
 
+import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.config.KiteConnectConfig;
-import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.market.fetch.DataFetchException;
 import com.dtech.kitecon.market.fetch.ZerodhaDataFetch;
@@ -23,18 +24,18 @@ public class HybridDataLoader extends BarsLoader {
 
   @Autowired
   public HybridDataLoader(
-      CandleRepository fifteenMinuteCandleRepository, KiteConnectConfig connectConfig,
-      ZerodhaDataFetch zerodhaDataFetch) {
+          CandleRepository fifteenMinuteCandleRepository, KiteConnectConfig connectConfig,
+          ZerodhaDataFetch zerodhaDataFetch) {
     super(fifteenMinuteCandleRepository);
     this.connectConfig = connectConfig;
     this.zerodhaDataFetch = zerodhaDataFetch;
   }
 
   public BarSeries loadInstrumentSeriesWithLiveData(Instrument instrument, ZonedDateTime startDate,
-      String interval)
+      Interval interval)
       throws DataFetchException {
     BarSeries barSeries = super.loadInstrumentSeries(instrument, startDate, interval);
-    List<BaseCandle> todaysFeed = zerodhaDataFetch
+    List<Candle> todaysFeed = zerodhaDataFetch
         .fetchTodaysData(instrument, interval);
     if (barSeries.isEmpty()) {
       return barSeries;

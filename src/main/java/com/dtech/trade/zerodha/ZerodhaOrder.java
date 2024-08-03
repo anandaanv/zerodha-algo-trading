@@ -65,7 +65,7 @@ public class ZerodhaOrder implements RealTradeOrder {
 
     @Override
     public String getUserId() {
-        return order.userId;
+        return order.accountId;
     }
 
     @Override
@@ -105,7 +105,7 @@ public class ZerodhaOrder implements RealTradeOrder {
 
     @Override
     public String getSymbol() {
-        return order.symbol;
+        return order.product;
     }
 
     @Override

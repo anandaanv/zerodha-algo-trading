@@ -1,5 +1,6 @@
 package com.dtech.kitecon.strategy.exec;
 
+import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.data.StrategyParameters;
 import com.dtech.kitecon.market.orders.OrderManager;
@@ -53,7 +54,7 @@ public class ProductionHandler {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrumentName, exchanges);
     Map<Instrument, BarSeries> barSeriesMap = instrumentDataLoader.loadHybridData(tradingIdentity,
-        "15minute");
+            Interval.FifteenMinute);
 
     StrategyConfig config = getStrategyConfig(instrumentName,
         strategyBuilder, StrategyEnvironment.PROD);

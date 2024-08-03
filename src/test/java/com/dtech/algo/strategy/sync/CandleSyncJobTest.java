@@ -11,14 +11,9 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.ta4j.core.BaseBar;
 
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 
@@ -36,7 +31,7 @@ class CandleSyncJobTest {
 
     @BeforeEach
     public void setup() {
-        Mockito.doNothing().when(candleRepository).saveAll(any(), any());
+        Mockito.doNothing().when(candleRepository).saveAll(any());
     }
 
     @Test
@@ -48,7 +43,7 @@ class CandleSyncJobTest {
         CandleSyncJob job = Mockito.spy(syncJob);
         job.run();
         Mockito.verify(job, Mockito.times(1)).insertNewCandle(instrument, baseBar1, Interval.FifteenMinute);
-        Mockito.verify(candleRepository, Mockito.times(1)).saveAll(eq(Interval.FifteenMinute.toString()), Mockito.any());
+        Mockito.verify(candleRepository, Mockito.times(1)).saveAll( Mockito.any());
     }
 }
 

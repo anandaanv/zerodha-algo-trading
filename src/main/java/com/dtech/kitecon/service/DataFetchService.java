@@ -1,8 +1,9 @@
 package com.dtech.kitecon.service;
 
+import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.config.HistoricalDateLimit;
 import com.dtech.kitecon.config.KiteConnectConfig;
-import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
@@ -69,13 +70,13 @@ public class DataFetchService {
         ZoneId.systemDefault());
   }
 
-  public void downloadCandleData(String instrumentName, String interval, String[] exchanges) {
+  public void downloadCandleData(String instrumentName, Interval interval, String[] exchanges) {
     LocalDateTime startDate = LocalDateTime.now().minus(4, ChronoUnit.MONTHS);
     List<Instrument> primaryInstruments = getInstrumentList(instrumentName, exchanges, startDate);
     primaryInstruments.forEach(instrument -> this.downloadData(instrument, interval));
   }
 
-  public void updateInstrumentToLatest(String instrumentName, String interval, String[] exchanges) {
+  public void updateInstrumentToLatest(String instrumentName, Interval interval, String[] exchanges) {
     LocalDateTime startDate = LocalDateTime.now().minus(4, ChronoUnit.MONTHS);
     List<Instrument> primaryInstruments = getInstrumentList(instrumentName, exchanges, startDate);
     primaryInstruments.forEach(instrument -> this.updateInstrument(instrument, interval));
@@ -94,7 +95,7 @@ public class DataFetchService {
     return primaryInstruments;
   }
 
-  public void downloadData(Instrument instrument, String interval) {
+  public void downloadData(Instrument instrument, Interval interval) {
     ZonedDateTime endTime = ZonedDateTime.now();
     int totalAvailableDuration = historicalDateLimit
         .getTotalAvailableDuration(instrument.getExchange(), interval);
@@ -103,10 +104,10 @@ public class DataFetchService {
     fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, startTime);
   }
 
-  public void updateInstrument(Instrument instrument, String interval) {
+  public void updateInstrument(Instrument instrument, Interval interval) {
     ZonedDateTime endTime = ZonedDateTime.now();
-    BaseCandle latestCandle = candleRepository
-        .findFirstByInstrumentOrderByTimestampDesc(interval, instrument);
+    Candle latestCandle = candleRepository
+        .findFirstByInstrumentAndTimeframeOrderByTimestampDesc(instrument, interval);
     if (latestCandle == null) {
       throw new RuntimeException("Data not available for the instrument");
     }
@@ -116,7 +117,7 @@ public class DataFetchService {
     fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, startDate);
   }
 
-  private void fetchDataAndUpdateDatabase(Instrument instrument, String interval,
+  private void fetchDataAndUpdateDatabase(Instrument instrument, Interval interval,
       ZonedDateTime endTime, int sliceSize, ZonedDateTime startDate) {
     List<DateRange> dateRangeList = DateRange.builder()
         .endDate(endTime)

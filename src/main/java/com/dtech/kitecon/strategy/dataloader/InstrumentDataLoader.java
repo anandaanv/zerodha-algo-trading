@@ -1,5 +1,6 @@
 package com.dtech.kitecon.strategy.dataloader;
 
+import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.market.fetch.DataFetchException;
 import com.dtech.kitecon.repository.InstrumentRepository;
@@ -24,7 +25,7 @@ public class InstrumentDataLoader {
   private final InstrumentRepository instrumentRepository;
   private final HybridDataLoader barsLoader;
 
-  public Map<Instrument, BarSeries> loadData(String instrumentName, String interval) {
+  public Map<Instrument, BarSeries> loadData(String instrumentName, Interval interval) {
     String[] exchanges = new String[]{"NSE", "NFO"};
     List<Instrument> instruments = getRelaventInstruments(instrumentName, exchanges);
     return instruments.stream()
@@ -39,7 +40,7 @@ public class InstrumentDataLoader {
         }));
   }
 
-  public Map<Instrument, BarSeries> loadHybridData(Instrument mappedInstrument, String interval) {
+  public Map<Instrument, BarSeries> loadHybridData(Instrument mappedInstrument, Interval interval) {
     String[] exchanges = new String[]{"NSE", "NFO"};
     ZonedDateTime startDate = ZonedDateTime.now().minus(30, ChronoUnit.DAYS);
     List<Instrument> instruments = Collections.singletonList(mappedInstrument);

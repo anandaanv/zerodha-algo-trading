@@ -1,22 +1,17 @@
 package com.dtech.kitecon.data;
 
 import java.time.LocalDateTime;
-import javax.persistence.Column;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.MappedSuperclass;
-import javax.persistence.OneToOne;
-import javax.persistence.Table;
-import javax.persistence.UniqueConstraint;
+
+import com.dtech.algo.series.Interval;
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@MappedSuperclass
+@Entity
 @Data
 @NoArgsConstructor
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"timestamp", "instrument"}))
-public class BaseCandle {
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"timeframe", "timestamp", "instrument"}))
+public class Candle {
 
   @Column
   protected Double open;
@@ -32,15 +27,21 @@ public class BaseCandle {
   protected Long oi;
   @Column
   protected LocalDateTime timestamp;
-  @OneToOne
+  @ManyToOne(targetEntity = Instrument.class)
   protected Instrument instrument;
   @Id
   @GeneratedValue(strategy = GenerationType.SEQUENCE)
   private long id;
 
+  @Column
+  @Enumerated(EnumType.STRING)
+  private Interval timeframe;
 
-  public BaseCandle(Double open, Double high, Double low, Double close, Long volume, Long oi,
-      LocalDateTime timestamp, Instrument instrument) {
+  //private String timeFrame
+
+
+  public Candle(Double open, Double high, Double low, Double close, Long volume, Long oi,
+                LocalDateTime timestamp, Instrument instrument, Interval interval) {
     this.open = open;
     this.high = high;
     this.low = low;
@@ -49,5 +50,6 @@ public class BaseCandle {
     this.oi = oi;
     this.timestamp = timestamp;
     this.instrument = instrument;
+    this.timeframe = interval;
   }
 }

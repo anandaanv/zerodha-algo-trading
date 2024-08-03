@@ -1,7 +1,8 @@
 package com.dtech.kitecon.market.fetch;
 
+import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.config.KiteConnectConfig;
-import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.service.CandleFacade;
 import com.dtech.kitecon.service.DateRange;
@@ -33,21 +34,21 @@ public class ZerodhaDataFetch implements MarketDataFetch{
   }
 
   @Override
-  public void fetch(DateRange dateRange, String instrumentToken, String interval)
+  public void fetch(DateRange dateRange, String instrumentToken, Interval interval)
       throws DataFetchException {
     try {
       HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
           dateRange.getStartDate().toInstant()),
           Date.from(dateRange.getEndDate().toInstant()),
           instrumentToken,
-          interval, false, true);
+          interval.getKiteKey(), false, true);
     } catch (Throwable e) {
       throw new DataFetchException(e);
     }
   }
 
   @Override
-  public List<BaseCandle> fetchTodaysData(Instrument instrument, String interval)
+  public List<Candle> fetchTodaysData(Instrument instrument, Interval interval)
       throws DataFetchException {
     try {
       ZonedDateTime now = ZonedDateTime.now();
@@ -57,8 +58,8 @@ public class ZerodhaDataFetch implements MarketDataFetch{
           startDate.toInstant()),
           Date.from(endDate.toInstant()),
           String.valueOf(instrument.getInstrumentToken()),
-          interval, false, true);
-      List<BaseCandle> baseCandles = candleFacade
+          interval.getKiteKey(), false, true);
+      List<Candle> baseCandles = candleFacade
           .buildCandlesFromOLSHStream(interval, dateFormat, instrument, candles);
       return baseCandles;
     } catch (Throwable e) {

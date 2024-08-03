@@ -1,5 +1,6 @@
 package com.dtech.kitecon.controller;
 
+import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.service.StrategyService;
 import com.dtech.kitecon.strategy.backtest.BacktestSummary;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +20,7 @@ public class StrategyController {
   @ResponseBody
   public BacktestSummary backtestStrategy(@PathVariable String strategyName,
       @PathVariable String instrument) throws InterruptedException {
-    return strategyService.testStrategy(instrument, strategyName, "15minute");
+    return strategyService.testStrategy(instrument, strategyName, Interval.FifteenMinute);
   }
 
 }

@@ -1,6 +1,7 @@
 package com.dtech.kitecon.market.fetch;
 
-import com.dtech.kitecon.data.BaseCandle;
+import com.dtech.algo.series.Interval;
+import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.service.DateRange;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
@@ -13,9 +14,9 @@ public interface MarketDataFetch {
 
   String getProfile() throws IOException, KiteException;
 
-  void fetch(DateRange dateRange, String instrumentToken, String interval)
+  void fetch(DateRange dateRange, String instrumentToken, Interval interval)
       throws DataFetchException;
 
-  List<BaseCandle> fetchTodaysData(Instrument instrument, String interval)
+  List<Candle> fetchTodaysData(Instrument instrument, Interval interval)
           throws DataFetchException;
 }

@@ -7,17 +7,19 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.Type;
 
-import javax.persistence.*;
+import jakarta.persistence.*;
+import org.hibernate.usertype.UserType;
+
 import java.time.ZonedDateTime;
 
 @Getter
 @Setter
 @NoArgsConstructor
-@Entity(name = "order")
+@Entity(name = "trade_order")
 public class Order implements RealTradeOrder {
     @Id
-    @GeneratedValue
-    @Type(type = "uuid-char") @Column(length = 36)
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(length = 36)
     private String parentOrderId;
 
     @Column
