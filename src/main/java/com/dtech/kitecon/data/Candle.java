@@ -5,12 +5,15 @@ import java.time.LocalDateTime;
 import com.dtech.algo.series.Interval;
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.PartitionKey;
 
 @Entity
 @Data
 @NoArgsConstructor
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"timeframe", "timestamp", "instrument"}))
+@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"timeframe", "timestamp", "instrument_instrument_token"}),
+        indexes = @Index(columnList = "instrument_instrument_token, timeframe"))
 public class Candle {
 
   @Column
@@ -26,15 +29,22 @@ public class Candle {
   @Column
   protected Long oi;
   @Column
+
+  @EqualsAndHashCode.Include
   protected LocalDateTime timestamp;
   @ManyToOne(targetEntity = Instrument.class)
+
+  @EqualsAndHashCode.Include
+  @PartitionKey
   protected Instrument instrument;
+
   @Id
   @GeneratedValue(strategy = GenerationType.SEQUENCE)
   private long id;
 
   @Column
   @Enumerated(EnumType.STRING)
+  @EqualsAndHashCode.Include
   private Interval timeframe;
 
   //private String timeFrame

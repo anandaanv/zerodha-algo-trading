@@ -63,6 +63,7 @@ dependencies {
     implementation group: 'org.reflections', name: 'reflections', version: '0.9.10'
 
     implementation group: 'org.springdoc', name: 'springdoc-openapi-starter-webmvc-ui', version: '2.6.0'
+    implementation 'org.jfree:jfreechart:1.5.3'
 
     //mapstruct
     implementation 'org.mapstruct:mapstruct:1.4.1.Final'

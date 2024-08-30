@@ -14,9 +14,20 @@ public enum Interval {
   OneHour("60minute", 60 * 60),
   FourHours("4hour", 4 * 60 * 60),
   Day("day", 24 * 60 * 60),
-  Week("week", 7 * 24 * 60 * 60),
-  Month("month", 30 * 24 * 60 * 60);
+  Week("week", 7 * 24 * 60 * 60);
+//  Month("month", 30 * 24 * 60 * 60);
 
   private final String kiteKey;
   private final int offset;
+
+  public Interval getParent() {
+    if( this == OneMinute || this == ThreeMinute || this == FiveMinute) {
+      return FifteenMinute;
+    } else if (this == FifteenMinute) {
+      return OneHour;
+    } else if(this == OneHour) {
+      return Day;
+    } else return Week;
+  }
+
 }
