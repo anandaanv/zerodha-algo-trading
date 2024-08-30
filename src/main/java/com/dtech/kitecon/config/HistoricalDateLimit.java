@@ -20,7 +20,7 @@ public class HistoricalDateLimit {
       return durationAsInt(90);
     } else if (offset < 60*60) {
       return durationAsInt(180);
-    } else if (offset <= 24 * 60 * 60) {
+    } else if (offset < 24 * 60 * 60) {
       return durationAsInt(365);
     } else {
       return durationAsInt(2000);
@@ -39,7 +39,22 @@ public class HistoricalDateLimit {
       return durationAsInt(90);
     } else if (offset < 60*60) {
       return durationAsInt(180);
-    } else if (offset <= 24 * 60 * 60) {
+    } else if (offset < 24 * 60 * 60) {
+      return durationAsInt(365);
+    } else {
+      return durationAsInt(2000);
+    }
+  }
+
+  public int getScreenerDuration(String exchange, Interval interval) {
+    int offset = interval.getOffset();
+    if(offset <= 60) {
+      return durationAsInt(15);
+    } else if (offset < 60*15) {
+      return durationAsInt(30);
+    } else if (offset < 60*60) {
+      return durationAsInt(60);
+    } else if (offset < 24 * 60 * 60) {
       return durationAsInt(365);
     } else {
       return durationAsInt(2000);

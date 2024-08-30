@@ -1,6 +1,5 @@
 package com.dtech.kitecon.controller;
 
-
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.service.DataFetchService;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
@@ -24,27 +23,26 @@ public class DataFetchController {
     return dataFetchService.getProfile();
   }
 
-  @GetMapping("/fetch/{instrument}")
-  public void fetchData(@PathVariable String instrument) {
+  @GetMapping("/fetch/{instrument}/{exchanges}")
+  public void fetchData(@PathVariable String instrument, @PathVariable(required = false) String[] exchanges) {
+    final String[] exchangeList = (exchanges == null || exchanges.length == 0) ? new String[]{"NSE", "NFO"} : exchanges;
     List<Interval> intervals = Arrays.stream(Interval.values()).toList();
-    String[] exchanges = new String[]{"NSE", "NFO"};
-    intervals
-        .forEach(interval -> dataFetchService.downloadCandleData(instrument, interval, exchanges));
+    intervals.forEach(interval -> dataFetchService.downloadCandleData(instrument, interval, exchangeList));
   }
 
-  @GetMapping("/fetch-interval/{instrument}/{interval}")
-  public void fetchDataInterval(@PathVariable String instrument, @PathVariable Interval interval) {
-    String[] exchanges = new String[]{"NSE", "NFO"};
-    dataFetchService.downloadCandleData(instrument, interval, exchanges);
+  @GetMapping("/fetch-interval/{instrument}/{interval}/{exchanges}")
+  public void fetchDataInterval(@PathVariable String instrument, @PathVariable Interval interval, @PathVariable(required = false) String[] exchanges) {
+    final String[] exchangeList = (exchanges == null || exchanges.length == 0) ? new String[]{"NSE", "NFO"} : exchanges;
+    dataFetchService.downloadCandleData(instrument, interval, exchangeList);
   }
 
-  @GetMapping("/update-interval/{instrument}/{interval}")
-  public void updateCandleDataToLatest(@PathVariable String instrument, @PathVariable Interval interval) {
-    String[] exchanges = new String[]{"NSE", "NFO"};
-    dataFetchService.updateInstrumentToLatest(instrument, interval, exchanges);
+  @GetMapping("/update-interval/{instrument}/{interval}/{exchanges}")
+  public void updateCandleDataToLatest(@PathVariable String instrument, @PathVariable Interval interval, @PathVariable(required = false) String[] exchanges) {
+    final String[] exchangeList = (exchanges == null || exchanges.length == 0) ? new String[]{"NSE", "NFO"} : exchanges;
+    dataFetchService.updateInstrumentToLatest(instrument, interval, exchangeList);
   }
 
-    @GetMapping("/fetch/instruments/all")
+  @GetMapping("/fetch/instruments/all")
   public void fetchAllInstruments() throws IOException, KiteException {
     dataFetchService.downloadAllInstruments();
   }

@@ -25,9 +25,8 @@ public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
     public IntervalBarSeries loadBarSeries(BarSeriesConfig barSeriesConfig) throws StrategyException {
         try {
             BarSeriesConfig refSeries = barSeriesConfig.clone();
-            int diff = Period.between(barSeriesConfig.getStartDate(), barSeriesConfig.getEndDate()).getDays();
-            refSeries.setStartDate(refSeries.getEndDate().minusDays(diff));
-            refSeries.setEndDate(LocalDate.now());
+            refSeries.setStartDate(refSeries.getStartDate());
+            refSeries.setEndDate(refSeries.getEndDate());
             return delegate.loadBarSeries(refSeries);
         } catch (CloneNotSupportedException e) {
             throw new StrategyException(e);

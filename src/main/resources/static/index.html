@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JPG Viewer with Selectable Sidebar</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin-top: 20px;
+        }
+        .gallery img {
+            margin-bottom: 20px;
+            width: 100%;
+            height: auto;
+        }
+        .sidebar {
+            height: 100vh; /* Full viewport height */
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-right: 1px solid #dee2e6;
+            position: sticky;
+            top: 0; /* Sticks the sidebar to the top while scrolling */
+        }
+        .sidebar ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .sidebar ul li {
+            margin: 10px 0;
+        }
+        .sidebar ul li a {
+            text-decoration: none;
+            color: #007bff;
+            cursor: pointer;
+            display: block;
+            padding: 5px;
+        }
+        .sidebar ul li a:hover,
+        .sidebar ul li a.selected {
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <!-- Sidebar with file names -->
+        <nav class="col-md-2 sidebar">
+            <h4>Image Files</h4>
+            <ul id="fileList">
+                <!-- File names will be dynamically loaded here -->
+            </ul>
+        </nav>
+
+        <!-- Main content area -->
+        <main class="col-md-10">
+            <h1 class="text-center">JPG File Browser</h1>
+
+            <!-- Directory input -->
+            <div class="row mb-4">
+                <div class="col-md-8 offset-md-2 text-center">
+                    <input type="text" id="directoryInput" class="form-control" placeholder="Enter directory path" value="tlbo">
+                    <button class="btn btn-primary mt-2" onclick="fetchImages()">Load Images</button>
+                </div>
+            </div>
+
+            <!-- Image gallery -->
+            <div class="row gallery" id="imageGallery">
+                <!-- Images will be dynamically loaded here -->
+            </div>
+        </main>
+    </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    let currentIndex = -1;  // To keep track of the currently selected item
+
+    // Function to fetch images from the directory
+    function fetchImages() {
+        const directory = document.getElementById("directoryInput").value;
+        if (!directory) {
+            alert("Please enter a directory path");
+            return;
+        }
+
+        // Fetch the list of image filenames from the server
+        fetch(`/images?directory=${encodeURIComponent(directory)}`)
+            .then(response => response.json())
+            .then(imageFiles => {
+                const gallery = document.getElementById("imageGallery");
+                const fileList = document.getElementById("fileList");
+
+                gallery.innerHTML = "";  // Clear previous images
+                fileList.innerHTML = "";  // Clear previous file list
+
+                currentIndex = -1;  // Reset the current index
+
+                // Populate the sidebar with file names and gallery with images
+                imageFiles.forEach((file, index) => {
+                    // Create image element for the gallery
+                    const col = document.createElement("div");
+                    col.className = "col-12";  // Full-width images
+
+                    const img = document.createElement("img");
+                    img.src = `/images/view?directory=${encodeURIComponent(directory)}&filename=${encodeURIComponent(file)}`;
+                    img.alt = file;
+                    img.classList.add('img-fluid');  // Responsive image
+
+                    col.appendChild(img);
+                    gallery.appendChild(col);
+
+                    // Create file name link in the sidebar
+                    const li = document.createElement("li");
+                    const link = document.createElement("a");
+                    link.textContent = file;
+                    link.setAttribute('data-index', index);  // Store the index in the element
+                    link.onclick = function() {
+                        scrollToImage(file, index);
+                    };
+                    li.appendChild(link);
+                    fileList.appendChild(li);
+                });
+
+                // Add event listener for keyboard navigation
+                document.addEventListener("keydown", handleKeyNavigation);
+            })
+            .catch(error => console.error('Error fetching image list:', error));
+    }
+
+    // Function to scroll to the selected image
+    function scrollToImage(filename, index) {
+        const img = document.querySelector(`img[alt="${filename}"]`);
+        if (img) {
+            img.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Update the selected item in the sidebar
+        updateSelectedSidebarItem(index);
+    }
+
+    // Update the selected item in the sidebar
+    function updateSelectedSidebarItem(index) {
+        const links = document.querySelectorAll("#fileList a");
+        links.forEach((link, idx) => {
+            link.classList.toggle("selected", idx === index);  // Add 'selected' class to the current item
+        });
+        currentIndex = index;  // Update the current index
+    }
+
+    // Handle keyboard navigation (up/down arrows)
+    function handleKeyNavigation(event) {
+        const links = document.querySelectorAll("#fileList a");
+        if (event.key === "ArrowDown") {
+            // Move to the next item
+            if (currentIndex < links.length - 1) {
+                currentIndex++;
+                scrollToImage(links[currentIndex].textContent, currentIndex);
+                links[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        } else if (event.key === "ArrowUp") {
+            // Move to the previous item
+            if (currentIndex > 0) {
+                currentIndex--;
+                scrollToImage(links[currentIndex].textContent, currentIndex);
+                links[currentIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+    }
+
+    // Automatically load images from the 'tlbo' directory when the page loads
+    window.onload = function() {
+        fetchImages();  // Automatically load images from the default directory
+    };
+</script>
+</body>
+</html>

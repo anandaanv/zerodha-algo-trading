@@ -4,11 +4,7 @@ import com.dtech.algo.series.Exchange;
 import com.dtech.algo.series.InstrumentType;
 import com.dtech.algo.series.Interval;
 import com.dtech.algo.series.SeriesType;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.ToString;
+import lombok.*;
 
 import java.time.LocalDate;
 
@@ -18,10 +14,12 @@ import java.time.LocalDate;
 @ToString
 @NoArgsConstructor
 public class BarSeriesConfig implements Cloneable {
+  @EqualsAndHashCode.Include
   private Interval interval;
   private SeriesType seriesType;
   private InstrumentType instrumentType;
   private Exchange exchange;
+  @EqualsAndHashCode.Include
   private String instrument;
   private String name;
   private LocalDate startDate;
