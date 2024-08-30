@@ -32,3 +32,5 @@ build/
 .gradle/
 *.class
 out/
+/tlbo/
+/elliott/
