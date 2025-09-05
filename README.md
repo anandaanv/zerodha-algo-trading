@@ -1,4 +1,7 @@
 # zerodha-algo-trading
+
+**IMP: Branch is unstable at the moment. Build pass, but tests are failing**. 
+
 A codebase to connect zerodha connect along with algo trading library to use power of algo trading with zerodha
 
 **IMP: Any new code additions should go to package `com.dtech.algo`. This package is supposed to have 100% code coverage production ready.**
