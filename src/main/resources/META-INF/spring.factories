@@ -1,0 +1,2 @@
+org.springframework.boot.env.EnvironmentPostProcessor=com.dtech.algo.config.DatabaseSecretsEnvironmentPostProcessor
+org.springframework.boot.env.EnvironmentPostProcessor=com.dtech.algo.config.DatabaseSecretsEnvironmentPostProcessor

@@ -32,7 +32,8 @@ public class IndexSymbolUpdaterService {
 
     @Async
     public void updateSymbols() throws InterruptedException {
-        List<String> allSymbols = indexSymbolRepository.findAllSymbols();
+//        List<String> allSymbols = indexSymbolRepository.findAllSymbols();
+        List<String> allSymbols = indexSymbolRepository.findAllSymbolsByIndexName("Nifty50");
 
         // For each symbol, assign a worker thread to handle the updates
         for (String symbol : allSymbols) {

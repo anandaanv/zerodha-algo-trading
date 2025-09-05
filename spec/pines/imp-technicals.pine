@@ -1,0 +1,330 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © anand1711
+
+//@version=5
+// strategy("Double Screened Decision", overlay = true)
+indicator("Double Screened Decision", overlay = true, explicit_plot_zorder = true)
+import TradingView/ta/7
+
+backdatedCrossover(xoSeries, lookbackDays) =>
+    xo = false
+    for i = 0 to lookbackDays by 1
+        xo := xo or xoSeries[i]
+    xo
+
+tideTimeframe = timeframe.period
+upperTideTimeframe = timeframe.period
+
+if timeframe.period == "5" or timeframe.period == "3"
+    tideTimeframe := "15"
+    upperTideTimeframe := "2h"
+else if timeframe.period == "30" or timeframe.period == "15"
+    tideTimeframe := "60"
+    upperTideTimeframe := "2h"
+else if timeframe.period == "60" or timeframe.period == "120"
+    tideTimeframe := "D"
+    upperTideTimeframe := "2D"
+else if timeframe.period == "D" or timeframe.period == "240"
+    tideTimeframe := "W"
+    upperTideTimeframe := "2W"
+else if timeframe.period == "W"
+    tideTimeframe := "M"
+    upperTideTimeframe := "2M"
+
+offset = 0
+
+[mLine, sLine, hLine]  = request.security(syminfo.tickerid, tideTimeframe, ta.macd(close, 9, 26, 9))
+
+[macdLine, signalLine, histLine]  = request.security(syminfo.tickerid, tideTimeframe, ta.macd(close, 9, 26, 9))
+[tbbbasis, tbbupper, tbblower]  = request.security(syminfo.tickerid, tideTimeframe, ta.bb(close, 20, 2))
+trsi  = request.security(syminfo.tickerid, tideTimeframe, ta.rsi(close, 14))
+tstoc  = request.security(syminfo.tickerid, tideTimeframe, ta.stoch(close, 3,3,14))
+
+[bbbasis, bbupper, bblower] = ta.bb(close, 20, 2)
+bbLowerEma = ta.ema(bblower, 3)
+bbUpperEma = ta.ema(bbupper, 3)
+
+bbcup = bbupper > bbupper[1]
+bbcdn = bblower < bblower[1]
+
+//// EMA crossover
+ema5 = ta.ema(close, 5)
+ema13 = ta.ema(close, 13)
+ema26 = ta.ema(close, 26)
+
+// RSI and Stochestic and MACD
+rsi = ta.rsi(close, 14)
+stoch = ta.stoch(close, 3,3,14)
+
+// buy side
+emaCrossoverLatest = ta.crossover(ema5[offset], ema13[offset]) or ta.crossover(ema5[offset], ema26[offset]) or ta.crossover(ema13[offset], ema26[offset])
+emaCrossover1 = ta.crossover(ema5[offset +1], ema13[offset +1]) or ta.crossover(ema5[offset +1], ema26[offset +1]) or ta.crossover(ema13[offset +1], ema26[offset +1])
+emaCrossover2 = ta.crossover(ema5[offset +2], ema13[offset +2]) or ta.crossover(ema5[offset +2], ema26[offset +2]) or ta.crossover(ema13[offset +2], ema26[offset +2])
+emaCrossover3 = ta.crossover(ema5[offset +3], ema13[offset +3]) or ta.crossover(ema5[offset +3], ema26[offset +3]) or ta.crossover(ema13[offset +3], ema26[offset +3])
+emaAlreadyAlignedUpside = ema5[offset] > ema13[offset] and ema13[offset] > ema26[offset]
+emaCrossover = emaCrossoverLatest or emaCrossover1 or emaCrossover2 or emaCrossover3 or emaAlreadyAlignedUpside
+
+// sell side
+emaCrossunderLatest = ta.crossunder(ema5[offset], ema13[offset]) or ta.crossunder(ema5[offset], ema26[offset]) or ta.crossunder(ema13[offset], ema26[offset])
+emaCrossunder1 = ta.crossunder(ema5[offset +1], ema13[offset +1]) or ta.crossunder(ema5[offset +1], ema26[offset +1]) or ta.crossunder(ema13[offset +1], ema26[offset +1])
+emaCrossunder2 = ta.crossunder(ema5[offset +2], ema13[offset +2]) or ta.crossunder(ema5[offset +2], ema26[offset +2]) or ta.crossunder(ema13[offset +2], ema26[offset +2])
+emaCrossunder3 = ta.crossunder(ema5[offset +3], ema13[offset +3]) or ta.crossunder(ema5[offset +3], ema26[offset +3]) or ta.crossunder(ema13[offset +3], ema26[offset +3])
+emaAlreadyAlignedDownsideside = ema5[offset] < ema13[offset] and ema13[offset] < ema26[offset]
+emaCrossunder = emaCrossunderLatest or emaCrossunder1 or emaCrossunder2 or emaCrossunder3 or emaAlreadyAlignedDownsideside
+
+
+mDown = mLine[offset] < mLine[offset+1]
+mUp = mLine[offset] > mLine[offset+1]
+
+rsiDowntick = rsi[offset] < rsi[offset+1]
+stockDowntick = stoch[offset] < stoch[offset+1]
+macdDown = macdLine[offset] < macdLine[offset+1]
+
+rsiUptick = rsi[offset] > rsi[offset+1]
+stockUptick = stoch[offset] > stoch[offset+1]
+macdUp = macdLine[offset] > macdLine[offset+1]
+
+isbkp = bblower > bblower[1] and backdatedCrossover(ta.crossover(close, bblower), 15) //and macdUp
+isbkt = bbupper < bbupper[1] and backdatedCrossover(ta.crossunder(close,bbUpperEma), 15) //and macdDown
+
+if mDown
+    smmDirection = "SELL"
+    doubleScreenDecision = "SELL"
+if mUp
+    doubleScreenDecision = "BUY"
+    smmDirection = "BUY"
+
+
+doubleScreenDecision = ""
+smmDirection = ""
+alertColor = color.yellow
+if(macdDown and (rsiDowntick or stockDowntick) and emaCrossunder)
+    doubleScreenDecision := "SELL"
+    smmDirection := "SELL"
+    alertColor := color.red
+else if(macdUp and (rsiUptick or stockUptick) and emaCrossover)
+    doubleScreenDecision := "BUY"
+    smmDirection := "BUY"
+    alertColor := color.green
+else if macdDown
+    alertColor := color.red
+    smmDirection := "SELL"
+    if not rsiDowntick
+        doubleScreenDecision := doubleScreenDecision + " RSI"
+    if not stockDowntick
+        doubleScreenDecision := doubleScreenDecision + " STOCH"
+    if not emaCrossunder
+        doubleScreenDecision := doubleScreenDecision + " EMA"
+else if macdUp
+    alertColor := color.green
+    smmDirection := "BUY"
+    if not rsiUptick
+        doubleScreenDecision := doubleScreenDecision + " RSI"
+    if not stockUptick
+        doubleScreenDecision := doubleScreenDecision + " STOCH"
+    if not emaCrossover
+        doubleScreenDecision := doubleScreenDecision + " EMA"
+
+//// PAPA Details
+bbcStatus = (bbcup or bbcdn) ? "BBC" : bbcup ? "BBCUP" : bbcdn ? "BBCDN" : ""
+bbStatus = isbkp? "BKP" : isbkt ? "BKT" : ""
+
+isBuy = smmDirection=="BUY"
+isSell = smmDirection=="SELL"
+
+// RSI
+rsiColor = color.yellow
+PAPADecision = "Watch"
+rsiDirection = rsi[0] > rsi[1] ? ">" : rsi[0] == rsi[1] ? "=" : "<"
+if isBuy and rsi > 60 and bbcup
+    PAPADecision :="Momentum Buy "
+    rsiColor := color.green
+else if isSell and rsi < 40 and bbcdn
+    PAPADecision := "Momentum Sell "
+    rsiColor := color.red
+else if isBuy and rsi > 40 and rsi < 60 and isbkp
+    PAPADecision :="Swing Buy "
+    rsiColor := color.green
+else if isSell and rsi > 40 and rsi < 60 and isbkt
+    PAPADecision :="Swing Sell "
+    rsiColor := color.red
+
+PAPADecision += " " + bbcStatus + " " + bbStatus + " " + str.tostring(rsi[0],  "#.#") + rsiDirection + str.tostring(rsi[1],  "#.#")
+
+// ADX
+adxSignal = ""
+adxcolor = color.yellow
+[diplus, diminus, adx] = ta.dmi(14, 14)
+adxUptick = adx > adx[1] and adx < 60
+adxDowntick = adx < adx[1]
+adxDirection = diplus > diminus ? ">" : diplus == diminus ? "=" : "<"
+if isBuy and ((diplus - diminus > 3 and adxUptick) or (diminus - diplus > 3 and adxDowntick))
+    adxcolor := color.green
+if isSell and ((diminus - diplus > 3 and adxUptick) or (diplus - diminus > 3 and adxDowntick))
+    adxcolor := color.red
+adxSignal += str.tostring(adx, "# ") + (adxUptick ? " > " : " < ") + str.tostring(adx[1], " #")  + " => " + str.tostring(diplus, "# ") + adxDirection + str.tostring(diminus, " #")
+
+
+// Plot future price on spot
+string symbolOnly = syminfo.ticker
+string futureCode = syminfo.type == "futures" ? syminfo.prefix + ":" + syminfo.ticker : syminfo.prefix + ":" + syminfo.ticker + "1!"
+string futureCode2 = syminfo.type == "futures" ? syminfo.prefix + ":" + syminfo.ticker : syminfo.prefix + ":" + syminfo.ticker + "2!"
+string timeframe = timeframe.period //timeframe.isintraday ? "1D" :
+[fOpen, fiHigh, fLow, fClose, fvolume] = request.security(futureCode, timeframe, [open, high, low, close, volume], ignore_invalid_symbol = true)
+diff = fClose - close
+plot(fClose, "Future price", color = diff>diff[1]? color.green : color.red, style = plot.style_line, editable = true, show_last = 50)
+
+
+//// Advanced Indicators
+// Get Tide Details
+tbbLowerEma = ta.ema(bblower, 3)
+btbUpperEma = ta.ema(bbupper, 3)
+
+tbbcup = tbbupper > tbbupper[1]
+tbbcdn = tbblower < tbblower[1]
+tbbc = tbbcdn and tbbcup
+istbkp = tbblower > tbblower[1] and backdatedCrossover(ta.crossover(close, tbblower), 15) and not tbbcdn
+istbkt = tbbupper < tbbupper[1] and backdatedCrossover(ta.crossunder(close,tbbupper), 15) and not tbbcup
+
+//// EMA crossover
+tema50 = ta.ema(close, 50)
+
+gueDecision = ""
+if isBuy
+    if trsi < trsi[1]
+        gueDecision += "RSI" + " "
+    if tstoc < tstoc[1]
+        gueDecision += "STOCH" + " "
+    if not (not tbbcdn or istbkp or tbbc)
+        gueDecision += "BB" + " "
+    if close < tema50
+        gueDecision += "EMA50" + " "
+    if macdLine < 0
+        gueDecision += "MACD " + str.tostring(macdLine, "#.#")
+else if isSell
+    if trsi > trsi[1]
+        gueDecision += "RSI " + " "
+    if tstoc > tstoc[1]
+        gueDecision += "STOCH" + " "
+    if not (not tbbcup or istbkt or tbbc)
+        gueDecision += "BB" + " "
+    if close > tema50
+        gueDecision += "EMA50" + " "
+    if macdLine > 0
+        gueDecision += "MACD " + str.tostring(macdLine, "#.#")
+
+if gueDecision == ""
+    gueDecision := isBuy ? "BUY" : isSell ? "SELL" : "Watch"
+gueColor = gueDecision == "BUY" ? color.green : gueDecision == "SELL" ? color.red : color.yellow
+
+int i_ofset = input(5)
+float mhi = high
+float mlo = low
+for i = 1 to i_ofset by 1
+    if mhi <= high[i] and mlo >= low[i]
+        mhi := high[i]
+        mlo := low[i]
+
+insideMother = high < mhi and low > mlo
+
+motherCandleBreakout = insideMother[1] == true and insideMother == false
+
+// MACD Histogram
+// Define variables for trendline
+var line trendline = na
+var float trendlineStart = na
+var float trendlineEnd = na
+
+// Define breakout condition
+var bool breakout = na
+
+// Lookback period for identifying higher highs
+rsilookback = input.int(30, title="Lookback Period")
+
+// Find highest high in the lookback period
+highestHigh = ta.highest(histLine, rsilookback)
+// Find the index of the highest high
+highestHighIndex = ta.highestbars(histLine, rsilookback)
+
+// Determine trendline points based on highest highs
+if highestHighIndex <= 0
+    trendlineStart := na
+    trendlineEnd := na
+else
+    trendlineStart := highestHigh
+    trendlineEnd := histLine[highestHighIndex]
+
+// Draw trendline
+if not na(trendlineStart) and not na(trendlineEnd)
+    trendline := line.new(bar_index[highestHighIndex], trendlineStart, bar_index, trendlineEnd, color=color.blue)
+
+histBreakout = ta.crossover(histLine, trendlineEnd)
+
+
+string openInterestTicker = str.format("{0}_OI", futureCode)
+string openInterestTicker2 = str.format("{0}_OI", futureCode2)
+[oiOpen1, oiHigh1, oiLow1, oiClose1] = request.security(openInterestTicker, timeframe, [open, high, low, close], ignore_invalid_symbol = true)
+[oiOpen2, oiHigh2, oiLow2, oiClose2] = request.security(openInterestTicker2, timeframe, [open, high, low, close], ignore_invalid_symbol = true)
+oiClose = oiClose1 + oiClose2
+
+highIndexO = ta.highestbars(oiClose, 15)
+lowIndexO = ta.lowestbars(oiClose, 15)
+highIndex = math.abs(highIndexO)
+lowIndex = math.abs(lowIndexO)
+oiDecision = ""
+if highIndex > lowIndex
+    oiHighDir = close[highIndex] - close[lowIndex] < 0
+    if oiHighDir and close > close[lowIndex]
+        oiDecision := " OI - Buy"
+    else if not oiHighDir and close < close[lowIndex]
+        oiDecision := " OI - Sell"
+
+
+otherData = motherCandleBreakout ? "Mother Breakout" : insideMother ? "Mother Candle" : ""
+otherData += histBreakout ? "MACD Breakout" : ""
+otherData += oiDecision
+otherDataColor = motherCandleBreakout ? alertColor : color.yellow
+
+symbol = syminfo.tickerid
+earnings = request.earnings(symbol, earnings.estimate)
+// Get the next earnings date and calculate days until next earnings
+next_earnings_date = earnings.future_time
+days_until_earnings = (next_earnings_date - time) / 86400000
+finantialsColor = days_until_earnings < 15 ? color.yellow : gueColor
+// Prepare the text for the label
+earnings_text = str.tostring(days_until_earnings, "#") + " days "
+
+var resultTable = table.new(position = position.top_right, columns = 2, rows = 6, bgcolor = color.yellow, border_width = 1)
+if barstate.islast
+    table.cell(table_id = resultTable, column = 0, row = 0, text = "SMM", bgcolor=alertColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 1, row = 0, text = doubleScreenDecision, bgcolor=alertColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 0, row = 1, text = "PAPA", bgcolor=rsiColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 1, row = 1, text = PAPADecision, bgcolor=rsiColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 0, row = 2, text = "ADX", bgcolor=adxcolor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 1, row = 2, text = adxSignal, bgcolor=adxcolor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 0, row = 3, text = "TIDE", bgcolor=gueColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 1, row = 3, text = gueDecision, bgcolor=gueColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 0, row = 4, text = "OTHER", bgcolor=gueColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 1, row = 4, text = otherData, bgcolor=gueColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 0, row = 5, text = "EARNINGS", bgcolor=finantialsColor, text_size = size.small)
+    table.cell(table_id = resultTable, column = 1, row = 5, text = earnings_text, bgcolor=finantialsColor, text_size = size.small)
+
+finalBuy = doubleScreenDecision == "BUY" and str.contains(PAPADecision, "Momentum Buy") and adxcolor == color.green
+finalSell = doubleScreenDecision == "SELL" and str.contains(PAPADecision, "Momentum Sell") and adxcolor == color.red
+
+swing_Buy = rsi > 40 and isbkp and trsi > 40
+swing_sell = rsi < 60 and isbkt and trsi < 60
+
+
+alertcondition(not swing_Buy[1] and swing_Buy, "Swing Buy" , "ASTA Swing Buy")
+alertcondition(not swing_sell[1] and swing_sell, "Swing Sell" , "ASTA Swing Sell")
+alertcondition(not finalBuy[1] and finalBuy, "ASTA Buy" , "ASTA Buy")
+alertcondition(not finalSell[1] and finalSell, "ASTA Sell" , "ASTA Sell")
+
+
+isIncreasing(series, days) =>
+    increasing = true
+    for i = 0 to days by 1
+        if series[i] < series[i+2]
+            increasing := false
+    increasing

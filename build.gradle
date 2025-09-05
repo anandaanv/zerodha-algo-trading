@@ -1,9 +1,14 @@
 plugins {
     id 'java'
     id 'org.springframework.boot' version '3.3.2'
-    id 'io.spring.dependency-management' version '1.1.6'
+    id 'io.spring.dependency-management' version '1.1.7'
     id "com.github.johnrengelman.processes" version "0.5.0"
     id("org.springdoc.openapi-gradle-plugin") version "1.9.0"
+    id 'org.jetbrains.kotlin.jvm' version '2.1.0'
+}
+
+ext {
+    set('springAiVersion', "1.0.1")
 }
 
 java {
@@ -47,27 +52,67 @@ dependencies {
     testCompileOnly 'org.projectlombok:lombok'
     implementation 'javax.cache:cache-api'
     implementation 'org.ehcache:ehcache'
-    implementation 'com.zerodhatech.kiteconnect:kiteconnect:3.4.0'
+    implementation 'com.zerodhatech.kiteconnect:kiteconnect:3.5.1'
     implementation group: 'com.google.guava', name: 'guava', version: '29.0-jre'
     implementation 'com.dheemantech.ta4j:ta4j-core:0.18-SNAPSHOT'
     implementation 'com.dheemantech.ta4j:ta4j-examples:0.18-SNAPSHOT'
     testImplementation 'com.h2database:h2'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     implementation group: 'mysql', name: 'mysql-connector-java', version: '8.0.33'
-    compileOnly 'org.projectlombok:lombok:1.18.34'
-    annotationProcessor 'org.projectlombok:lombok:1.18.34'
-    testAnnotationProcessor 'org.projectlombok:lombok:1.18.34'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    implementation group: 'de.codecentric', name: 'spring-boot-admin-starter-server', version: '2.3.0'
 
-    implementation group: 'org.reflections', name: 'reflections', version: '0.9.10'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
 
-    implementation group: 'org.springdoc', name: 'springdoc-openapi-starter-webmvc-ui', version: '2.6.0'
+    // Utilities
+    implementation 'com.google.guava:guava:32.1.2-jre'
+    // Apache Commons
+    implementation 'org.apache.commons:commons-lang3:3.13.0'
+    implementation 'commons-io:commons-io:2.15.0'
+
+//    // Lombok
+//    compileOnly 'org.projectlombok:lombok'
+//    annotationProcessor 'org.projectlombok:lombok'
+
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    // Spring Boot starter test already includes JUnit Jupiter
+
+    // Browser automation
+    implementation 'org.seleniumhq.selenium:selenium-java:4.15.0'
+    implementation 'io.github.bonigarcia:webdrivermanager:5.6.2'
+
+    // Reflection utilities
+    implementation 'org.reflections:reflections:0.9.10'
+
+    // API Documentation
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
     implementation 'org.jfree:jfreechart:1.5.3'
+    implementation 'net.sf.py4j:py4j:0.10.9.9'
 
     //mapstruct
     implementation 'org.mapstruct:mapstruct:1.4.1.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.4.1.Final'
+
+    implementation("com.openai:openai-java-spring-boot-starter:3.4.1")
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+
+    // Kotlin JSR-223 Scripting Engine (for .kts screeners)
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.0'
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-common:2.1.0'
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm:2.1.0'
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-jsr223:2.1.0'
+    implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.0'
+
+}
+
+task createDirectories {
+    doLast {
+        mkdir "${projectDir}/charts"
+        mkdir "${projectDir}/charts/temp"
+    }
 }
 
 test {
@@ -81,4 +126,68 @@ task installTa4j(type: Exec) {
     commandLine "mvn", "install -Dmaven.test.skip=true"
 }
 
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+    }
+}
+
+bootRun.dependsOn createDirectories
+
+// Ensure external scripts under projectRoot/screener are NOT packaged into the boot jar
+bootJar {
+    exclude('screener/**')
+}
+
 //build.dependsOn installTa4j
+
+// --------------------------------------------------------
+// Frontend (npm) integration: build and package static UI
+// --------------------------------------------------------
+def isWindows = System.getProperty("os.name").toLowerCase().contains("win")
+def npmCmd = isWindows ? "npm.cmd" : "npm"
+def uiDir = "${projectDir}/ui/chart-draw-app"
+def frontendDist = "${uiDir}/dist"
+def staticTargetDir = "${buildDir}/resources/main/static/"
+
+// npm install
+tasks.register("npmInstall", Exec) {
+    description = "Install npm dependencies for chart-draw app"
+    workingDir uiDir
+    commandLine npmCmd, "install"
+    // Only run if package.json exists
+    onlyIf { file("${uiDir}/package.json").exists() }
+}
+
+// npm run build
+tasks.register("npmBuild", Exec) {
+    description = "Build chart-draw app (vite)"
+    workingDir uiDir
+    commandLine npmCmd, "run", "build"
+    dependsOn "npmInstall"
+    onlyIf { file("${uiDir}/package.json").exists() }
+}
+
+// Copy dist to Spring Boot resources (in build dir, not source tree)
+tasks.register("copyFrontend", Copy) {
+    description = "Copy built frontend to build/resources/static for packaging"
+    dependsOn "npmBuild"
+    from(frontendDist)
+    into(staticTargetDir)
+    onlyIf { file(frontendDist).exists() }
+}
+
+// Include frontend assets in jar/war packaging
+tasks.named("processResources") {
+    dependsOn "copyFrontend"
+}
+
+// Clean frontend outputs from build dir
+tasks.register("cleanFrontend", Delete) {
+    description = "Clean copied frontend assets from build dir"
+    delete staticTargetDir
+}
+
+tasks.named("clean") {
+    dependsOn "cleanFrontend"
+}
