@@ -1,0 +1,35 @@
+chartpattern:
+  zigzag:
+    defaults:
+      atrLength: 14
+      atrMult: 2.0
+      pctMin: 0.03
+      hysteresis: 1.6
+      minBarsBetweenPivots: 3
+      mode: LIVE
+      dynamicPctEnabled: true
+      volMult: 2.0
+      rvolWindow: 50
+  trendline:
+    defaults:
+      recentPivotCount: 60
+      minGapBars: 10
+      pctBand: 0.003             # 0.3% tolerance
+      atrBandMult: 0.4           # 0.4 * ATR at pivot
+      maxLinesPerSide: 3
+      flatAngleDeg: 2.0
+      containmentWindowBars: 250 # emphasize lines respected in the last 200–300 bars
+      maxProximityNowPct: 0.01   # skip lines farther than 1% from LTP
+      recentEmphasisBars: 1000    # bars window defining "recent"
+      recencyWeight: 0.3         # how strongly to boost recent lines
+      coverageMin: 0.55          # require at least 55% containment in recent window
+      breachMax: 0.25            # disallow if >25% wrong-side breaches recently
+      ransacSamples: 300         # number of random pair samples to try
+      slopeSimilarityEps: 0.00005 # slope diff threshold to treat lines as similar (overlap suppression)
+      emaProximityPct: 0.004     # within 0.4% of EMA counts as "near"
+      bbStdDev: 2.0              # Bollinger band standard deviation
+      allowTwoLatestPivots: true # always include most recent two same-side pivots as anchors
+  # Optional: configure index components for screening endpoints
+  indexes:
+    NIFTY50: []
+    BANKNIFTY: []

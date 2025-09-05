@@ -34,3 +34,87 @@ build/
 out/
 /tlbo/
 /elliott/
+
+# ------------------------------------------------------------------
+# Node / npm / Frontend
+# ------------------------------------------------------------------
+node_modules/
+**/node_modules/
+# Lock files (treat as generated for this repo)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+
+# Frontend build outputs
+dist/
+**/dist/
+build/
+**/build/
+.out/
+.next/
+.nuxt/
+.svelte-kit/
+.angular/
+.angular/cache
+storybook-static/
+public/build/
+tmp/
+temp/
+.tmp/
+
+# Tool caches
+.vite/
+.cache/
+.turbo/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+.npm/
+.yarn/
+.pnpm-store/
+.browserslistrc.cach*
+.swc/
+.vscode-test/
+
+# Test artifacts
+coverage/
+.cypress/
+.playwright/
+reports/
+test-results/
+
+# Logs
+logs/
+log/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# Environments and local config
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+.env.*.local
+
+# Misc generated
+*.pid
+*.seed
+*.pid.lock
+*.orig
+*.rej
+
+# Docker / compose artifacts (if any generated)
+*.orig.tmp

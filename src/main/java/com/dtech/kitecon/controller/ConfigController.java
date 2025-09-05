@@ -1,5 +1,6 @@
 package com.dtech.kitecon.controller;
 
+import com.dtech.algo.runner.candle.KiteTickerService;
 import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.service.IndexSymbolUpdaterService;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
@@ -17,12 +18,14 @@ public class ConfigController {
 
   private final KiteConnectConfig kiteConnectConfig;
   private final IndexSymbolUpdaterService updaterService;
+  private final KiteTickerService tickerService;
 
   @GetMapping("/app")
   @ResponseBody
   public String fetchData(@RequestParam("request_token") String token)
           throws IOException, KiteException, InterruptedException {
     kiteConnectConfig.initialize(token);
+    tickerService.init();
 //    updaterService.updateSymbols();
     return "success";
   }

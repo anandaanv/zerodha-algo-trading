@@ -60,7 +60,7 @@ public class TrendlineVisualizer {
         XYPlot stochasticPlot = createStochasticPlot(series, divergences);
         combinedPlot.add(stochasticPlot, 1);
 
-        highlightWaves(candlestickPlot, waves, series);
+//        highlightWaves(candlestickPlot, waves, series);
 
         // Create the final chart with the combined plot
         chart = new JFreeChart(title, JFreeChart.DEFAULT_TITLE_FONT, combinedPlot, false);
@@ -82,7 +82,7 @@ public class TrendlineVisualizer {
         adjustYAxisRange(plot, series);
 
         // Add trendlines to the plot
-        //addTrendlinesToPlot(plot, trendlines, series, extendToCurrent);
+        addTrendlinesToPlot(plot, trendlines, series, extendToCurrent);
 
         // Highlight local maxima and minima
         highlightLocalMaxMin(plot, maxima, series);
@@ -232,7 +232,7 @@ public class TrendlineVisualizer {
 
         try {
             // Save the chart as a JPEG file with the specified width and height
-            ChartUtils.saveChartAsJPEG(imageFile, chart, 2000, 1000);
+            ChartUtils.saveChartAsJPEG(imageFile, chart, 4000, 2000);
             System.out.println("Chart saved to " + imageFile.getAbsolutePath());
         } catch (IOException e) {
             System.err.println("Error saving chart to JPEG: " + e.getMessage());

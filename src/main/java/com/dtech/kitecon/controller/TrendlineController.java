@@ -29,7 +29,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@RestController
+//@RestController
 @RequiredArgsConstructor
 @Slf4j
 public class TrendlineController {

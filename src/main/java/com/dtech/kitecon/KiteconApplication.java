@@ -7,11 +7,13 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.ComponentScan.Filter;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @ComponentScan(basePackages = {"com.dtech"})
 @EnableJpaRepositories(basePackages = {"com.dtech"})
 @EntityScan(basePackages = {"com.dtech"})
+@EnableScheduling
 public class KiteconApplication {
 
   public static void main(String[] args) {

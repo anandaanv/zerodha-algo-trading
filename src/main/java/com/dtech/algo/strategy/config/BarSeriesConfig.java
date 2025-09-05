@@ -5,6 +5,7 @@ import com.dtech.algo.series.InstrumentType;
 import com.dtech.algo.series.Interval;
 import com.dtech.algo.series.SeriesType;
 import lombok.*;
+import org.mapstruct.control.DeepClone;
 
 import java.time.LocalDate;
 
