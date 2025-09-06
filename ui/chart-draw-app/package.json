@@ -9,7 +9,7 @@
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
-    "lightweight-charts": "^4.2.1",
+    "@klinecharts/pro": "^0.1.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
