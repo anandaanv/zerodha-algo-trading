@@ -97,3 +97,74 @@
 
 /* Keep overlay on top (from previous patch) */
 .overlay { z-index: 10; }
+
+/* KLine overlay toolbar (preview-like) */
+.kline-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 30;
+  background: #ffffffcc;
+  backdrop-filter: blur(2px);
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+  max-width: 320px;
+}
+
+/* Timeframe pill buttons */
+.pill-btn {
+  padding: 6px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 999px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+}
+.pill-btn:hover {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25,118,210,0.15);
+}
+
+.kline-toolbar-group + .kline-toolbar-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e0e0e0;
+}
+
+.kline-toolbar-title {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+.kline-toolbar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.kline-tool-btn {
+  font-size: 12px;
+  padding: 6px 8px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.kline-tool-btn:hover {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25,118,210,0.15);
+}
+.kline-tool-btn.danger {
+  color: #e53935;
+  border-color: #ffcdd2;
+  background: #fff5f5;
+}
+
+.kline-toolbar-footer {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}

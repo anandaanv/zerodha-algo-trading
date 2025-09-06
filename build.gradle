@@ -169,7 +169,7 @@ tasks.register("npmBuild", Exec) {
 }
 
 // Copy dist to Spring Boot resources (in build dir, not source tree)
-tasks.register("copyFrontend", Copy) {
+tasks.register("copyFrontend", Sync) {
     description = "Copy built frontend to build/resources/static for packaging"
     dependsOn "npmBuild"
     from(frontendDist)
