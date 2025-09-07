@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { init, dispose, type KLineData, type Chart } from "klinecharts";
 import { fetchIntervalMapping, fetchOhlc } from "../api";
-import OverlayToolbar from "./OverlayToolbar";
+import OverlaySidebar from "./OverlaySidebar";
 import type { OhlcBar, Timeframe } from "../types";
 
 const defaultIntervalMap: Record<string, string> = {
@@ -164,13 +164,13 @@ export default function KLineApp() {
         <button onClick={load}>Load</button>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 12, color: "#555" }}>
-          Use the overlay toolbar on the chart (top-left) to draw. Shortcuts: L/Y/S/P/H/V/R/C/T/D/F/E · Shift+C clears.
+          Use the sidebar to add overlays, or shortcuts: L/Y/S/P/H/V/R/C/T/D/F/E · Shift+C clears all.
         </div>
       </div>
 
       <div style={{ position: "relative", width, height, borderTop: "1px solid #e0e0e0" }}>
         <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
-        <OverlayToolbar onCreate={createOverlay} onClear={clearOverlays} />
+        <OverlaySidebar onCreate={createOverlay} onClear={clearOverlays} />
       </div>
     </div>
   );
