@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { KLineChartPro } from "@klinecharts/pro";
 // Import Pro styles so the built-in toolbar and UI render properly
 import "@klinecharts/pro/dist/klinecharts-pro.css";
@@ -17,6 +17,114 @@ type BarRow = {
 export default function ProApp() {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
+
+  const LOCAL_HISTORY_KEY = "chart_pro_local_history";
+
+  type SavedState = {
+    id: string;
+    timestamp: number;
+    symbol?: string;
+    period?: any;
+    overlays?: any[];
+    indicators?: any[];
+  };
+
+  const loadHistory = (): SavedState[] => {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_HISTORY_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as SavedState[]) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const persistHistory = (items: SavedState[]) => {
+    try {
+      window.localStorage.setItem(LOCAL_HISTORY_KEY, JSON.stringify(items));
+    } catch {
+      // ignore write errors (quota, private mode, etc.)
+    }
+  };
+
+  const collectCurrentState = (): Omit<SavedState, "id" | "timestamp"> => {
+    const chart = chartRef.current;
+    const symbol = chart?.getSymbol?.() ?? chart?.symbol ?? undefined;
+    const period = chart?.getPeriod?.() ?? chart?.period ?? undefined;
+
+    // Safely serialize complex objects by removing functions/symbols and breaking cycles
+    const safeSerialize = (value: any) => {
+      try {
+        const seen = new WeakSet();
+        return JSON.parse(
+          JSON.stringify(value, (_k, v) => {
+            if (typeof v === "function" || typeof v === "symbol") return undefined;
+            if (v && typeof v === "object") {
+              if (seen.has(v)) return undefined;
+              seen.add(v);
+            }
+            return v;
+          })
+        );
+      } catch {
+        return undefined;
+      }
+    };
+
+    // Try to locate the underlying KLineChart instance that provides overlays/indicators APIs
+    const getBaseKLine = () => {
+      const c: any = chart;
+      const candidates = [
+        c,
+        c?.chart,
+        c?.kLineChart,
+        c?.klinechart,
+        c?.kLine,
+        c?.kChart,
+        c?._chart,
+        c?.innerChart,
+        c?.instance,
+        c?.core,
+        c?.ctx,
+      ];
+      for (const obj of candidates) {
+        if (obj && (typeof obj.getOverlays === "function" || typeof obj.getIndicators === "function")) {
+          return obj;
+        }
+      }
+      try {
+        for (const key of Object.keys(c ?? {})) {
+          const v = c[key];
+          if (
+            v &&
+            typeof v === "object" &&
+            (typeof (v as any).getOverlays === "function" || typeof (v as any).getIndicators === "function")
+          ) {
+            return v;
+          }
+        }
+      } catch {
+        // ignore reflection errors
+      }
+      return null;
+    };
+
+    const base = getBaseKLine();
+    const overlays = safeSerialize(base?.getOverlays?.() ?? []);
+    const indicators = safeSerialize(base?.getIndicators?.() ?? []);
+
+    return { symbol, period, overlays, indicators };
+  };
+
+  const handleSave = useCallback(() => {
+    const now = Date.now();
+    const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
+    const base = collectCurrentState();
+    const history = loadHistory();
+    const next: SavedState[] = [{ id, timestamp: now, ...base }, ...history].slice(0, 50);
+    persistHistory(next);
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -252,5 +360,30 @@ export default function ProApp() {
     };
   }, []);
 
-  return <div ref={containerRef} style={{ width: "100%", height: "100vh" }} />;
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100vh" }}>
+      <div
+        ref={containerRef}
+        style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+      />
+      <button
+        onClick={handleSave}
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 1000,
+          padding: "8px 12px",
+          borderRadius: 6,
+          border: "1px solid #ccc",
+          background: "#fff",
+          cursor: "pointer",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.15)"
+        }}
+        title="Save current chart setup to local history"
+      >
+        Save
+      </button>
+    </div>
+  );
 }
