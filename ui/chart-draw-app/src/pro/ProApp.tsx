@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 import { createChart, type IChartApi, type CandlestickData } from "lightweight-charts";
 import { TrendlinePlugin } from "./plugins/TrendlinePlugin";
 import { RayPlugin } from "./plugins/RayPlugin";
+import SimplePropertiesDialog, { type SimpleStyle } from "./SimplePropertiesDialog";
 
 type BarRow = {
   time?: number;
@@ -22,6 +23,35 @@ export default function ProApp() {
   const rayRef = useRef<RayPlugin | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showLineFlyout, setShowLineFlyout] = useState(false);
+
+  const [showProps, setShowProps] = useState(false);
+  const [propsInitial, setPropsInitial] = useState<SimpleStyle>({ color: "#1976d2", width: 2, style: "solid" });
+
+  const openPropsDialog = useCallback(() => {
+    const style =
+      (trendlineRef.current as any)?.getSelectedStyle?.() ??
+      (rayRef.current as any)?.getSelectedStyle?.() ??
+      null;
+    setPropsInitial(style ?? { color: "#1976d2", width: 2, style: "solid" });
+    setShowProps(true);
+  }, []);
+
+  const applyPropsDialog = useCallback((s: SimpleStyle) => {
+    // Prefer the plugin that currently has a selection
+    const trendHas = (trendlineRef.current as any)?.hasSelection?.() === true;
+    const rayHas = (rayRef.current as any)?.hasSelection?.() === true;
+
+    if (trendHas) {
+      (trendlineRef.current as any)?.applySelectedStyle?.(s);
+    } else if (rayHas) {
+      (rayRef.current as any)?.applySelectedStyle?.(s);
+    } else {
+      // Fallback: try both (if any selection exists internally)
+      (trendlineRef.current as any)?.applySelectedStyle?.(s);
+      (rayRef.current as any)?.applySelectedStyle?.(s);
+    }
+    setShowProps(false);
+  }, []);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     const key = e.key.toLowerCase();
@@ -353,6 +383,29 @@ export default function ProApp() {
             </div>
           )}
         </div>
+
+        {/* Properties button (gear) */}
+        <button
+          onClick={openPropsDialog}
+          title="Properties"
+          style={{
+            width: 40,
+            height: 40,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 8,
+            border: "1px solid #e0e0e0",
+            background: "#ffffff",
+            cursor: "pointer",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 20 20">
+            <path d="M8 2 L12 2 L13 5 L16 6 L16 10 L13 11 L12 14 L8 14 L7 11 L4 10 L4 6 L7 5 Z" stroke="#333" fill="none" />
+            <circle cx="10" cy="8" r="2" fill="#333" />
+          </svg>
+        </button>
       </div>
 
       {/* Save button */}
@@ -374,6 +427,14 @@ export default function ProApp() {
       >
         Save
       </button>
+
+      {/* Properties dialog */}
+      <SimplePropertiesDialog
+        open={showProps}
+        initial={propsInitial}
+        onApply={applyPropsDialog}
+        onClose={() => setShowProps(false)}
+      />
     </div>
   );
 }
