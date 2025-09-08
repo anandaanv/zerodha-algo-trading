@@ -1,7 +1,10 @@
-import React, { useEffect, useRef, useCallback, useState } from "react";
+import React, { useEffect, useRef, useCallback, useState, useMemo } from "react";
 import { createChart, type IChartApi, type CandlestickData } from "lightweight-charts";
-import { TrendlinePlugin } from "./plugins/TrendlinePlugin";
-import { RayPlugin } from "./plugins/RayPlugin";
+import { getPluginsByGroup, getAllPlugins } from "./plugins/PluginRegistry";
+// Ensure plugin modules are imported so they self-register
+import "./plugins/TrendlinePlugin";
+import "./plugins/RayPlugin";
+import "./plugins/HLinePlugin";
 import SimplePropertiesDialog, { type SimpleStyle } from "./SimplePropertiesDialog";
 
 type BarRow = {
@@ -19,36 +22,50 @@ export default function ProApp() {
   const chartRef = useRef<IChartApi | null>(null);
   const currentSymbolRef = useRef<string | undefined>(undefined);
   const currentPeriodRef = useRef<string | undefined>(undefined);
-  const trendlineRef = useRef<TrendlinePlugin | null>(null);
-  const rayRef = useRef<RayPlugin | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const [showLineFlyout, setShowLineFlyout] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+
+  // map key -> instance
+  const pluginMapRef = useRef<Record<string, any>>({});
+  const groups = useMemo(() => getPluginsByGroup(), []);
+  const allDefs = useMemo(() => getAllPlugins(), []);
 
   const [showProps, setShowProps] = useState(false);
   const [propsInitial, setPropsInitial] = useState<SimpleStyle>({ color: "#1976d2", width: 2, style: "solid" });
 
   const openPropsDialog = useCallback(() => {
-    const style =
-      (trendlineRef.current as any)?.getSelectedStyle?.() ??
-      (rayRef.current as any)?.getSelectedStyle?.() ??
-      null;
+    const pm = pluginMapRef.current;
+    // Prefer the plugin that currently has a selection
+    let style: SimpleStyle | null = null;
+    for (const k of Object.keys(pm)) {
+      if (pm[k]?.hasSelection?.()) {
+        style = pm[k]?.getSelectedStyle?.() ?? null;
+        break;
+      }
+    }
+    // Fallback to the first plugin that returns a style, or default
+    if (!style) {
+      for (const k of Object.keys(pm)) {
+        style = pm[k]?.getSelectedStyle?.() ?? null;
+        if (style) break;
+      }
+    }
     setPropsInitial(style ?? { color: "#1976d2", width: 2, style: "solid" });
     setShowProps(true);
   }, []);
 
   const applyPropsDialog = useCallback((s: SimpleStyle) => {
-    // Prefer the plugin that currently has a selection
-    const trendHas = (trendlineRef.current as any)?.hasSelection?.() === true;
-    const rayHas = (rayRef.current as any)?.hasSelection?.() === true;
-
-    if (trendHas) {
-      (trendlineRef.current as any)?.applySelectedStyle?.(s);
-    } else if (rayHas) {
-      (rayRef.current as any)?.applySelectedStyle?.(s);
-    } else {
-      // Fallback: try both (if any selection exists internally)
-      (trendlineRef.current as any)?.applySelectedStyle?.(s);
-      (rayRef.current as any)?.applySelectedStyle?.(s);
+    const pm = pluginMapRef.current;
+    let applied = false;
+    // Apply to whichever plugin has a selection
+    for (const k of Object.keys(pm)) {
+      if (pm[k]?.hasSelection?.()) {
+        applied = pm[k]?.applySelectedStyle?.(s) || applied;
+      }
+    }
+    // If none selected, attempt all (no-op where not selected)
+    if (!applied) {
+      for (const k of Object.keys(pm)) pm[k]?.applySelectedStyle?.(s);
     }
     setShowProps(false);
   }, []);
@@ -56,28 +73,29 @@ export default function ProApp() {
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     const key = e.key.toLowerCase();
     if ((e.altKey || e.metaKey) && key === "t") {
-      // default to trendline
-      rayRef.current?.cancel?.();
-      rayRef.current?.setActive?.(false);
-      trendlineRef.current?.setActive?.(true);
-      trendlineRef.current?.startDrawing();
-      setShowLineFlyout(false);
+      // default to trendline via registry
+      const pm = pluginMapRef.current;
+      pm["ray"]?.cancel?.();
+      pm["ray"]?.setActive?.(false);
+      pm["trendline"]?.setActive?.(true);
+      pm["trendline"]?.startDrawing?.();
+      setOpenGroup(null);
       e.preventDefault();
       return;
     }
     if (key === "escape") {
-      trendlineRef.current?.cancel?.();
-      rayRef.current?.cancel?.();
-      setShowLineFlyout(false);
+      const pm = pluginMapRef.current;
+      for (const k of Object.keys(pm)) pm[k]?.cancel?.();
+      setOpenGroup(null);
       return;
     }
     if (key === "delete" || key === "backspace") {
-      const deleted =
-        (trendlineRef.current as any)?.deleteSelected?.() ||
-        (rayRef.current as any)?.deleteSelected?.();
-      if (deleted) {
-        e.preventDefault();
+      const pm = pluginMapRef.current;
+      let deleted = false;
+      for (const k of Object.keys(pm)) {
+        deleted = pm[k]?.deleteSelected?.() || deleted;
       }
+      if (deleted) e.preventDefault();
     }
   }, []);
 
@@ -120,15 +138,18 @@ export default function ProApp() {
 
   function saveOverlaysToLocal(symbol: string, period: string) {
     try {
-      const tl = (trendlineRef.current as any)?.exportAll?.() ?? [];
-      const ry = (rayRef.current as any)?.exportAll?.() ?? [];
       const raw = window.localStorage.getItem(LOCAL_OVERLAYS_KEY);
       const obj = raw ? JSON.parse(raw) : {};
       obj[symbol] = obj[symbol] || {};
-      obj[symbol][period] = { trendlines: tl, rays: ry };
+      obj[symbol][period] = obj[symbol][period] || {};
+      const instances = pluginMapRef.current;
+      for (const def of getAllPlugins()) {
+        const data = (instances[def.key] as any)?.exportAll?.() ?? [];
+        obj[symbol][period][def.key] = data;
+      }
       window.localStorage.setItem(LOCAL_OVERLAYS_KEY, JSON.stringify(obj));
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn("Save overlays failed", e);
     }
   }
 
@@ -139,10 +160,16 @@ export default function ProApp() {
       const obj = JSON.parse(raw);
       const entry = obj?.[symbol]?.[period];
       if (!entry) return;
-      (trendlineRef.current as any)?.importAll?.(entry.trendlines ?? []);
-      (rayRef.current as any)?.importAll?.(entry.rays ?? []);
-    } catch {
-      // ignore
+      const instances = pluginMapRef.current;
+      for (const def of getAllPlugins()) {
+        const data = entry[def.key] ?? [];
+        (instances[def.key] as any)?.importAll?.(data);
+      }
+      // Backward compatibility for earlier keys
+      if (entry.trendlines && instances["trendline"]) (instances["trendline"] as any)?.importAll?.(entry.trendlines);
+      if (entry.rays && instances["ray"]) (instances["ray"] as any)?.importAll?.(entry.rays);
+    } catch (e) {
+      console.warn("Load overlays failed", e);
     }
   }
 
@@ -244,11 +271,18 @@ export default function ProApp() {
 
       await loadCandles(DEFAULT_SYMBOL, DEFAULT_PERIOD);
 
-      // Create plugins
-      trendlineRef.current = new TrendlinePlugin({ chart, series, container });
-      rayRef.current = new RayPlugin({ chart, series, container });
+      // Create plugins from registry
+      const instances: Record<string, any> = {};
+      for (const def of getAllPlugins()) {
+        try {
+          instances[def.key] = new (def.ctor as any)({ chart, series, container });
+        } catch (err) {
+          console.error("Failed to init plugin", def.key, err);
+        }
+      }
+      pluginMapRef.current = instances;
 
-      // Load saved overlays for this symbol/period (delay to ensure time scale is ready)
+      // Load saved overlays after chart/plugins are ready
       setTimeout(() => {
         loadOverlaysFromLocal(DEFAULT_SYMBOL, DEFAULT_PERIOD);
       }, 0);
@@ -276,38 +310,39 @@ export default function ProApp() {
 
     return () => {
       try {
-        trendlineRef.current?.destroy?.();
+        const instances = pluginMapRef.current;
+        for (const key of Object.keys(instances)) {
+          instances[key]?.destroy?.();
+        }
       } catch {
         /* noop */
       }
-      trendlineRef.current = null;
-      try {
-        rayRef.current?.destroy?.();
-      } catch {
-        /* noop */
-      }
-      rayRef.current = null;
       try {
         chartRef.current?.remove?.();
       } catch {
         /* noop */
       }
       chartRef.current = null;
+      pluginMapRef.current = {};
     };
   }, []);
 
   const handleWrapperMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // keep focus for keyboard shortcuts
     wrapperRef.current?.focus();
-    // Let plugins try to select at this point (trendline first, then ray)
     const x = e.clientX;
     const y = e.clientY;
-    const selected =
-      (trendlineRef.current as any)?.trySelectAt?.(x, y) ||
-      (rayRef.current as any)?.trySelectAt?.(x, y);
+    const instances = pluginMapRef.current;
+    let selected = false;
+    // try in reverse registration order to mimic topmost selection
+    const keys = Object.keys(instances);
+    for (let i = keys.length - 1; i >= 0; i--) {
+      if ((instances[keys[i]] as any)?.trySelectAt?.(x, y)) {
+        selected = true;
+        break;
+      }
+    }
     if (!selected) {
-      (trendlineRef.current as any)?.clearSelection?.();
-      (rayRef.current as any)?.clearSelection?.();
+      for (const k of keys) (instances[k] as any)?.clearSelection?.();
     }
   }, []);
 
@@ -336,106 +371,82 @@ export default function ProApp() {
           zIndex: 1000,
         }}
       >
-        {/* Line group button with flyout */}
-        <div style={{ position: "relative" }}>
-          <button
-            onClick={() => setShowLineFlyout((v) => !v)}
-            title="Line Tools"
-            style={{
-              width: 40,
-              height: 40,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 8,
-              border: "1px solid #e0e0e0",
-              background: "#ffffff",
-              cursor: "pointer",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 20 20">
-              <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
-            </svg>
-          </button>
-
-          {showLineFlyout && (
-            <div
+        {Object.entries(groups).map(([group, defs]) => (
+          <div key={group} style={{ position: "relative" }}>
+            <button
+              onClick={() => setOpenGroup((g) => (g === group ? null : group))}
+              title={`${group} Tools`}
               style={{
-                position: "absolute",
-                top: 0,
-                left: 48,
+                width: 40,
+                height: 40,
                 display: "flex",
-                flexDirection: "column",
-                gap: 6,
-                padding: 6,
-                background: "#fff",
-                border: "1px solid #e0e0e0",
+                alignItems: "center",
+                justifyContent: "center",
                 borderRadius: 8,
-                boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
+                border: "1px solid #e0e0e0",
+                background: "#ffffff",
+                cursor: "pointer",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
               }}
             >
-              <button
-                onClick={() => {
-                  rayRef.current?.cancel?.();
-                  rayRef.current?.setActive?.(false);
-                  trendlineRef.current?.setActive?.(true);
-                  trendlineRef.current?.startDrawing();
-                  setShowLineFlyout(false);
-                }}
-                title="Trend Line (Alt+T)"
-                style={{
-                  width: 160,
-                  height: 36,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  justifyContent: "flex-start",
-                  borderRadius: 6,
-                  border: "1px solid #eee",
-                  background: "#ffffff",
-                  cursor: "pointer",
-                  padding: "0 10px",
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 20 20">
-                  <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
-                </svg>
-                <span style={{ fontSize: 12, color: "#333" }}>Trend Line</span>
-              </button>
+              {/* Use first plugin icon in group as group icon */}
+              {defs[0]?.icon?.()}
+            </button>
 
-              <button
-                onClick={() => {
-                  trendlineRef.current?.cancel?.();
-                  trendlineRef.current?.setActive?.(false);
-                  rayRef.current?.setActive?.(true);
-                  rayRef.current?.startDrawing();
-                  setShowLineFlyout(false);
-                }}
-                title="Ray"
+            {openGroup === group && (
+              <div
                 style={{
-                  width: 160,
-                  height: 36,
+                  position: "absolute",
+                  top: 0,
+                  left: 48,
                   display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  justifyContent: "flex-start",
-                  borderRadius: 6,
-                  border: "1px solid #eee",
-                  background: "#ffffff",
-                  cursor: "pointer",
-                  padding: "0 10px",
+                  flexDirection: "column",
+                  gap: 6,
+                  padding: 6,
+                  background: "#fff",
+                  border: "1px solid #e0e0e0",
+                  borderRadius: 8,
+                  boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 20 20">
-                  <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
-                  <path d="M17 3 L19 1" stroke="#333" strokeWidth="2" />
-                </svg>
-                <span style={{ fontSize: 12, color: "#333" }}>Ray</span>
-              </button>
-            </div>
-          )}
-        </div>
+                {defs.map((def) => (
+                  <button
+                    key={def.key}
+                    onClick={() => {
+                      // cancel other drawings and make chosen active
+                      for (const other of allDefs) {
+                        if (other.key !== def.key) {
+                          (pluginMapRef.current[other.key] as any)?.cancel?.();
+                          (pluginMapRef.current[other.key] as any)?.setActive?.(false);
+                        }
+                      }
+                      (pluginMapRef.current[def.key] as any)?.setActive?.(true);
+                      (pluginMapRef.current[def.key] as any)?.startDrawing?.();
+                      setOpenGroup(null);
+                    }}
+                    title={def.title}
+                    style={{
+                      width: 180,
+                      height: 36,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      justifyContent: "flex-start",
+                      borderRadius: 6,
+                      border: "1px solid #eee",
+                      background: "#ffffff",
+                      cursor: "pointer",
+                      padding: "0 10px",
+                    }}
+                  >
+                    {def.icon?.()}
+                    <span style={{ fontSize: 12, color: "#333" }}>{def.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
 
         {/* Properties button (gear) */}
         <button
