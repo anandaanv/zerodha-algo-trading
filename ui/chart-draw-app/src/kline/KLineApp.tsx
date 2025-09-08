@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { init, dispose, type KLineData, type Chart } from "klinecharts";
 import { fetchIntervalMapping, fetchOhlc } from "../api";
 import OverlaySidebar from "./OverlaySidebar";
+import { registerOverlayTemplates } from "./registerOverlays";
 import type { OhlcBar, Timeframe } from "../types";
 
 const defaultIntervalMap: Record<string, string> = {
@@ -30,6 +31,8 @@ export default function KLineApp() {
   // init / dispose chart
   useEffect(() => {
     if (!containerRef.current) return;
+    // Ensure custom overlays are registered once
+    registerOverlayTemplates();
     const chart = init(containerRef.current, { styles: tvLikeStyles });
     chartRef.current = chart;
 
@@ -40,7 +43,7 @@ export default function KLineApp() {
     };
     window.addEventListener("resize", onResize);
 
-    // Keyboard overlays using built-in API (createOverlay / removeAllOverlay). No custom toolbar.
+    // Keyboard overlays using built-in API with robust fallbacks.
     const onKey = (e: KeyboardEvent) => {
       const c: any = chartRef.current as any;
       if (!c) return;
@@ -49,13 +52,26 @@ export default function KLineApp() {
 
       // Clear all overlays: Shift + C
       if (withShift && key === "c") {
-        if (typeof c.removeAllOverlay === "function") c.removeAllOverlay();
-        else if (typeof c.removeAllGraphicMark === "function") c.removeAllGraphicMark();
-        e.preventDefault();
+        let cleared = false;
+        try {
+          if (typeof c.removeAllOverlay === "function") {
+            const res = c.removeAllOverlay();
+            cleared = res !== false;
+          }
+        } catch {}
+        if (!cleared) {
+          try {
+            if (typeof c.removeAllGraphicMark === "function") {
+              const res = c.removeAllGraphicMark();
+              cleared = res !== false;
+            }
+          } catch {}
+        }
+        if (cleared) e.preventDefault();
         return;
       }
 
-      // Map keys to built-in overlays (fallback to graphic mark ids on older versions)
+      // Map keys to overlay/mark ids
       const map: Record<string, string> = {
         l: "straightLine",
         y: "rayLine",
@@ -72,13 +88,27 @@ export default function KLineApp() {
       };
       const overlayId = map[key];
       if (overlayId) {
+        let created = false;
+
+        // Try overlay first; only treat as created if result is truthy
         try {
-          if (typeof c.createOverlay === "function") c.createOverlay(overlayId);
-          else if (typeof c.createGraphicMark === "function") c.createGraphicMark(overlayId);
-          e.preventDefault();
-        } catch (err) {
-          console.warn("Overlay not available:", overlayId, err);
+          if (typeof c.createOverlay === "function") {
+            const res = c.createOverlay(overlayId);
+            created = !!res;
+          }
+        } catch {}
+
+        // Fallback to graphic mark if overlay was not created
+        if (!created) {
+          try {
+            if (typeof c.createGraphicMark === "function") {
+              const res = c.createGraphicMark(overlayId);
+              created = !!res;
+            }
+          } catch {}
         }
+
+        if (created) e.preventDefault();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -134,18 +164,48 @@ export default function KLineApp() {
     return order.filter((k) => keys.includes(k)).concat(keys.filter((k) => !order.includes(k)));
   }, [intervalMap]);
 
-  // Helpers to create/clear overlays (falls back to v9 graphic marks if needed)
+  // Helpers to create/clear overlays with robust fallbacks (v9 marks or v10 overlays)
   function createOverlay(id: string) {
     const c: any = chartRef.current as any;
-    if (!c) return;
-    if (typeof c.createOverlay === "function") c.createOverlay(id);
-    else if (typeof c.createGraphicMark === "function") c.createGraphicMark(id);
+    if (!c) return false;
+    let created = false;
+
+    try {
+      if (typeof c.createOverlay === "function") {
+        const res = c.createOverlay(id);
+        created = !!res;
+      }
+    } catch {}
+
+    if (!created) {
+      try {
+        if (typeof c.createGraphicMark === "function") {
+          const res = c.createGraphicMark(id);
+          created = !!res;
+        }
+      } catch {}
+    }
+    return created;
   }
   function clearOverlays() {
     const c: any = chartRef.current as any;
-    if (!c) return;
-    if (typeof c.removeAllOverlay === "function") c.removeAllOverlay();
-    else if (typeof c.removeAllGraphicMark === "function") c.removeAllGraphicMark();
+    if (!c) return false;
+    let cleared = false;
+    try {
+      if (typeof c.removeAllOverlay === "function") {
+        c.removeAllOverlay();
+        cleared = true;
+      }
+    } catch {}
+    if (!cleared) {
+      try {
+        if (typeof c.removeAllGraphicMark === "function") {
+          c.removeAllGraphicMark();
+          cleared = true;
+        }
+      } catch {}
+    }
+    return cleared;
   }
 
   return (
