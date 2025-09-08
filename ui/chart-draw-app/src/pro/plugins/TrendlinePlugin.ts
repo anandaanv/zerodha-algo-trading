@@ -125,6 +125,30 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
     }
   };
 
+  // Simple styles for selection and defaults (used by properties dialog)
+  private selectionStyles = new Map<string, { color: string; width: number; style: "solid" | "dashed" }>();
+  private defaultStyle: { color: string; width: number; style: "solid" | "dashed" } = {
+    color: "#1976d2",
+    width: 2,
+    style: "solid",
+  };
+
+  hasSelection() {
+    return !!this.selectedId;
+  }
+
+  getSelectedStyle(): { color: string; width: number; style: "solid" | "dashed" } | null {
+    if (!this.selectedId) return null;
+    return this.selectionStyles.get(this.selectedId) ?? { ...this.defaultStyle };
+  }
+
+  applySelectedStyle(s: { color: string; width: number; style: "solid" | "dashed" }): boolean {
+    if (!this.selectedId) return false;
+    this.selectionStyles.set(this.selectedId, { ...s });
+    this.render();
+    return true;
+  }
+
   constructor(params: { chart: any; series: any; container: HTMLElement }) {
     super(params);
     this.canvas.addEventListener("mousemove", this.handleMove);
@@ -200,7 +224,8 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
       const y2 = ln.p2.price != null ? this.priceToY(ln.p2.price) : null;
       if (x1 != null && y1 != null && x2 != null && y2 != null) {
         const isSel = ln.id === this.selectedId;
-        this.drawLinePx(x1, y1, x2, y2, isSel ? "#1565c0" : "#1976d2");
+        const style = this.selectionStyles.get(ln.id) ?? this.defaultStyle;
+        this.drawLinePx(x1, y1, x2, y2, style);
         if (isSel) {
           this.drawAnchor(x1, y1);
           this.drawAnchor(x2, y2);
@@ -209,19 +234,31 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
     }
     // preview
     if (this.drawing && this.firstPoint && this.mouse) {
-      this.drawLinePx(this.firstPoint.x, this.firstPoint.y, this.mouse.x, this.mouse.y, "#455a64");
+      this.drawLinePx(this.firstPoint.x, this.firstPoint.y, this.mouse.x, this.mouse.y, {
+        color: this.defaultStyle.color,
+        width: Math.max(1, this.defaultStyle.width),
+        style: this.defaultStyle.style,
+      });
     }
   }
 
-  private drawLinePx(x1: number, y1: number, x2: number, y2: number, style = "#1976d2") {
+  private drawLinePx(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    style: { color: string; width: number; style: "solid" | "dashed" }
+  ) {
     const ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = style;
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = Math.max(1, style.width);
+    if (style.style === "dashed") ctx.setLineDash([6, 4]);
     ctx.beginPath();
     ctx.moveTo(x1 + 0.5, y1 + 0.5);
     ctx.lineTo(x2 + 0.5, y2 + 0.5);
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   }
 

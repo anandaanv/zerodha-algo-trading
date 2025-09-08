@@ -125,6 +125,30 @@ export class RayPlugin extends BaseOverlayPlugin {
     }
   };
 
+  // Simple styles for selection and defaults
+  private selectionStyles = new Map<string, { color: string; width: number; style: "solid" | "dashed" }>();
+  private defaultStyle: { color: string; width: number; style: "solid" | "dashed" } = {
+    color: "#1976d2",
+    width: 2,
+    style: "solid",
+  };
+
+  hasSelection() {
+    return !!this.selectedId;
+  }
+
+  getSelectedStyle(): { color: string; width: number; style: "solid" | "dashed" } | null {
+    if (!this.selectedId) return null;
+    return this.selectionStyles.get(this.selectedId) ?? { ...this.defaultStyle };
+  }
+
+  applySelectedStyle(s: { color: string; width: number; style: "solid" | "dashed" }): boolean {
+    if (!this.selectedId) return false;
+    this.selectionStyles.set(this.selectedId, { ...s });
+    this.render();
+    return true;
+  }
+
   constructor(params: { chart: any; series: any; container: HTMLElement }) {
     super(params);
     this.canvas.addEventListener("mousemove", this.handleMove);
@@ -197,7 +221,8 @@ export class RayPlugin extends BaseOverlayPlugin {
       const seg = this.getRayPx(ln);
       if (!seg) continue;
       const isSel = ln.id === this.selectedId;
-      this.drawLinePx(seg.a.x, seg.a.y, seg.b.x, seg.b.y, isSel ? "#1565c0" : "#1976d2");
+      const style = this.selectionStyles.get(ln.id) ?? this.defaultStyle;
+      this.drawLinePx(seg.a.x, seg.a.y, seg.b.x, seg.b.y, style);
       if (isSel) {
         this.drawAnchor(seg.a.x, seg.a.y);
         this.drawAnchor(this.timeToX(ln.p2.time)!, this.priceToY(ln.p2.price)!);
@@ -206,19 +231,31 @@ export class RayPlugin extends BaseOverlayPlugin {
 
     // preview
     if (this.drawing && this.firstPoint && this.mouse) {
-      this.drawLinePx(this.firstPoint.x, this.firstPoint.y, this.mouse.x, this.mouse.y, "#455a64");
+      this.drawLinePx(this.firstPoint.x, this.firstPoint.y, this.mouse.x, this.mouse.y, {
+        color: this.defaultStyle.color,
+        width: Math.max(1, this.defaultStyle.width),
+        style: this.defaultStyle.style,
+      });
     }
   }
 
-  private drawLinePx(x1: number, y1: number, x2: number, y2: number, style = "#1976d2") {
+  private drawLinePx(
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    style: { color: string; width: number; style: "solid" | "dashed" }
+  ) {
     const ctx = this.ctx;
     ctx.save();
-    ctx.strokeStyle = style;
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = style.color;
+    ctx.lineWidth = Math.max(1, style.width);
+    if (style.style === "dashed") ctx.setLineDash([6, 4]);
     ctx.beginPath();
     ctx.moveTo(x1 + 0.5, y1 + 0.5);
     ctx.lineTo(x2 + 0.5, y2 + 0.5);
     ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
   }
 
