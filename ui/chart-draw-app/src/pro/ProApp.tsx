@@ -1,8 +1,7 @@
-import React, { useEffect, useRef, useCallback } from "react";
-import { KLineChartPro } from "@klinecharts/pro";
-// Import Pro styles so the built-in toolbar and UI render properly
-import "@klinecharts/pro/dist/klinecharts-pro.css";
-import {KLineData} from "klinecharts";
+import React, { useEffect, useRef, useCallback, useState } from "react";
+import { createChart, type IChartApi, type CandlestickData } from "lightweight-charts";
+import { TrendlinePlugin } from "./plugins/TrendlinePlugin";
+import { RayPlugin } from "./plugins/RayPlugin";
 
 type BarRow = {
   time?: number;
@@ -16,7 +15,41 @@ type BarRow = {
 
 export default function ProApp() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const currentSymbolRef = useRef<string | undefined>(undefined);
+  const currentPeriodRef = useRef<string | undefined>(undefined);
+  const trendlineRef = useRef<TrendlinePlugin | null>(null);
+  const rayRef = useRef<RayPlugin | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [showLineFlyout, setShowLineFlyout] = useState(false);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    const key = e.key.toLowerCase();
+    if ((e.altKey || e.metaKey) && key === "t") {
+      // default to trendline
+      rayRef.current?.cancel?.();
+      rayRef.current?.setActive?.(false);
+      trendlineRef.current?.setActive?.(true);
+      trendlineRef.current?.startDrawing();
+      setShowLineFlyout(false);
+      e.preventDefault();
+      return;
+    }
+    if (key === "escape") {
+      trendlineRef.current?.cancel?.();
+      rayRef.current?.cancel?.();
+      setShowLineFlyout(false);
+      return;
+    }
+    if (key === "delete" || key === "backspace") {
+      const deleted =
+        (trendlineRef.current as any)?.deleteSelected?.() ||
+        (rayRef.current as any)?.deleteSelected?.();
+      if (deleted) {
+        e.preventDefault();
+      }
+    }
+  }, []);
 
   const LOCAL_HISTORY_KEY = "chart_pro_local_history";
 
@@ -49,72 +82,9 @@ export default function ProApp() {
   };
 
   const collectCurrentState = (): Omit<SavedState, "id" | "timestamp"> => {
-    const chart = chartRef.current;
-    const symbol = chart?.getSymbol?.() ?? chart?.symbol ?? undefined;
-    const period = chart?.getPeriod?.() ?? chart?.period ?? undefined;
-
-    // Safely serialize complex objects by removing functions/symbols and breaking cycles
-    const safeSerialize = (value: any) => {
-      try {
-        const seen = new WeakSet();
-        return JSON.parse(
-          JSON.stringify(value, (_k, v) => {
-            if (typeof v === "function" || typeof v === "symbol") return undefined;
-            if (v && typeof v === "object") {
-              if (seen.has(v)) return undefined;
-              seen.add(v);
-            }
-            return v;
-          })
-        );
-      } catch {
-        return undefined;
-      }
-    };
-
-    // Try to locate the underlying KLineChart instance that provides overlays/indicators APIs
-    const getBaseKLine = () => {
-      const c: any = chart;
-      const candidates = [
-        c,
-        c?.chart,
-        c?.kLineChart,
-        c?.klinechart,
-        c?.kLine,
-        c?.kChart,
-        c?._chart,
-        c?.innerChart,
-        c?.instance,
-        c?.core,
-        c?.ctx,
-      ];
-      for (const obj of candidates) {
-        if (obj && (typeof obj.getOverlays === "function" || typeof obj.getIndicators === "function")) {
-          return obj;
-        }
-      }
-      try {
-        for (const key of Object.keys(c ?? {})) {
-          const v = c[key];
-          if (
-            v &&
-            typeof v === "object" &&
-            (typeof (v as any).getOverlays === "function" || typeof (v as any).getIndicators === "function")
-          ) {
-            return v;
-          }
-        }
-      } catch {
-        // ignore reflection errors
-      }
-      return null;
-    };
-
-    const base = getBaseKLine();
-    const overlays = safeSerialize(base?.getOverlays?.() ?? []);
-    const indicators = safeSerialize(base?.getIndicators?.() ?? []);
-
-    return { symbol, period, overlays, indicators };
+    const symbol = currentSymbolRef.current;
+    const period = currentPeriodRef.current;
+    return { symbol, period, overlays: [], indicators: [] };
   };
 
   const handleSave = useCallback(() => {
@@ -157,202 +127,100 @@ export default function ProApp() {
       const DEFAULT_SYMBOL = "TCS";
       const DEFAULT_PERIOD = uiKeys.includes("1h") ? "1h" : (uiKeys[0] || "1h");
 
-      class MyDatafeed {
-        constructor(
-          private defaultSymbol: string,
-          private defaultPeriod: string,
-          private uiToEnum: Record<string, string>
-        ) {}
+      currentSymbolRef.current = DEFAULT_SYMBOL;
+      currentPeriodRef.current = DEFAULT_PERIOD;
 
-        // Normalize period from string or object ({ multiplier,timespan,text } or { text/value }) to a UI key like "1h"
-        private uiKey(p?: any): string {
-          if (!p) return this.defaultPeriod;
-          if (typeof p === "string") return p;
-          if (typeof p === "object") {
-            if (p.text) return String(p.text);
-            if (p.value) return String(p.value);
-            if (p.multiplier && p.timespan) {
-              const mult = Number(p.multiplier) || 1;
-              const u = String(p.timespan).toLowerCase();
-              const suf = u.startsWith("min") ? "m" : u.startsWith("hour") ? "h" : u.startsWith("day") ? "d" : u.startsWith("week") ? "w" : "";
-              if (suf) return `${mult}${suf}`;
-            }
-          }
-          return this.defaultPeriod;
-        }
-
-        // Map UI key to server enum name via backend mapping
-        private toEnum(p?: any): string {
-          const key = this.uiKey(p);
-          return this.uiToEnum[key] ?? key;
-        }
-
-        // Symbol search (drives the built-in search in Pro)
-        searchSymbols(keyword?: string) {
-          const url = new URL("/api/symbols", window.location.origin);
-          if (keyword) url.searchParams.set("query", keyword);
-          return fetch(url)
-            .then((r) => (r.ok ? r.json() : []))
-            .catch(() => []);
-        }
-
-        // Supported periods from backend mapping (only what your server exposes)
-        getPeriods() {
-          const keys = Object.keys(this.uiToEnum);
-          return Promise.resolve(keys);
-        }
-        // Also expose as properties for implementations that read arrays instead of calling the method
-        get periods() {
-          return Object.keys(this.uiToEnum);
-        }
-        get resolutions() {
-          return this.periods;
-        }
-        // Compatibility
-        getResolutions() {
-          return this.getPeriods();
-        }
-
-        // Historical bars (Pro calls this) - pure positional call
-        getHistoryKLineData = async (
-          symbol: string | undefined,
-          period: any,
-          from?: number,
-          to?: number
-        ): Promise<KLineData[]> => {
-          const s = (symbol ?? this.defaultSymbol) as string;
-          const enumName = this.toEnum(period);
-          const url = new URL("/api/ohlc", window.location.origin);
-          url.searchParams.set("symbol", s);
-          url.searchParams.set("interval", enumName);
-          if (from != null) url.searchParams.set("from", String(from));
-          if (to != null) url.searchParams.set("to", String(to));
-          return fetch(url)
-            .then((r) => {
-              if (!r.ok) throw new Error(`bars fetch failed ${r.status}`);
-              return r.json();
-            })
-            .then((rows: BarRow[]) =>
-              rows.map((b) => ({
-                timestamp: (b.time ?? b.timestamp ?? 0) * 1000,
-                open: b.open,
-                high: b.high,
-                low: b.low,
-                close: b.close,
-                volume: b.volume,
-              }))
-            );
-        };
-
-        // Legacy alias (wraps the above) - pure positional call
-        getBars = (
-          symbol: string | undefined,
-          resolutionOrPeriod: any,
-          from?: number,
-          to?: number
-        ) => {
-          // Treat second arg as period (or resolution); mapping is handled in getHistoryKLineData
-          return this.getHistoryKLineData(symbol ?? this.defaultSymbol, resolutionOrPeriod ?? this.defaultPeriod, from, to);
-        };
-
-        // Realtime (optional)
-        getRealtimeKLineData(
-          { symbol, period }: { symbol?: string; period?: any },
-          onRealtime: (bar: {
-            timestamp: number;
-            open: number;
-            high: number;
-            low: number;
-            close: number;
-            volume: number;
-          }) => void
-        ) {
-          // Implement WS and call onRealtime with same shape; translate interval if needed:
-          const _s = (symbol ?? this.defaultSymbol) as string;
-          const _enum = this.toEnum(period);
-          const handle = { close: () => {} };
-          return handle;
-        }
-
-        // Expected by Pro: subscribe/unsubscribe for realtime
-        subscribe(
-          { symbol, period }: { symbol?: string; period?: any },
-          onRealtime: (bar: {
-            timestamp: number;
-            open: number;
-            high: number;
-            low: number;
-            close: number;
-            volume: number;
-          }) => void
-        ) {
-          return this.getRealtimeKLineData({ symbol, period }, onRealtime);
-        }
-
-        unsubscribe(handle: { close?: () => void } | any) {
-          try {
-            handle?.close?.();
-          } catch {
-            // ignore
-          }
-        }
-
-        // Backward-compat alias delegates to subscribe
-        subscribeBars(
-          { symbol, resolution, period }: { symbol?: string; resolution?: any; period?: any },
-          onRealtime: (bar: any) => void
-        ) {
-          return this.subscribe(
-            { symbol: symbol ?? this.defaultSymbol, period: period ?? resolution ?? this.defaultPeriod },
-            onRealtime
-          );
-        }
-      }
-
-      const chart = new KLineChartPro({
-        container: containerRef.current!,
-        datafeed: new MyDatafeed(DEFAULT_SYMBOL, DEFAULT_PERIOD, mapping),
-        symbol: DEFAULT_SYMBOL,
-        period: DEFAULT_PERIOD,
-        // Provide only backend-supported periods to Pro
-        periods: periodItems,
-        locale: "en-US",
+      // Create Lightweight Charts chart
+      const container = containerRef.current!;
+      const bounds = container.getBoundingClientRect();
+      const chart = createChart(container, {
+        width: Math.max(200, Math.floor(bounds.width || window.innerWidth)),
+        height: Math.max(200, Math.floor(bounds.height || window.innerHeight)),
         layout: {
-          toolbar: { visible: true },
-          symbolSearch: { visible: true },
-          // Inject the exact items so the picker mirrors backend support (fallback to simple text/value)
-          resolution: { visible: true, items: periodItems.length ? periodItems : uiKeys.map(k => ({ text: k, value: k })) },
-          indicator: { visible: true },
-          theme: { toggle: true },
+          background: { color: "#ffffff" },
+          textColor: "#333",
         },
-        chart: {
-          styles: {
-            candle: {
-              type: "candle_solid",
-              upColor: "#26a69a",
-              downColor: "#ef5350",
-              upBorderColor: "#26a69a",
-              downBorderColor: "#ef5350",
-              upWickColor: "#26a69a",
-              downWickColor: "#ef5350",
-            },
-          },
+        grid: {
+          vertLines: { color: "#f0f0f0" },
+          horzLines: { color: "#f0f0f0" },
         },
+        timeScale: { timeVisible: true, secondsVisible: true },
+      });
+      chartRef.current = chart;
+
+      const series = chart.addCandlestickSeries({
+        upColor: "#26a69a",
+        downColor: "#ef5350",
+        wickUpColor: "#26a69a",
+        wickDownColor: "#ef5350",
+        borderVisible: false,
       });
 
-      try {
-        chart.setPeriod?.(DEFAULT_PERIOD);
-      } catch {
-        /* ignore */
-      }
-      chartRef.current = chart;
+      // Helper to map UI key to server enum
+      const toEnum = (p: string) => mapping[p] ?? p;
+
+      // Load historical candles and set to series
+      const loadCandles = async (symbol: string, period: string) => {
+        const url = new URL("/api/ohlc", window.location.origin);
+        url.searchParams.set("symbol", symbol);
+        url.searchParams.set("interval", toEnum(period));
+        const rows: BarRow[] = await fetch(url)
+          .then(r => {
+            if (!r.ok) throw new Error(`ohlc fetch failed ${r.status}`);
+            return r.json();
+          });
+        const data: CandlestickData[] = rows.map(b => ({
+          time: (b.time ?? b.timestamp ?? 0) as number,
+          open: b.open,
+          high: b.high,
+          low: b.low,
+          close: b.close,
+        }));
+        series.setData(data);
+      };
+
+      await loadCandles(DEFAULT_SYMBOL, DEFAULT_PERIOD);
+
+      // Create plugins
+      trendlineRef.current = new TrendlinePlugin({ chart, series, container });
+      rayRef.current = new RayPlugin({ chart, series, container });
+
+      // Handle resize
+      const onResize = () => {
+        if (!chartRef.current || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        chartRef.current.applyOptions({
+          width: Math.max(200, Math.floor(rect.width)),
+          height: Math.max(200, Math.floor(rect.height)),
+        });
+      };
+      window.addEventListener("resize", onResize);
     };
 
     void init();
 
+    // focus the wrapper so it can receive key events
+    try {
+      wrapperRef.current?.focus?.();
+    } catch {
+      /* ignore */
+    }
+
     return () => {
       try {
-        chartRef.current?.destroy?.();
+        trendlineRef.current?.destroy?.();
+      } catch {
+        /* noop */
+      }
+      trendlineRef.current = null;
+      try {
+        rayRef.current?.destroy?.();
+      } catch {
+        /* noop */
+      }
+      rayRef.current = null;
+      try {
+        chartRef.current?.remove?.();
       } catch {
         /* noop */
       }
@@ -361,11 +229,133 @@ export default function ProApp() {
   }, []);
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100vh" }}>
+    <div
+      ref={wrapperRef}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onMouseDown={() => wrapperRef.current?.focus()}
+      style={{ position: "relative", width: "100%", height: "100vh", outline: "none" }}
+    >
       <div
         ref={containerRef}
         style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
       />
+
+      {/* Left toolbar */}
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          left: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          zIndex: 1000,
+        }}
+      >
+        {/* Line group button with flyout */}
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setShowLineFlyout((v) => !v)}
+            title="Line Tools"
+            style={{
+              width: 40,
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 8,
+              border: "1px solid #e0e0e0",
+              background: "#ffffff",
+              cursor: "pointer",
+              boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 20 20">
+              <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
+            </svg>
+          </button>
+
+          {showLineFlyout && (
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 48,
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+                padding: 6,
+                background: "#fff",
+                border: "1px solid #e0e0e0",
+                borderRadius: 8,
+                boxShadow: "0 8px 20px rgba(0,0,0,0.12)",
+              }}
+            >
+              <button
+                onClick={() => {
+                  rayRef.current?.cancel?.();
+                  rayRef.current?.setActive?.(false);
+                  trendlineRef.current?.setActive?.(true);
+                  trendlineRef.current?.startDrawing();
+                  setShowLineFlyout(false);
+                }}
+                title="Trend Line (Alt+T)"
+                style={{
+                  width: 160,
+                  height: 36,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  justifyContent: "flex-start",
+                  borderRadius: 6,
+                  border: "1px solid #eee",
+                  background: "#ffffff",
+                  cursor: "pointer",
+                  padding: "0 10px",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20">
+                  <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
+                </svg>
+                <span style={{ fontSize: 12, color: "#333" }}>Trend Line</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  trendlineRef.current?.cancel?.();
+                  trendlineRef.current?.setActive?.(false);
+                  rayRef.current?.setActive?.(true);
+                  rayRef.current?.startDrawing();
+                  setShowLineFlyout(false);
+                }}
+                title="Ray"
+                style={{
+                  width: 160,
+                  height: 36,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  justifyContent: "flex-start",
+                  borderRadius: 6,
+                  border: "1px solid #eee",
+                  background: "#ffffff",
+                  cursor: "pointer",
+                  padding: "0 10px",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20">
+                  <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
+                  <path d="M17 3 L19 1" stroke="#333" strokeWidth="2" />
+                </svg>
+                <span style={{ fontSize: 12, color: "#333" }}>Ray</span>
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Save button */}
       <button
         onClick={handleSave}
         style={{
