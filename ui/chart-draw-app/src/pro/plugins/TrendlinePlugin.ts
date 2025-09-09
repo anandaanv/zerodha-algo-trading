@@ -158,8 +158,6 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
 
     // start inactive by default
     this.setActive(false);
-    // disable pointer events unless drawing; wrapper will handle selection
-    this.canvas.style.pointerEvents = "none";
 
     // Now that subclass fields are initialized and listeners set, render once.
     this.render();
@@ -170,7 +168,6 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
     this.firstPoint = null;
     this.mouse = null;
     this.setActive(true);
-    this.canvas.style.pointerEvents = "auto";
     this.canvas.style.cursor = "crosshair";
     this.render();
   }
@@ -180,30 +177,8 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
     this.drawing = false;
     this.firstPoint = null;
     this.mouse = null;
-    this.canvas.style.pointerEvents = "none";
     this.canvas.style.cursor = "default";
     this.render();
-  }
-
-  clearSelection() {
-    this.selectedId = null;
-    this.render();
-  }
-
-  trySelectAt(clientX: number, clientY: number): boolean {
-    // Convert to plugin-local coords
-    const rect = this.canvas.getBoundingClientRect();
-    const pt = { x: clientX - rect.left, y: clientY - rect.top };
-    const hit = this.hitTest(pt);
-    if (hit) {
-      this.selectedId = hit.id;
-      this.dragMode = "none";
-      this.dragStart = null;
-      this.originalPx = null;
-      this.render();
-      return true;
-    }
-    return false;
   }
 
   deleteSelected() {
@@ -285,52 +260,6 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.restore();
-  }
-
-  // ---- Persistence API ----
-  exportAll(): Array<{ p1: { time: any; price: number }; p2: { time: any; price: number }; style: { color: string; width: number; style: "solid" | "dashed" } }> {
-    return this.lines.map((ln) => {
-      const style = this.selectionStyles.get(ln.id) ?? this.defaultStyle;
-      return {
-        p1: { time: ln.p1.time, price: ln.p1.price },
-        p2: { time: ln.p2.time, price: ln.p2.price },
-        style: { color: style.color, width: style.width, style: style.style },
-      };
-    });
-  }
-
-  importAll(items: Array<{ p1: { time: any; price: number }; p2: { time: any; price: number }; style?: { color: string; width: number; style: "solid" | "dashed" } }>) {
-    // clear existing
-    this.lines.splice(0, this.lines.length);
-    this.selectionStyles.clear();
-
-    const normalizeTime = (t: any) => {
-      if (typeof t === "number" && t > 1e12) {
-        // looks like milliseconds, convert to seconds for lightweight-charts
-        return Math.floor(t / 1000);
-      }
-      return t;
-    };
-
-    for (const it of items || []) {
-      const id = this.uid();
-      const style = it.style ?? this.defaultStyle;
-      this.lines.push({
-        id,
-        p1: { time: normalizeTime(it.p1.time), price: it.p1.price },
-        p2: { time: normalizeTime(it.p2.time), price: it.p2.price },
-        props: {
-          color: style.color ?? "#1976d2",
-          width: style.width ?? 2,
-          style: (style.style as "solid" | "dashed") ?? "solid",
-          text: "",
-          textColor: "#333333",
-          textPos: "mid",
-        },
-      });
-      this.selectionStyles.set(id, { color: style.color, width: style.width, style: style.style });
-    }
-    this.render();
   }
 
   private drawAnchor(x: number, y: number) {
