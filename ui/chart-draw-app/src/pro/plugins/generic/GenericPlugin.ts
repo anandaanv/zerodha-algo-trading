@@ -437,6 +437,49 @@ export abstract class GenericPlugin<
     ctx.restore();
   }
 
+  /**
+   * Draw a small label near a point in pixel space.
+   */
+  protected drawLabelPx(
+    x: number,
+    y: number,
+    text: string,
+    opts?: { color?: string; bg?: string; font?: string; paddingX?: number; paddingY?: number; offsetX?: number; offsetY?: number }
+  ) {
+    const ctx = this.ctx;
+    const color = opts?.color ?? "#333333";
+    const bg = opts?.bg ?? "rgba(255,255,255,0.85)";
+    const font = opts?.font ?? "12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
+    const paddingX = opts?.paddingX ?? 4;
+    const paddingY = opts?.paddingY ?? 2;
+    const offsetX = opts?.offsetX ?? 8;
+    const offsetY = opts?.offsetY ?? -8;
+
+    ctx.save();
+    ctx.font = font;
+    const metrics = ctx.measureText(String(text));
+    const w = Math.ceil(metrics.width) + paddingX * 2;
+    const h = 14 + paddingY * 2; // approximate height for 12px font
+
+    const rx = x + offsetX;
+    const ry = y + offsetY - h;
+
+    // background
+    ctx.fillStyle = bg;
+    ctx.fillRect(rx, ry, w, h);
+
+    // border
+    ctx.strokeStyle = "rgba(0,0,0,0.15)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(rx + 0.5, ry + 0.5, w - 1, h - 1);
+
+    // text
+    ctx.fillStyle = color;
+    ctx.textBaseline = "top";
+    ctx.fillText(String(text), rx + paddingX, ry + paddingY);
+    ctx.restore();
+  }
+
   protected toPxPoints(points: ChartPoint[]): Array<{ x: number; y: number }> {
     const res: Array<{ x: number; y: number }> = [];
     for (const p of points) {
