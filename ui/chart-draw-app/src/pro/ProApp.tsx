@@ -13,6 +13,7 @@ import "./plugins/generic/patterns/ChannelPlugin";
 import "./plugins/generic/patterns/TrianglePlugin";
 import "./plugins/generic/elliott/WXYXZPlugin";
 import SimplePropertiesDialog, { type SimpleStyle } from "./SimplePropertiesDialog";
+type SymbolItem = { name: string };
 
 type BarRow = {
   time?: number;
@@ -43,6 +44,96 @@ export default function ProApp() {
   // UI state for Save button visual feedback
   const [saveHover, setSaveHover] = useState(false);
   const [saveActive, setSaveActive] = useState(false);
+
+  // NEW: selection state
+  const LAST_SELECTION_KEY = "chart_last_selection_v1";
+  const [symbol, setSymbol] = useState<string>("TCS");
+  const [period, setPeriod] = useState<string>("1h");
+  const [periodButtons, setPeriodButtons] = useState<string[]>([]);
+  const [mappingRef, setMappingRef] = useState<Record<string, string>>({});
+  const [showSymbolPicker, setShowSymbolPicker] = useState(false);
+  const [symbolQuery, setSymbolQuery] = useState<string>(symbol);
+  const [symbolItems, setSymbolItems] = useState<SymbolItem[]>([]);
+  const [symbolLoading, setSymbolLoading] = useState(false);
+  const applySelectionRef = useRef<((s: string, p: string) => Promise<void>) | null>(null);
+
+    // Symbol search for picker
+    const fetchSymbols = useCallback(async (query: string): Promise<SymbolItem[]> => {
+        const q = (query || "").trim();
+        try {
+            const url = new URL("/api/symbols", window.location.origin);
+            if (q) url.searchParams.set("query", q);
+            const res = await fetch(url.toString());
+            if (res.ok) {
+                const arr = await res.json();
+                return (Array.isArray(arr) ? arr : []).map((it: any) => {
+                    if (typeof it === "string") return { name: it };
+                    if (it?.name) return { name: it.name as string };
+                    return { name: String(it) };
+                });
+            }
+        } catch {
+            /* ignore */
+        }
+        // fallback list
+        const base = ["TCS", "INFY", "RELIANCE", "HDFCBANK", "SBIN", "TATASTEEL", "ITC"];
+        const filtered = base.filter(s => s.toLowerCase().includes(q.toLowerCase()));
+        return filtered.map(s => ({ name: s }));
+    }, []);
+
+  // Load initial items when picker opens
+  useEffect(() => {
+    if (!showSymbolPicker) return;
+    setSymbolQuery(symbol);
+    let cancelled = false;
+    (async () => {
+      try {
+        setSymbolLoading(true);
+        const res = await fetchSymbols(symbol);
+        if (!cancelled) setSymbolItems(res);
+      } finally {
+        if (!cancelled) setSymbolLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showSymbolPicker]);
+
+  // Debounced search when query changes
+  useEffect(() => {
+    if (!showSymbolPicker) return;
+    const handle = setTimeout(async () => {
+      setSymbolLoading(true);
+      try {
+        const res = await fetchSymbols(symbolQuery);
+        setSymbolItems(res);
+      } finally {
+        setSymbolLoading(false);
+      }
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [showSymbolPicker, symbolQuery, fetchSymbols]);
+
+  // Helpers to persist last selection
+  const persistLastSelection = useCallback((s: string, p: string) => {
+    try {
+      window.localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify({ symbol: s, period: p }));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const loadLastSelection = useCallback((): { symbol?: string; period?: string } => {
+    try {
+      const raw = window.localStorage.getItem(LAST_SELECTION_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return typeof parsed === "object" && parsed ? parsed : {};
+    } catch {
+      return {};
+    }
+  }, []);
 
   const openPropsDialog = useCallback(() => {
     const pm = pluginMapRef.current;
@@ -228,8 +319,17 @@ export default function ProApp() {
       const DEFAULT_SYMBOL = "TCS";
       const DEFAULT_PERIOD = uiKeys.includes("1h") ? "1h" : (uiKeys[0] || "1h");
 
-      currentSymbolRef.current = DEFAULT_SYMBOL;
-      currentPeriodRef.current = DEFAULT_PERIOD;
+      // Restore last selection if present
+      const last = loadLastSelection();
+      const startSymbol = last.symbol || DEFAULT_SYMBOL;
+      const startPeriod = last.period && uiKeys.includes(last.period) ? last.period : DEFAULT_PERIOD;
+
+      currentSymbolRef.current = startSymbol;
+      currentPeriodRef.current = startPeriod;
+      setSymbol(startSymbol);
+      setPeriod(startPeriod);
+      setPeriodButtons(uiKeys);
+      setMappingRef(mapping);
 
       // Create Lightweight Charts chart
       const container = containerRef.current!;
@@ -267,10 +367,10 @@ export default function ProApp() {
       const toEnum = (p: string) => mapping[p] ?? p;
 
       // Load historical candles and set to series
-      const loadCandles = async (symbol: string, period: string) => {
+      const loadCandles = async (sym: string, per: string) => {
         const url = new URL("/api/ohlc", window.location.origin);
-        url.searchParams.set("symbol", symbol);
-        url.searchParams.set("interval", toEnum(period));
+        url.searchParams.set("symbol", sym);
+        url.searchParams.set("interval", toEnum(per));
         const rows: BarRow[] = await fetch(url)
           .then(r => {
             if (!r.ok) throw new Error(`ohlc fetch failed ${r.status}`);
@@ -286,8 +386,6 @@ export default function ProApp() {
         series.setData(data);
       };
 
-      await loadCandles(DEFAULT_SYMBOL, DEFAULT_PERIOD);
-
       // Create plugins from registry
       const instances: Record<string, any> = {};
       for (const def of getAllPlugins()) {
@@ -299,9 +397,37 @@ export default function ProApp() {
       }
       pluginMapRef.current = instances;
 
-      // Load saved overlays after chart/plugins are ready
+      // Centralized selection applier
+      const applySelection = async (nextSymbol: string, nextPeriod: string, opts?: { savePreviousOverlays?: boolean }) => {
+        const prevSymbol = currentSymbolRef.current;
+        const prevPeriod = currentPeriodRef.current;
+
+        // Save overlays for previous selection before switching
+        if (opts?.savePreviousOverlays !== false && prevSymbol && prevPeriod) {
+          saveOverlaysToLocal(prevSymbol, String(prevPeriod));
+        }
+
+        currentSymbolRef.current = nextSymbol;
+        currentPeriodRef.current = nextPeriod;
+        setSymbol(nextSymbol);
+        setPeriod(nextPeriod);
+        persistLastSelection(nextSymbol, nextPeriod);
+
+        await loadCandles(nextSymbol, nextPeriod);
+
+        // Load overlays for new selection
+        loadOverlaysFromLocal(nextSymbol, nextPeriod);
+      };
+
+      // store to ref so handlers can call it
+      applySelectionRef.current = applySelection;
+
+      // Initial load: apply restored/default selection
+      await applySelection(startSymbol, startPeriod, { savePreviousOverlays: false });
+
+      // Load saved overlays after chart/plugins are ready (redundant but safe)
       setTimeout(() => {
-        loadOverlaysFromLocal(DEFAULT_SYMBOL, DEFAULT_PERIOD);
+        loadOverlaysFromLocal(startSymbol, startPeriod);
       }, 0);
 
       // Handle resize
@@ -342,7 +468,7 @@ export default function ProApp() {
       chartRef.current = null;
       pluginMapRef.current = {};
     };
-  }, []);
+  }, [loadLastSelection, persistLastSelection]);
 
   const handleWrapperMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     wrapperRef.current?.focus();
@@ -363,6 +489,19 @@ export default function ProApp() {
     }
   }, []);
 
+
+
+  // Handlers to change symbol/period using ref-stored applySelection
+  const changeSymbol = useCallback(async (next: string) => {
+    if (!next || next === currentSymbolRef.current) return;
+    await applySelectionRef.current?.(next, currentPeriodRef.current || period);
+  }, [period]);
+
+  const changePeriod = useCallback(async (next: string) => {
+    if (!next || next === currentPeriodRef.current) return;
+    await applySelectionRef.current?.(currentSymbolRef.current || symbol, next);
+  }, [symbol]);
+
   return (
     <div
       ref={wrapperRef}
@@ -375,6 +514,72 @@ export default function ProApp() {
         ref={containerRef}
         style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
       />
+
+      {/* Top centered toolbar: symbol + timeframe */}
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          zIndex: 1100,
+          padding: "8px 12px",
+          borderRadius: 12,
+          background: "rgba(255,255,255,0.9)",
+          border: "1px solid #e0e0e0",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.10)",
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        <button
+          onClick={() => setShowSymbolPicker(true)}
+          title="Change symbol"
+          style={{
+            padding: "6px 10px",
+            borderRadius: 8,
+            border: "1px solid #ddd",
+            background: "#fff",
+            cursor: "pointer",
+            fontWeight: 600,
+            letterSpacing: 0.2,
+            color: "#1976d2",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+          }}
+        >
+          {symbol}
+        </button>
+
+        <div style={{ display: "flex", gap: 6 }}>
+          {periodButtons.map((p) => {
+            const active = p === period;
+            return (
+              <button
+                key={p}
+                onClick={() => changePeriod(p)}
+                title={`Switch to ${p}`}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: active ? "1px solid transparent" : "1px solid #ddd",
+                  background: active
+                    ? "linear-gradient(135deg, #1976d2, #42a5f5)"
+                    : "#fff",
+                  color: active ? "#fff" : "#333",
+                  cursor: "pointer",
+                  boxShadow: active ? "0 6px 16px rgba(25,118,210,0.25)" : "0 1px 3px rgba(0,0,0,0.06)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                {p}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Left toolbar */}
       <div
@@ -542,6 +747,89 @@ export default function ProApp() {
         onApply={applyPropsDialog}
         onClose={() => setShowProps(false)}
       />
+
+      {/* Inline symbol picker box (appears under the symbol label) */}
+      {showSymbolPicker && (
+        <div
+          style={{
+            position: "absolute",
+            top: 64,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 360,
+            zIndex: 1200,
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div
+            style={{
+              background: "#fff",
+              border: "1px solid #e6e6e6",
+              borderRadius: 10,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.12)",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{ padding: 10, borderBottom: "1px solid #f0f0f0" }}>
+              <input
+                autoFocus
+                placeholder="Type a symbol..."
+                value={symbolQuery}
+                onChange={(e) => setSymbolQuery(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "8px 10px",
+                  borderRadius: 6,
+                  border: "1px solid #ddd",
+                  outline: "none",
+                }}
+              />
+            </div>
+
+            <div style={{ maxHeight: 240, overflowY: "auto" }}>
+              {symbolLoading && <div style={{ padding: 12, color: "#666" }}>Loading...</div>}
+              {!symbolLoading && symbolItems.length === 0 && <div style={{ padding: 12, color: "#666" }}>No matches</div>}
+              {!symbolLoading &&
+                symbolItems.map((s) => (
+                  <button
+                    key={s.name}
+                    onClick={() => {
+                      setShowSymbolPicker(false);
+                      setSymbol(s.name);
+                      void changeSymbol(s.name);
+                    }}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "8px 12px",
+                      border: "none",
+                      borderBottom: "1px solid #f5f5f5",
+                      background: "#fff",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+            </div>
+
+            <div style={{ padding: 8, display: "flex", justifyContent: "flex-end", borderTop: "1px solid #eee" }}>
+              <button
+                onClick={() => setShowSymbolPicker(false)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  border: "1px solid #ddd",
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
