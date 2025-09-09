@@ -208,6 +208,12 @@ export default function ProApp() {
           horzLines: { color: "#f0f0f0" },
         },
         timeScale: { timeVisible: true, secondsVisible: true },
+        handleScroll: {
+          mouseWheel: true,
+          pressedMouseMove: true,
+          horzTouchDrag: true,
+          vertTouchDrag: true,
+        },
       });
       chartRef.current = chart;
 

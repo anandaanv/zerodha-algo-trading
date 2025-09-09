@@ -28,11 +28,13 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
   private handleMove = (e: MouseEvent) => {
     const pt = this.toLocal(e);
 
+    console.log(this.dragMode, this.drawing);
     if (this.drawing) {
       this.mouse = pt;
       this.render();
       return;
     }
+
 
     if (this.dragMode !== "none" && this.selectedId && this.dragStart && this.originalPx) {
       const dx = pt.x - this.dragStart.x;
@@ -187,6 +189,9 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
 
   clearSelection() {
     this.selectedId = null;
+    // Return control to the chart/wrapper
+    this.canvas.style.pointerEvents = "none";
+    this.setActive(false);
     this.render();
   }
 
@@ -196,10 +201,11 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
     const pt = { x: clientX - rect.left, y: clientY - rect.top };
     const hit = this.hitTest(pt);
     if (hit) {
-      this.selectedId = hit.id;
-      this.dragMode = "none";
-      this.dragStart = null;
-      this.originalPx = null;
+        // Pure selection: do not reset drag state here
+        this.selectedId = hit.id;
+      // Make this overlay interactive for the next click-and-drag
+      this.canvas.style.pointerEvents = "auto";
+      this.setActive(true);
       this.render();
       return true;
     }
@@ -212,6 +218,9 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
     if (idx >= 0) {
       this.lines.splice(idx, 1);
       this.selectedId = null;
+      // No selection left: stop intercepting events
+      this.canvas.style.pointerEvents = "none";
+      this.setActive(false);
       this.render();
       return true;
     }

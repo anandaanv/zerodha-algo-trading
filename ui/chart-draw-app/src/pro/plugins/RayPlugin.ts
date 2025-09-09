@@ -187,6 +187,8 @@ export class RayPlugin extends BaseOverlayPlugin {
 
   clearSelection() {
     this.selectedId = null;
+    this.canvas.style.pointerEvents = "none";
+    this.setActive(false);
     this.render();
   }
 
@@ -195,10 +197,11 @@ export class RayPlugin extends BaseOverlayPlugin {
     const pt = { x: clientX - rect.left, y: clientY - rect.top };
     const hit = this.hitTest(pt);
     if (hit) {
-      this.selectedId = hit.id;
-      this.dragMode = "none";
-      this.dragStart = null;
-      this.originalPx = null;
+        // Pure selection: do not reset drag state here
+        this.selectedId = hit.id;
+      // Make this overlay interactive for the next click-and-drag
+      this.canvas.style.pointerEvents = "auto";
+      this.setActive(true);
       this.render();
       return true;
     }
@@ -211,6 +214,8 @@ export class RayPlugin extends BaseOverlayPlugin {
     if (idx >= 0) {
       this.rays.splice(idx, 1);
       this.selectedId = null;
+      this.canvas.style.pointerEvents = "none";
+      this.setActive(false);
       this.render();
       return true;
     }

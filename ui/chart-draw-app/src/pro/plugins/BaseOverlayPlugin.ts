@@ -18,7 +18,8 @@ export abstract class BaseOverlayPlugin {
     this.canvas = document.createElement("canvas");
     this.canvas.style.position = "absolute";
     this.canvas.style.inset = "0";
-    this.canvas.style.pointerEvents = "auto";
+    // Do not intercept pointer events by default; let the chart handle panning/zoom
+    this.canvas.style.pointerEvents = "none";
     this.canvas.style.zIndex = "5";
     this.container.appendChild(this.canvas);
     const ctx = this.canvas.getContext("2d");
@@ -97,7 +98,8 @@ export abstract class BaseOverlayPlugin {
 
   // Bring this plugin's canvas to front when active, or restore baseline when inactive
   public setActive(active: boolean) {
-    this.canvas.style.zIndex = active ? "10" : "5";
+    // Use a high z-index while active so the overlay is above chart interaction layers
+    this.canvas.style.zIndex = active ? "1000" : "5";
   }
 
   abstract render(): void;
