@@ -2,10 +2,9 @@ import React, { useEffect, useRef, useCallback, useState, useMemo } from "react"
 import { createChart, type IChartApi, type CandlestickData } from "lightweight-charts";
 import { getPluginsByGroup, getAllPlugins } from "./plugins/PluginRegistry";
 // Ensure plugin modules are imported so they self-register
-import "./plugins/TrendlinePlugin";
-import "./plugins/RayPlugin";
-import "./plugins/HLinePlugin";
 import "./plugins/generic/lines/MultiPointLinePlugin";
+import "./plugins/generic/lines/TrendLinePlugin";
+import "./plugins/generic/lines/HLinePlugin";
 import SimplePropertiesDialog, { type SimpleStyle } from "./SimplePropertiesDialog";
 
 type BarRow = {

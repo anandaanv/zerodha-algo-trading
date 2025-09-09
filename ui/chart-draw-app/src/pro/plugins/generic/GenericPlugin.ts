@@ -94,8 +94,8 @@ export abstract class GenericPlugin<
     this.mousePx = null;
     this.clearSelection();
     this.setActive(true);
-    this.canvas.style.pointerEvents = "auto";
     this.canvas.style.cursor = "crosshair";
+    this.updateInteractivity();
     this.render();
   }
 
@@ -109,8 +109,8 @@ export abstract class GenericPlugin<
     this.drawing = false;
     this.drawingPtsPx = [];
     this.mousePx = null;
-    this.canvas.style.pointerEvents = this.selectedId ? "auto" : "none";
     this.canvas.style.cursor = "default";
+    this.updateInteractivity();
     this.render();
   }
 
@@ -123,14 +123,46 @@ export abstract class GenericPlugin<
     return !!this.selectedId;
   }
 
+  // Expose current selected style for property dialogs (expects props with color/width/style)
+  getSelectedStyle(): { color: string; width: number; style: "solid" | "dashed" } | null {
+    if (!this.selectedId) return null;
+    const shape = this.shapes.find(s => s.id === this.selectedId);
+    if (!shape) return null;
+    const p: any = shape.props ?? {};
+    if (typeof p.color === "string" && typeof p.width === "number" && (p.style === "solid" || p.style === "dashed")) {
+      return { color: p.color, width: p.width, style: p.style };
+    }
+    // Fallback to defaultProps if props missing
+    const d: any = this.cfg.defaultProps ?? {};
+    if (typeof d.color === "string" && typeof d.width === "number" && (d.style === "solid" || d.style === "dashed")) {
+      return { color: d.color, width: d.width, style: d.style };
+    }
+    return null;
+  }
+
+  // Apply style to currently selected shape
+  applySelectedStyle(s: { color: string; width: number; style: "solid" | "dashed" }): boolean {
+    if (!this.selectedId) return false;
+    const idx = this.shapes.findIndex(sh => sh.id === this.selectedId);
+    if (idx < 0) return false;
+    const shape = this.shapes[idx];
+    const nextProps: any = { ...(shape.props as any) };
+    nextProps.color = s.color;
+    nextProps.width = s.width;
+    nextProps.style = s.style;
+    (shape as any).props = nextProps;
+    this.render();
+    return true;
+  }
+
   clearSelection() {
     this.selectedId = null;
     this.dragMode = "none";
        this.dragStartPx = null;
     this.originalShapePx = null;
     (this as any)._tempAnchorIndex = undefined;
-    this.canvas.style.pointerEvents = "none";
     this.setActive(false);
+    this.updateInteractivity();
     this.render();
   }
 
@@ -183,6 +215,7 @@ export abstract class GenericPlugin<
       const props = (it.props ?? this.cfg.defaultProps) as TProps;
       this.shapes.push({ id, points: pts, props } as TShape);
     }
+    this.updateInteractivity();
     this.render();
   }
 
@@ -366,6 +399,7 @@ export abstract class GenericPlugin<
       // Record the point and initialize preview anchor
       this.drawingPtsPx.push(pt);
       this.mousePx = pt;
+      this.updateInteractivity();
       const required = this.cfg.maxPoints;
       if (this.drawingPtsPx.length >= required) {
         this.finalizeDrawing();
@@ -420,6 +454,7 @@ export abstract class GenericPlugin<
       const shape = { id, points: pts, props: this.cloneProps(this.cfg.defaultProps) } as TShape;
       this.shapes.push(shape);
       this.selectedId = id;
+      this.updateInteractivity();
     }
     this.cancelDrawing();
   }
@@ -529,5 +564,15 @@ export abstract class GenericPlugin<
     this.canvas.removeEventListener("mouseup", this.handleUp);
     this.canvas.removeEventListener("dblclick", this.handleDoubleClick);
     window.removeEventListener("mouseup", this.handleUp);
+  }
+
+  // Enable canvas interactions only when drawing or when a shape is actively selected.
+  // This ensures normal chart pan/zoom when not interacting with overlays.
+  private updateInteractivity() {
+    const shouldCapture = this.drawing || !!this.selectedId;
+    this.canvas.style.pointerEvents = shouldCapture ? "auto" : "none";
+    if (!shouldCapture) {
+      this.canvas.style.cursor = "default";
+    }
   }
 }
