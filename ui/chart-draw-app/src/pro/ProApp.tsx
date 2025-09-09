@@ -9,6 +9,8 @@ import "./plugins/generic/fib/FibPlugin";
 import "./plugins/generic/fib/FibExtPlugin";
 import "./plugins/generic/elliott/ImpulseWavePlugin";
 import "./plugins/generic/elliott/CorrectiveABCPlugin";
+import "./plugins/generic/patterns/ChannelPlugin";
+import "./plugins/generic/patterns/TrianglePlugin";
 import "./plugins/generic/elliott/WXYXZPlugin";
 import SimplePropertiesDialog, { type SimpleStyle } from "./SimplePropertiesDialog";
 
