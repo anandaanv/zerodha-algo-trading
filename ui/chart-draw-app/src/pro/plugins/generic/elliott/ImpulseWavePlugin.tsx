@@ -88,6 +88,47 @@ export class ImpulseWavePlugin extends GenericPlugin<LineProps> {
       ctx.restore();
     }
 
+    // Live measurement overlays for Elliott 0-5 while placing points
+    const n = pointsPx.length;
+    if (n >= 2) {
+      const last = pointsPx[n - 1];
+      const p0 = pointsPx[0];
+      const p1 = pointsPx[1];
+
+      // Helper to format percent
+      const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
+
+      if (n === 3) {
+        // Selecting point #2 (index 2): retracement of 0-1 measured at current
+        const base = Math.abs(p1.y - p0.y) || 1;
+        const cur = pointsPx[2];
+        const ret = Math.abs(cur.y - p1.y) / base;
+        this.drawLabelPx(cur.x, cur.y, `Ret ${pct(ret)}`, { color: "#333", offsetX: 8, offsetY: -8 });
+      } else if (n === 4) {
+        // Selecting point #3 (index 3): extension of 0-1 from point #2
+        const base = Math.abs(p1.y - p0.y) || 1;
+        const p2 = pointsPx[2];
+        const cur = pointsPx[3];
+        const ext = Math.abs(cur.y - p2.y) / base;
+        this.drawLabelPx(cur.x, cur.y, `Ext ${pct(ext)}`, { color: "#333", offsetX: 8, offsetY: -8 });
+      } else if (n === 5) {
+        // Selecting point #4 (index 4): retracement of 1-3 measured at current
+        const p3 = pointsPx[3];
+        const base13 = Math.abs(p3.y - p1.y) || 1;
+        const cur = pointsPx[4];
+        const ret = Math.abs(cur.y - p3.y) / base13;
+        this.drawLabelPx(cur.x, cur.y, `Ret ${pct(ret)} of 1-3`, { color: "#333", offsetX: 8, offsetY: -8 });
+      } else if (n >= 6) {
+        // Selecting point #5 (index 5): extension of 1-3 from point #4
+        const p3 = pointsPx[3];
+        const p4 = pointsPx[4];
+        const base13 = Math.abs(p3.y - p1.y) || 1;
+        const cur = pointsPx[5];
+        const ext = Math.abs(cur.y - p4.y) / base13;
+        this.drawLabelPx(cur.x, cur.y, `Ext ${pct(ext)} of 1-3`, { color: "#333", offsetX: 8, offsetY: -8 });
+      }
+    }
+
     // If all points placed, render final shape
     if (pointsPx.length >= 6) {
       this.drawShapePx(pointsPx.slice(0, 6), { ...props, width: Math.max(1, props.width) }, false);
