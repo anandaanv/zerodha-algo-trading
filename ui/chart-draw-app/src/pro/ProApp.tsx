@@ -82,6 +82,7 @@ export default function ProApp() {
   }, []);
 
   const LOCAL_HISTORY_KEY = "chart_pro_local_history";
+  const LOCAL_OVERLAYS_KEY = "lwc_overlays_v1";
 
   type SavedState = {
     id: string;
@@ -117,6 +118,34 @@ export default function ProApp() {
     return { symbol, period, overlays: [], indicators: [] };
   };
 
+  function saveOverlaysToLocal(symbol: string, period: string) {
+    try {
+      const tl = (trendlineRef.current as any)?.exportAll?.() ?? [];
+      const ry = (rayRef.current as any)?.exportAll?.() ?? [];
+      const raw = window.localStorage.getItem(LOCAL_OVERLAYS_KEY);
+      const obj = raw ? JSON.parse(raw) : {};
+      obj[symbol] = obj[symbol] || {};
+      obj[symbol][period] = { trendlines: tl, rays: ry };
+      window.localStorage.setItem(LOCAL_OVERLAYS_KEY, JSON.stringify(obj));
+    } catch {
+      // ignore
+    }
+  }
+
+  function loadOverlaysFromLocal(symbol: string, period: string) {
+    try {
+      const raw = window.localStorage.getItem(LOCAL_OVERLAYS_KEY);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      const entry = obj?.[symbol]?.[period];
+      if (!entry) return;
+      (trendlineRef.current as any)?.importAll?.(entry.trendlines ?? []);
+      (rayRef.current as any)?.importAll?.(entry.rays ?? []);
+    } catch {
+      // ignore
+    }
+  }
+
   const handleSave = useCallback(() => {
     const now = Date.now();
     const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
@@ -124,6 +153,10 @@ export default function ProApp() {
     const history = loadHistory();
     const next: SavedState[] = [{ id, timestamp: now, ...base }, ...history].slice(0, 50);
     persistHistory(next);
+    // Save overlays keyed by symbol and period
+    if (base.symbol && base.period) {
+      saveOverlaysToLocal(base.symbol, String(base.period));
+    }
   }, []);
 
   useEffect(() => {
@@ -215,6 +248,11 @@ export default function ProApp() {
       trendlineRef.current = new TrendlinePlugin({ chart, series, container });
       rayRef.current = new RayPlugin({ chart, series, container });
 
+      // Load saved overlays for this symbol/period (delay to ensure time scale is ready)
+      setTimeout(() => {
+        loadOverlaysFromLocal(DEFAULT_SYMBOL, DEFAULT_PERIOD);
+      }, 0);
+
       // Handle resize
       const onResize = () => {
         if (!chartRef.current || !containerRef.current) return;
@@ -258,12 +296,27 @@ export default function ProApp() {
     };
   }, []);
 
+  const handleWrapperMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // keep focus for keyboard shortcuts
+    wrapperRef.current?.focus();
+    // Let plugins try to select at this point (trendline first, then ray)
+    const x = e.clientX;
+    const y = e.clientY;
+    const selected =
+      (trendlineRef.current as any)?.trySelectAt?.(x, y) ||
+      (rayRef.current as any)?.trySelectAt?.(x, y);
+    if (!selected) {
+      (trendlineRef.current as any)?.clearSelection?.();
+      (rayRef.current as any)?.clearSelection?.();
+    }
+  }, []);
+
   return (
     <div
       ref={wrapperRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
-      onMouseDown={() => wrapperRef.current?.focus()}
+      onMouseDown={handleWrapperMouseDown}
       style={{ position: "relative", width: "100%", height: "100vh", outline: "none" }}
     >
       <div
