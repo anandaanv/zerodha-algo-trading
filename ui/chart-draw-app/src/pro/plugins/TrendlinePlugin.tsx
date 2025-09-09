@@ -6,13 +6,13 @@ type TrendPoint = { time: Time; price: number };
 type TrendLine = { p1: TrendPoint; p2: TrendPoint };
 type DragMode = "none" | "p1" | "p2" | "move";
 
-export class RayPlugin extends BaseOverlayPlugin {
+export class TrendlinePlugin extends BaseOverlayPlugin {
   private drawing = false;
   private firstPoint: { x: number; y: number } | null = null;
   private mouse: { x: number; y: number } | null = null;
 
   private uid = () => Math.random().toString(36).slice(2, 10);
-  private rays: (TrendLine & { id: string })[] = [];
+  private lines: (TrendLine & { id: string })[] = [];
   private selectedId: string | null = null;
   private dragMode: DragMode = "none";
   private dragStart: { x: number; y: number } | null = null;
@@ -28,18 +28,20 @@ export class RayPlugin extends BaseOverlayPlugin {
   private handleMove = (e: MouseEvent) => {
     const pt = this.toLocal(e);
 
+    console.log(this.dragMode, this.drawing);
     if (this.drawing) {
       this.mouse = pt;
       this.render();
       return;
     }
 
+
     if (this.dragMode !== "none" && this.selectedId && this.dragStart && this.originalPx) {
       const dx = pt.x - this.dragStart.x;
       const dy = pt.y - this.dragStart.y;
-      const idx = this.rays.findIndex((l) => l.id === this.selectedId);
+      const idx = this.lines.findIndex((l) => l.id === this.selectedId);
       if (idx >= 0) {
-        const ln = this.rays[idx];
+        const ln = this.lines[idx];
         const toPoint = (px: { x: number; y: number }) => {
           const t = this.xToTime(px.x);
           const p = this.yToPrice(px.y);
@@ -85,7 +87,7 @@ export class RayPlugin extends BaseOverlayPlugin {
       const p2 = this.yToPrice(pt.y);
       if (t1 != null && p1 != null && t2 != null && p2 != null) {
         const id = this.uid();
-        this.rays.push({ id, p1: { time: t1, price: p1 }, p2: { time: t2, price: p2 } });
+        this.lines.push({ id, p1: { time: t1, price: p1 }, p2: { time: t2, price: p2 } });
         this.selectedId = id;
       }
       this.cancel();
@@ -98,8 +100,8 @@ export class RayPlugin extends BaseOverlayPlugin {
       this.selectedId = hit.id;
       this.dragMode = hit.mode;
       this.dragStart = pt;
-      const ln = this.rays.find((l) => l.id === this.selectedId)!;
-      const seg = this.getRayPx(ln)!;
+      const ln = this.lines.find((l) => l.id === this.selectedId)!;
+      const seg = this.getLinePx(ln)!;
       this.originalPx = {
         p1px: { ...seg.a },
         p2px: { ...seg.b },
@@ -125,7 +127,7 @@ export class RayPlugin extends BaseOverlayPlugin {
     }
   };
 
-  // Simple styles for selection and defaults
+  // Simple styles for selection and defaults (used by properties dialog)
   private selectionStyles = new Map<string, { color: string; width: number; style: "solid" | "dashed" }>();
   private defaultStyle: { color: string; width: number; style: "solid" | "dashed" } = {
     color: "#1976d2",
@@ -187,12 +189,14 @@ export class RayPlugin extends BaseOverlayPlugin {
 
   clearSelection() {
     this.selectedId = null;
+    // Return control to the chart/wrapper
     this.canvas.style.pointerEvents = "none";
     this.setActive(false);
     this.render();
   }
 
   trySelectAt(clientX: number, clientY: number): boolean {
+    // Convert to plugin-local coords
     const rect = this.canvas.getBoundingClientRect();
     const pt = { x: clientX - rect.left, y: clientY - rect.top };
     const hit = this.hitTest(pt);
@@ -210,10 +214,11 @@ export class RayPlugin extends BaseOverlayPlugin {
 
   deleteSelected() {
     if (!this.selectedId) return false;
-    const idx = this.rays.findIndex((l) => l.id === this.selectedId);
+    const idx = this.lines.findIndex((l) => l.id === this.selectedId);
     if (idx >= 0) {
-      this.rays.splice(idx, 1);
+      this.lines.splice(idx, 1);
       this.selectedId = null;
+      // No selection left: stop intercepting events
       this.canvas.style.pointerEvents = "none";
       this.setActive(false);
       this.render();
@@ -223,11 +228,11 @@ export class RayPlugin extends BaseOverlayPlugin {
   }
 
   getLines() {
-    return [...this.rays];
+    return [...this.lines];
   }
 
   clear() {
-    this.rays.splice(0, this.rays.length);
+    this.lines.splice(0, this.lines.length);
     this.selectedId = null;
     this.render();
   }
@@ -242,22 +247,25 @@ export class RayPlugin extends BaseOverlayPlugin {
     super.destroy();
   }
 
+  // rendering
   render() {
     this.clearCanvas();
-
-    // draw saved rays
-    for (const ln of this.rays) {
-      const seg = this.getRayPx(ln);
-      if (!seg) continue;
-      const isSel = ln.id === this.selectedId;
-      const style = this.selectionStyles.get(ln.id) ?? this.defaultStyle;
-      this.drawLinePx(seg.a.x, seg.a.y, seg.b.x, seg.b.y, style);
-      if (isSel) {
-        this.drawAnchor(seg.a.x, seg.a.y);
-        this.drawAnchor(this.timeToX(ln.p2.time)!, this.priceToY(ln.p2.price)!);
+    // saved lines
+    for (const ln of this.lines) {
+      const x1 = this.timeToX(ln.p1.time);
+      const y1 = ln.p1.price != null ? this.priceToY(ln.p1.price) : null;
+      const x2 = this.timeToX(ln.p2.time);
+      const y2 = ln.p2.price != null ? this.priceToY(ln.p2.price) : null;
+      if (x1 != null && y1 != null && x2 != null && y2 != null) {
+        const isSel = ln.id === this.selectedId;
+        const style = this.selectionStyles.get(ln.id) ?? this.defaultStyle;
+        this.drawLinePx(x1, y1, x2, y2, style);
+        if (isSel) {
+          this.drawAnchor(x1, y1);
+          this.drawAnchor(x2, y2);
+        }
       }
     }
-
     // preview
     if (this.drawing && this.firstPoint && this.mouse) {
       this.drawLinePx(this.firstPoint.x, this.firstPoint.y, this.mouse.x, this.mouse.y, {
@@ -290,7 +298,7 @@ export class RayPlugin extends BaseOverlayPlugin {
 
   // ---- Persistence API ----
   exportAll(): Array<{ p1: { time: any; price: number }; p2: { time: any; price: number }; style: { color: string; width: number; style: "solid" | "dashed" } }> {
-    return this.rays.map((ln) => {
+    return this.lines.map((ln) => {
       const style = this.selectionStyles.get(ln.id) ?? this.defaultStyle;
       return {
         p1: { time: ln.p1.time, price: ln.p1.price },
@@ -302,11 +310,12 @@ export class RayPlugin extends BaseOverlayPlugin {
 
   importAll(items: Array<{ p1: { time: any; price: number }; p2: { time: any; price: number }; style?: { color: string; width: number; style: "solid" | "dashed" } }>) {
     // clear existing
-    this.rays.splice(0, this.rays.length);
+    this.lines.splice(0, this.lines.length);
     this.selectionStyles.clear();
 
     const normalizeTime = (t: any) => {
       if (typeof t === "number" && t > 1e12) {
+        // looks like milliseconds, convert to seconds for lightweight-charts
         return Math.floor(t / 1000);
       }
       return t;
@@ -315,7 +324,7 @@ export class RayPlugin extends BaseOverlayPlugin {
     for (const it of items || []) {
       const id = this.uid();
       const style = it.style ?? this.defaultStyle;
-      this.rays.push({
+      this.lines.push({
         id,
         p1: { time: normalizeTime(it.p1.time), price: it.p1.price },
         p2: { time: normalizeTime(it.p2.time), price: it.p2.price },
@@ -346,28 +355,6 @@ export class RayPlugin extends BaseOverlayPlugin {
     ctx.restore();
   }
 
-  private getRayPx(ln: TrendLine) {
-    const x1 = this.timeToX(ln.p1.time);
-    const y1 = this.priceToY(ln.p1.price);
-    const x2 = this.timeToX(ln.p2.time);
-    const y2 = this.priceToY(ln.p2.price);
-    if (x1 == null || y1 == null || x2 == null || y2 == null) return null;
-
-    // Extend from p1 through p2 to the right edge
-    const rect = this.container.getBoundingClientRect();
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const eps = 1e-6;
-    if (Math.abs(dx) < eps) {
-      // vertical ray
-      return { a: { x: x1, y: y1 }, b: { x: x1, y: rect.height } };
-    }
-    const slope = dy / dx;
-    const xRight = rect.width;
-    const yRight = y1 + slope * (xRight - x1);
-    return { a: { x: x1, y: y1 }, b: { x: xRight, y: yRight } };
-  }
-
   private dist(a: { x: number; y: number }, b: { x: number; y: number }) {
     const dx = a.x - b.x;
     const dy = a.y - b.y;
@@ -381,22 +368,26 @@ export class RayPlugin extends BaseOverlayPlugin {
     const proj = { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
     return this.dist(p, proj);
   }
+  private getLinePx(ln: TrendLine) {
+    const x1 = this.timeToX(ln.p1.time);
+    const y1 = ln.p1.price != null ? this.priceToY(ln.p1.price) : null;
+    const x2 = this.timeToX(ln.p2.time);
+    const y2 = ln.p2.price != null ? this.priceToY(ln.p2.price) : null;
+    if (x1 == null || y1 == null || x2 == null || y2 == null) return null;
+    return { a: { x: x1, y: y1 }, b: { x: x2, y: y2 } };
+  }
   private hitTest(pt: { x: number; y: number }): { id: string; mode: DragMode } | null {
     const threshold = 6;
-    // anchors: p1 and p2 (p2 anchor stays at exact second point, ray extends right visually)
-    for (let i = this.rays.length - 1; i >= 0; i--) {
-      const ln = this.rays[i];
-      const a = this.timeToX(ln.p1.time);
-      const ay = this.priceToY(ln.p1.price);
-      const bx = this.timeToX(ln.p2.time);
-      const by = this.priceToY(ln.p2.price);
-      if (a != null && ay != null && this.dist(pt, { x: a, y: ay }) <= threshold) return { id: ln.id, mode: "p1" };
-      if (bx != null && by != null && this.dist(pt, { x: bx, y: by }) <= threshold) return { id: ln.id, mode: "p2" };
+    for (let i = this.lines.length - 1; i >= 0; i--) {
+      const ln = this.lines[i];
+      const seg = this.getLinePx(ln);
+      if (!seg) continue;
+      if (this.dist(pt, seg.a) <= threshold) return { id: ln.id, mode: "p1" };
+      if (this.dist(pt, seg.b) <= threshold) return { id: ln.id, mode: "p2" };
     }
-    // line body: use extended ray segment
-    for (let i = this.rays.length - 1; i >= 0; i--) {
-      const ln = this.rays[i];
-      const seg = this.getRayPx(ln);
+    for (let i = this.lines.length - 1; i >= 0; i--) {
+      const ln = this.lines[i];
+      const seg = this.getLinePx(ln);
       if (!seg) continue;
       if (this.distToSegment(pt, seg.a, seg.b) <= threshold) {
         return { id: ln.id, mode: "move" };
@@ -405,3 +396,16 @@ export class RayPlugin extends BaseOverlayPlugin {
     return null;
   }
 }
+
+import { registerPlugin } from "./PluginRegistry";
+registerPlugin({
+  key: "trendline",
+  title: "Trend Line",
+  group: "Lines",
+  icon: () => (
+    <svg width="16" height="16" viewBox="0 0 20 20">
+      <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
+    </svg>
+  ),
+  ctor: TrendlinePlugin,
+});
