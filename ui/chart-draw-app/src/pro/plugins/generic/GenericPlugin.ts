@@ -483,7 +483,7 @@ export abstract class GenericPlugin<
   ) {
     const ctx = this.ctx;
     const color = opts?.color ?? "#333333";
-    const bg = opts?.bg ?? "rgba(255,255,255,0.85)";
+    const bg = opts?.bg ?? "transparent";
     const font = opts?.font ?? "12px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
     const paddingX = opts?.paddingX ?? 4;
     const paddingY = opts?.paddingY ?? 2;
@@ -499,14 +499,14 @@ export abstract class GenericPlugin<
     const rx = x + offsetX;
     const ry = y + offsetY - h;
 
-    // background
-    ctx.fillStyle = bg;
-    ctx.fillRect(rx, ry, w, h);
-
-    // border
-    ctx.strokeStyle = "rgba(0,0,0,0.15)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(rx + 0.5, ry + 0.5, w - 1, h - 1);
+    // optional background/border (skip when transparent)
+    if (bg !== "transparent") {
+      ctx.fillStyle = bg;
+      ctx.fillRect(rx, ry, w, h);
+      ctx.strokeStyle = "rgba(0,0,0,0.15)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(rx + 0.5, ry + 0.5, w - 1, h - 1);
+    }
 
     // text
     ctx.fillStyle = color;

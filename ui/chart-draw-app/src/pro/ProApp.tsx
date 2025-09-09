@@ -5,6 +5,8 @@ import { getPluginsByGroup, getAllPlugins } from "./plugins/PluginRegistry";
 import "./plugins/generic/lines/MultiPointLinePlugin";
 import "./plugins/generic/lines/TrendLinePlugin";
 import "./plugins/generic/lines/HLinePlugin";
+import "./plugins/generic/fib/FibPlugin";
+import "./plugins/generic/fib/FibExtPlugin";
 import SimplePropertiesDialog, { type SimpleStyle } from "./SimplePropertiesDialog";
 
 type BarRow = {

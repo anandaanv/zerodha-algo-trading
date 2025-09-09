@@ -26,7 +26,7 @@ export class TrendLinePlugin extends GenericPlugin<LineProps> {
       anchorRadiusPx: 4,
       hitTolerancePx: 6,
       showAnchorsWhenSelected: true,
-      defaultProps: { color: "#1976d2", width: 2, style: "solid" },
+      defaultProps: { color: "#1976d2", width: 1, style: "solid" },
     });
   }
 
