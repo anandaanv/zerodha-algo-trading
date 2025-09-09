@@ -5,7 +5,7 @@ import { getPluginsByGroup, getAllPlugins } from "./plugins/PluginRegistry";
 import "./plugins/TrendlinePlugin";
 import "./plugins/RayPlugin";
 import "./plugins/HLinePlugin";
-import "./plugins/generic/MultiPointLinePlugin";
+import "./plugins/generic/lines/MultiPointLinePlugin";
 import SimplePropertiesDialog, { type SimpleStyle } from "./SimplePropertiesDialog";
 
 type BarRow = {

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React from "react";
-import { GenericPlugin } from "./GenericPlugin";
-import { registerPlugin } from "../PluginRegistry";
+import { GenericPlugin } from "../GenericPlugin";
+import { registerPlugin } from "../../PluginRegistry";
 
 export type LineProps = { color: string; width: number; style: "solid" | "dashed" };
 
