@@ -400,17 +400,3 @@ export class RayPlugin extends BaseOverlayPlugin {
     return null;
   }
 }
-
-import { registerPlugin } from "./PluginRegistry";
-registerPlugin({
-  key: "ray",
-  title: "Ray",
-  group: "Lines",
-  icon: () => (
-    <svg width="16" height="16" viewBox="0 0 20 20">
-      <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
-      <path d="M17 3 L19 1" stroke="#333" strokeWidth="2" />
-    </svg>
-  ),
-  ctor: RayPlugin,
-});

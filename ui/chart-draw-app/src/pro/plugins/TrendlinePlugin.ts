@@ -387,16 +387,3 @@ export class TrendlinePlugin extends BaseOverlayPlugin {
     return null;
   }
 }
-
-import { registerPlugin } from "./PluginRegistry";
-registerPlugin({
-  key: "trendline",
-  title: "Trend Line",
-  group: "Lines",
-  icon: () => (
-    <svg width="16" height="16" viewBox="0 0 20 20">
-      <path d="M3 17 L17 3" stroke="#333" strokeWidth="2" />
-    </svg>
-  ),
-  ctor: TrendlinePlugin,
-});
