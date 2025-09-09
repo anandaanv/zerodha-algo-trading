@@ -5,24 +5,24 @@ import { registerPlugin } from "../../PluginRegistry";
 
 export type LineProps = { color: string; width: number; style: "solid" | "dashed" };
 
-// Icon: simple V/W like
-const abcIcon = () =>
+// Icon: multi-zig-zag polyline
+const wxyxzIcon = () =>
   React.createElement(
     "svg",
     { width: 16, height: 16, viewBox: "0 0 20 20" },
     React.createElement("polyline", {
-      points: "2,12 10,6 18,12",
+      points: "2,14 6,6 10,10 14,4 18,12",
       stroke: "#333",
       fill: "none",
       strokeWidth: 2,
     })
   );
 
-export class CorrectiveABCPlugin extends GenericPlugin<LineProps> {
+export class WXYXZPlugin extends GenericPlugin<LineProps> {
   constructor(params: { chart: any; series: any; container: HTMLElement }) {
     super(params, {
-      minPoints: 4,
-      maxPoints: 4,
+      minPoints: 6,
+      maxPoints: 6,
       anchorRadiusPx: 4,
       hitTolerancePx: 6,
       showAnchorsWhenSelected: true,
@@ -30,7 +30,7 @@ export class CorrectiveABCPlugin extends GenericPlugin<LineProps> {
     });
   }
 
-  // Catalog
+  // Catalog metadata
   getToolGroup(): string {
     return "Elliott";
   }
@@ -38,7 +38,7 @@ export class CorrectiveABCPlugin extends GenericPlugin<LineProps> {
     return "Waves";
   }
   getToolIcon(): () => any {
-    return abcIcon;
+    return wxyxzIcon;
   }
 
   protected drawShapePx(pointsPx: Array<{ x: number; y: number }>, props: LineProps, selected: boolean): void {
@@ -58,8 +58,8 @@ export class CorrectiveABCPlugin extends GenericPlugin<LineProps> {
     ctx.setLineDash([]);
     ctx.restore();
 
-    // Labels 0, A, B, C
-    const labels = ["0", "A", "B", "C"];
+    // Labels 0, W, X, Y, X, Z
+    const labels = ["0", "W", "X", "Y", "X", "Z"];
     for (let i = 0; i < Math.min(pointsPx.length, labels.length); i++) {
       const p = pointsPx[i];
       this.drawLabelPx(p.x, p.y, labels[i], {
@@ -71,6 +71,7 @@ export class CorrectiveABCPlugin extends GenericPlugin<LineProps> {
   }
 
   protected drawPreviewPx(pointsPx: Array<{ x: number; y: number }>, props: LineProps) {
+    // Dashed preview polyline for in-progress points
     const ctx = this.ctx;
     if (pointsPx.length >= 1) {
       ctx.save();
@@ -87,18 +88,19 @@ export class CorrectiveABCPlugin extends GenericPlugin<LineProps> {
       ctx.restore();
     }
 
-    if (pointsPx.length >= 4) {
-      this.drawShapePx(pointsPx.slice(0, 4), { ...props, width: Math.max(1, props.width) }, false);
+    // When all points placed, render final
+    if (pointsPx.length >= 6) {
+      this.drawShapePx(pointsPx.slice(0, 6), { ...props, width: Math.max(1, props.width) }, false);
     }
   }
 }
 
 // Register
 registerPlugin({
-  key: "elliott-abc",
-  title: "Elliott ABC",
+  key: "elliott-wxyxz",
+  title: "Elliott 0-W-X-Y-X-Z",
   group: "Elliott",
   subgroup: "Waves",
-  icon: abcIcon,
-  ctor: CorrectiveABCPlugin,
+  icon: wxyxzIcon,
+  ctor: WXYXZPlugin,
 });
