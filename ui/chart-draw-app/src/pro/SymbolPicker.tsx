@@ -131,7 +131,7 @@ export default function SymbolPicker({ open, value, onClose, onSelect, fetchSymb
               >
                 <div style={{ fontWeight: 700, color: "#222" }}>{s.tradingsymbol}</div>
                 <div style={{ fontSize: 12, color: "#666", marginTop: 2, display: "flex", gap: 8 }}>
-                  <span>{s.name ?? ""}</span>
+                  <span>{s.tradingsymbol ?? ""}</span>
                   {typeof s.lastPrice === "number" && <span>· ₹{s.lastPrice.toFixed(2)}</span>}
                   {s.expiry && <span>· exp: {new Date(s.expiry).toLocaleDateString()}</span>}
                 </div>

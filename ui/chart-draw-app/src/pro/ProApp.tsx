@@ -68,7 +68,7 @@ export default function ProApp() {
                 const arr = await res.json();
                 return (Array.isArray(arr) ? arr : []).map((it: any) => {
                     if (typeof it === "string") return { name: it };
-                    if (it?.name) return { name: it.name as string };
+                    if (it?.tradingsymbol) return { name: it.tradingsymbol as string };
                     return { name: String(it) };
                 });
             }
