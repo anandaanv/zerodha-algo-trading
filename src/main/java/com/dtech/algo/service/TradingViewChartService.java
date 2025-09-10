@@ -37,6 +37,8 @@ import org.ta4j.core.indicators.*;
 import org.ta4j.core.indicators.adx.ADXIndicator;
 import org.ta4j.core.indicators.adx.MinusDIIndicator;
 import org.ta4j.core.indicators.adx.PlusDIIndicator;
+import org.ta4j.core.indicators.averages.EMAIndicator;
+import org.ta4j.core.indicators.averages.SMAIndicator;
 import org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator;
 import org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator;
 import org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator;
@@ -716,7 +718,7 @@ public class TradingViewChartService {
         // Calculate values for all bars
         for (int i = 0; i < barSeries.getBarCount(); i++) {
             Bar bar = barSeries.getBar(i);
-            long timestamp = bar.getEndTime().toEpochSecond();
+            long timestamp = bar.getEndTime().getEpochSecond();
 
             // Candle data
             candles.add(new CandleData(
@@ -840,8 +842,8 @@ public class TradingViewChartService {
                 }
                 int fromIdx = Math.max(0, s.getBarCount() - Math.max(1, maxBars));
                 int endIdx = s.getEndIndex();
-                long minTime = s.getBar(fromIdx).getEndTime().toEpochSecond();
-                long maxTime = s.getBar(endIdx).getEndTime().toEpochSecond();
+                long minTime = s.getBar(fromIdx).getEndTime().getEpochSecond();
+                long maxTime = s.getBar(endIdx).getEndTime().getEpochSecond();
 
                 java.util.List<TradingViewChartRequest.TrendLine> trimmedTls = new java.util.ArrayList<>();
                 if (ol.getTrendlines() != null) {

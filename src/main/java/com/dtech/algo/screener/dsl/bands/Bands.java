@@ -3,7 +3,7 @@ package com.dtech.algo.screener.dsl.bands;
 import com.dtech.algo.screener.ScreenerContext;
 import com.dtech.algo.screener.dsl.KDsl;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.averages.SMAIndicator;
 import org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator;
 import org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator;
 import org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator;

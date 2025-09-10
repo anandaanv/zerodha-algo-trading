@@ -32,7 +32,7 @@ public class ChartDataService {
         int end = series.getEndIndex();
         List<OhlcBarDTO> out = new ArrayList<>(end + 1);
         for (int i = 0; i <= end; i++) {
-            long t = series.getBar(i).getEndTime().toEpochSecond();
+            long t = series.getBar(i).getEndTime().getEpochSecond();
             if (t < fromSec || t > toSec) continue;
             out.add(new OhlcBarDTO(
                     t,

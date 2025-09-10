@@ -28,7 +28,9 @@ import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.market.fetch.DataFetchException;
 import com.dtech.kitecon.repository.CandleRepository;
-import java.time.ZoneId;
+
+import java.time.Duration;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -36,8 +38,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.ta4j.core.BarSeries;
-import org.ta4j.core.BaseBarSeries;
+import org.ta4j.core.*;
+import org.ta4j.core.bars.TimeBarBuilder;
 
 /**
  * This class build a Ta4j time series from a CSV file containing bars.
@@ -61,22 +63,33 @@ public abstract class BarsLoader {
 
   protected BarSeries getBarSeries(Instrument instrument, List<? extends Candle> candles) {
     candles.sort(Comparator.comparing(Candle::getTimestamp));
-    BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
+    BarSeries series = new BaseBarSeriesBuilder().withName(instrument.getTradingsymbol()).build();
     candles.forEach(candle -> addBarToSeries(series, candle));
     return series;
   }
 
   protected void addBarToSeries(BarSeries series, Candle candle) {
-    ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
     double open = candle.getOpen();
     double high = candle.getHigh();
     double low = candle.getLow();
     double close = candle.getClose();
     double volume = candle.getVolume();
-    series.addBar(date, open, high, low, close, volume);
+    series.addBar(getBar(open, high, low, close, volume, candle.getTimestamp()));
   }
 
-  /**
+    public static Bar getBar(double open, double high, double low, double close, double volume, Instant timestamp) {
+        return new TimeBarBuilder()
+                .openPrice(open)
+                .closePrice(close)
+                .highPrice(high)
+                .lowPrice(low)
+                .volume(volume)
+                .endTime(timestamp)
+                .timePeriod(Duration.ofDays(1))
+                .build();
+    }
+
+    /**
    * @return a time series from Apple Inc. bars.
    */
   public BarSeries loadInstrumentSeries(Instrument instrument, ZonedDateTime startDate,

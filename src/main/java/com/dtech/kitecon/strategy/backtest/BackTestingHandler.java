@@ -14,11 +14,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.*;
 import org.ta4j.core.Trade.TradeType;
-import org.ta4j.core.analysis.criteria.*;
-import org.ta4j.core.analysis.criteria.pnl.AverageLossCriterion;
-import org.ta4j.core.analysis.criteria.pnl.AverageProfitCriterion;
-import org.ta4j.core.analysis.criteria.pnl.GrossProfitCriterion;
-import org.ta4j.core.analysis.criteria.pnl.ProfitLossCriterion;
+
+import org.ta4j.core.backtest.BarSeriesManager;
+import org.ta4j.core.criteria.*;
+import org.ta4j.core.criteria.pnl.AverageLossCriterion;
+import org.ta4j.core.criteria.pnl.AverageProfitCriterion;
+import org.ta4j.core.criteria.pnl.ProfitLossCriterion;
 import org.ta4j.core.num.DecimalNum;
 
 import java.util.*;
@@ -114,8 +115,6 @@ public class BackTestingHandler {
             calculateCriterion(new AverageLossCriterion(), series, tradingRecord));
     backtestresultsMap.put("AverageProfit",
             calculateCriterion(new AverageProfitCriterion(), series, tradingRecord));
-    backtestresultsMap.put("BuyAndHold",
-            calculateCriterion(new BuyAndHoldReturnCriterion(), series, tradingRecord));
     backtestresultsMap.put("LinearTransactionCost",
             calculateCriterion(new LinearTransactionCostCriterion(5000, 0.005), series, tradingRecord));
     backtestresultsMap.put("MaximumDrawdown",
@@ -126,8 +125,6 @@ public class BackTestingHandler {
             calculateCriterion(new NumberOfPositionsCriterion(), series, tradingRecord));
     backtestresultsMap.put("RewardRiskRatio",
             calculateCriterion(new ReturnOverMaxDrawdownCriterion(), series, tradingRecord));
-    backtestresultsMap.put("TotalProfit",
-            calculateCriterion(new GrossProfitCriterion(), series, tradingRecord));
     backtestresultsMap.put("ProfitLoss",
             calculateCriterion(new ProfitLossCriterion(), series, tradingRecord));
     return backtestresultsMap;

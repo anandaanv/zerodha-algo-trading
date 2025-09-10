@@ -10,6 +10,7 @@ import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -51,16 +52,16 @@ public class DataDownloader {
         DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
         DateRange dateRange = downloadRequest.getDateRange();
         Instrument instrument = downloadRequest.getInstrument();
-        ZonedDateTime startDate = dateRange.getStartDate();
-        ZonedDateTime endDate = dateRange.getEndDate();
+        Instant startDate = dateRange.getStartDate();
+        Instant endDate = dateRange.getEndDate();
 //    candleRepository
 //        .deleteByInstrumentAndTimeframeAndTimestampBetween(instrument, interval,
 //            startDate.minusSeconds(1).toLocalDateTime(),
 //            endDate.toLocalDateTime().plusSeconds(1));
         try {
             HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
-                            startDate.toInstant()),
-                    Date.from(endDate.toInstant()),
+                            startDate),
+                    Date.from(endDate),
                     String.valueOf(instrument.getInstrumentToken()),
                     interval.getKiteKey(), false, true);
             LocalDateTime timeStart = ZonedDateTime.parse(candles.dataArrayList.getFirst().timeStamp, dateFormat).toLocalDateTime().minusSeconds(1);
@@ -69,7 +70,7 @@ public class DataDownloader {
                     timeStart,
                     timesEnd);
 
-            Map<LocalDateTime, Candle> datamap = existingData.stream().collect(Collectors.toMap(candle -> candle.getTimestamp(), candle -> candle));
+            Map<Instant, Candle> datamap = existingData.stream().collect(Collectors.toMap(candle -> candle.getTimestamp(), candle -> candle));
             List<Candle> databaseCandles = candleFacade.buildCandlesFromOLSHStreamFailSafe(
                     interval, dateFormat, instrument, candles, datamap);
             candleRepository.saveAll(databaseCandles);

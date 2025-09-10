@@ -4,23 +4,24 @@ import com.dtech.algo.exception.StrategyException;
 import com.dtech.algo.strategy.TradeStrategy;
 import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
 import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
-import com.dtech.algo.strategy.config.*;
+import com.dtech.algo.strategy.config.IndicatorConfig;
+import com.dtech.algo.strategy.config.StrategyConfig;
 import com.dtech.algo.strategy.helper.ComponentHelper;
 import com.dtech.algo.strategy.units.CachedIndicatorBuilder;
 import com.dtech.algo.strategy.units.CachedRuleBuilder;
 import com.dtech.kitecon.KiteconApplication;
-
-import java.util.*;
-
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.ta4j.core.BarSeriesManager;
 import org.ta4j.core.TradingRecord;
-import org.ta4j.core.analysis.criteria.pnl.GrossProfitCriterion;
+import org.ta4j.core.backtest.BarSeriesManager;
+import org.ta4j.core.criteria.pnl.ProfitLossCriterion;
 import org.ta4j.core.num.Num;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @SpringBootTest(classes = {KiteconApplication.class})
 class FinalStrategyBuilderTest {
@@ -54,7 +55,7 @@ class FinalStrategyBuilderTest {
     BarSeriesManager seriesManager = new BarSeriesManager(componentHelper.getBarSeries());
     TradingRecord tradingRecord = seriesManager.run(tradeStrategy);
 
-    Num profit = new GrossProfitCriterion().calculate(componentHelper.getBarSeries(), tradingRecord);
+    Num profit = new ProfitLossCriterion().calculate(componentHelper.getBarSeries(), tradingRecord);
     Assertions.assertEquals(tradingRecord.getPositionCount(), 5);
     Assertions.assertEquals(profit.doubleValue(), 281.73, 0.001);
 

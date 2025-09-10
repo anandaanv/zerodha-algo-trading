@@ -4,7 +4,7 @@ import com.dtech.algo.screener.ScreenerContext;
 import com.dtech.algo.screener.dsl.KDsl;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.indicators.RSIIndicator;
-import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.averages.SMAIndicator;
 import org.ta4j.core.indicators.StochasticOscillatorKIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 

@@ -14,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -56,7 +57,7 @@ class RdbmsBarSeriesLoaderTest {
 
     private Candle get15MinCandle(Instrument instrument) {
         return new Candle(100.0, 100.0, 92.0, 109.0, 10000L,
-                100L, LocalDateTime.now(), instrument, Interval.FifteenMinute);
+                100L, Instant.now(), instrument, Interval.FifteenMinute);
     }
 
     @Test

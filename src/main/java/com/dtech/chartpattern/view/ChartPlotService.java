@@ -1,15 +1,9 @@
 package com.dtech.chartpattern.view;
 
 import com.dtech.algo.controller.dto.TradingViewChartRequest;
-import com.dtech.algo.controller.dto.TradingViewChartRequest.OverlayLevels;
-import com.dtech.algo.controller.dto.TradingViewChartRequest.TrendLine;
 import com.dtech.algo.controller.dto.TradingViewChartResponse;
 import com.dtech.algo.series.Interval;
 import com.dtech.algo.service.TradingViewChartService;
-import com.dtech.chartpattern.trendline.TrendlineService;
-import com.dtech.chartpattern.trendline.TrendlineState;
-import com.dtech.chartpattern.trendline.ActiveTrendlineService;
-import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import com.dtech.chartpattern.zigzag.ZigZagService;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
@@ -28,10 +22,7 @@ public class ChartPlotService {
 
     private final CandleRepository candleRepository;
     private final ZigZagService zigZagService;
-    private final TrendlineService trendlineService;
     private final TradingViewChartService tradingViewChartService;
-    private final com.dtech.chartpattern.patterns.PatternTrendlineService patternTrendlineService;
-    private final ActiveTrendlineService activeTrendlineService;
 
     @Value("${charts.visibleBars.default:1000}")
     private int defaultVisibleBars;
@@ -95,81 +86,6 @@ public class ChartPlotService {
             return new byte[0];
         }
         long lastTs = candles.get(lastIdx).getTimestamp().atZone(ZoneId.systemDefault()).toEpochSecond();
-
-        // Trendlines from DB (classic) or pattern-derived lines
-//        if (patternTrendlinesEnabled) {
-//            var plines = patternTrendlineService.getOrRecalc(tradingSymbol, instrument, interval);
-//            for (var pl : plines) {
-//                long startTs = pl.getStartTs().atZone(ZoneId.systemDefault()).toEpochSecond();
-//                long endTs = pl.getEndTs().atZone(ZoneId.systemDefault()).toEpochSecond();
-//                String color =
-//                        (pl.getSide().name().equalsIgnoreCase("SUPPORT") || pl.getSide().name().equalsIgnoreCase("LOWER"))
-//                                ? "#2ca02c" : "#ff7f0e";
-//                String label = pl.getPatternType().name().toLowerCase();
-//
-//                trendLines.add(TradingViewChartRequest.TrendLine.builder()
-//                        .startTs(startTs)
-//                        .startPrice(pl.getY1())
-//                        .endTs(endTs)
-//                        .endPrice(pl.getY2())
-//                        .label(label)
-//                        .color(color)
-//                        .build());
-//            }
-//        } else {
-//            var lines = trendlineService.getOrRecalc(tradingSymbol, interval);
-//            for (var tl : lines) {
-//                int startIdx = (int) Math.max(0, Math.min(lastIdx, tl.getStartSeq()));
-//                long startTs = candles.get(startIdx).getTimestamp().atZone(ZoneId.systemDefault()).toEpochSecond();
-//
-//                double y1 = tl.getSlopePerBar() * startIdx + tl.getIntercept();
-//                double y2 = tl.getSlopePerBar() * lastIdx + tl.getIntercept();
-//
-//                String color = tl.getSide().name().equalsIgnoreCase("SUPPORT") ? "#2ca02c" : "#ff7f0e";
-//                String label = tl.getState() == TrendlineState.RETESTING ? "retesting" :
-//                        (tl.getState() == TrendlineState.BROKEN ? "broken" : "active");
-//
-//                trendLines.add(TradingViewChartRequest.TrendLine.builder()
-//                        .startTs(startTs)
-//                        .startPrice(y1)
-//                        .endTs(lastTs)
-//                        .endPrice(y2)
-//                        .label(label)
-//                        .color(color)
-//                        .build());
-//            }
-//        }
-
-        // Add active trendlines overlays (computed from pivots + ATR)
-        try {
-            var activeLines = activeTrendlineService.compute(tradingSymbol, instrument, interval);
-            for (var al : activeLines) {
-                long startTs = al.getPivot1Seq();
-                double y1 = al.getSlope() * startTs + al.getIntercept();
-                double y2 = al.getSlope() * lastTs + al.getIntercept();
-
-                String color = (al.getSide() == com.dtech.chartpattern.trendline.ActiveTrendlineService.ActiveTrendline.Side.SUPPORT) ? "#2ca02c" : "#ff7f0e";
-                // Build informative label: side, score, touches, breaks, extra flags
-                StringBuilder lbl = new StringBuilder();
-                lbl.append("active-").append(al.getSide().name().toLowerCase())
-                   .append(" s:").append(String.format(Locale.US, "%.2f", al.getScore()))
-                   .append(" t:").append(al.getTouchCount())
-                   .append(" b:").append(al.getBreakCount());
-                if (al.isNearFlat()) lbl.append(" flat");
-                if (al.getPairType() != null) lbl.append(" ").append(al.getPairType().toLowerCase());
-
-                trendLines.add(TradingViewChartRequest.TrendLine.builder()
-                        .startTs(startTs)
-                        .startPrice(y1)
-                        .endTs(lastTs)
-                        .endPrice(y2)
-                        .label(lbl.toString())
-                        .color(color)
-                        .build());
-            }
-        } catch (Exception e) {
-            // Don't fail chart generation if active lines fail
-        }
 
         overlays.put(interval.name(), TradingViewChartRequest.OverlayLevels.builder()
                 .trendlines(trendLines)

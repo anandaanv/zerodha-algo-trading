@@ -31,11 +31,6 @@ repositories {
     mavenCentral()
     maven { url 'https://repo.spring.io/milestone' }
     maven { url 'https://repo.spring.io/snapshot' }
-    maven {
-        name 'ta4j-snapshot'
-        url 'http://oss.sonatype.org/content/repositories/snapshots'
-        allowInsecureProtocol = true
-    }
     maven { url 'https://jitpack.io' }
 }
 
@@ -54,8 +49,9 @@ dependencies {
     implementation 'org.ehcache:ehcache'
     implementation 'com.zerodhatech.kiteconnect:kiteconnect:3.5.1'
     implementation group: 'com.google.guava', name: 'guava', version: '29.0-jre'
-    implementation 'com.dheemantech.ta4j:ta4j-core:0.18-SNAPSHOT'
-    implementation 'com.dheemantech.ta4j:ta4j-examples:0.18-SNAPSHOT'
+    // Use official ta4j release artifacts from Maven Central
+    implementation 'org.ta4j:ta4j-core:0.18'
+    implementation 'org.ta4j:ta4j-examples:0.18'
     testImplementation 'com.h2database:h2'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     implementation group: 'mysql', name: 'mysql-connector-java', version: '8.0.33'

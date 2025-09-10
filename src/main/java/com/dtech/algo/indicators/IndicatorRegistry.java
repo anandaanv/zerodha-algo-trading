@@ -1,25 +1,18 @@
 package com.dtech.algo.indicators;
 
 import com.dtech.algo.registry.common.BaseRegistry;
-import java.lang.reflect.Constructor;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-
+import jakarta.annotation.PostConstruct;
 import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.Indicator;
 import org.ta4j.core.indicators.AbstractIndicator;
-import org.ta4j.core.indicators.RSIIndicator;
-import org.ta4j.core.indicators.SMAIndicator;
-import org.ta4j.core.indicators.candles.DojiIndicator;
-import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
-import org.ta4j.core.indicators.helpers.ConstantIndicator;
-import org.ta4j.core.indicators.range.OpeningRangeLow;
 
-import jakarta.annotation.PostConstruct;
+import java.lang.reflect.Constructor;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 
 @Service

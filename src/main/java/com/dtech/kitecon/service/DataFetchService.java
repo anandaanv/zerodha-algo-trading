@@ -10,11 +10,16 @@ import com.dtech.kitecon.repository.InstrumentRepository;
 import com.google.common.util.concurrent.RateLimiter;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.Profile;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
@@ -22,12 +27,6 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
-
-import jakarta.annotation.PostConstruct;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
@@ -113,30 +112,29 @@ public class DataFetchService {
     }
 
     public void downloadData(Instrument instrument, Interval interval) {
-        ZonedDateTime endTime = ZonedDateTime.now();
+        Instant endTime = Instant.now();
         int totalAvailableDuration = historicalDateLimit
                 .getTotalAvailableDuration(instrument.getExchange(), interval);
-        ZonedDateTime startTime = endTime.minusDays(totalAvailableDuration);
+        Instant startTime = endTime.minus(totalAvailableDuration, ChronoUnit.DAYS);
         int sliceSize = historicalDateLimit.getDuration(instrument.getExchange(), interval);
         fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, startTime);
     }
 
     public void updateInstrument(Instrument instrument, Interval interval) {
-        ZonedDateTime endTime = ZonedDateTime.now();
+        Instant endTime = Instant.now();
         Candle latestCandle = candleRepository
                 .findFirstByInstrumentAndTimeframeOrderByTimestampDesc(instrument, interval);
         if (latestCandle == null) {
             downloadData(instrument, interval);
         } else {
-            LocalDateTime latestTimestamp = latestCandle.getTimestamp();
+            Instant latestTimestamp = latestCandle.getTimestamp();
             int sliceSize = historicalDateLimit.getDuration(instrument.getExchange(), interval);
-            ZonedDateTime startDate = ZonedDateTime.of(latestTimestamp, ZoneId.systemDefault());
-            fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, startDate);
+            fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, latestTimestamp);
         }
     }
 
     private void fetchDataAndUpdateDatabase(Instrument instrument, Interval interval,
-                                            ZonedDateTime endTime, int sliceSize, ZonedDateTime startDate) {
+                                            Instant endTime, int sliceSize, Instant startDate) {
         List<DateRange> dateRangeList = DateRange.builder()
                 .endDate(endTime)
                 .startDate(startDate)

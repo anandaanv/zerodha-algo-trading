@@ -6,10 +6,13 @@ import com.dtech.algo.series.SeriesType;
 import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
+import com.dtech.kitecon.strategy.dataloader.BarsLoader;
 import lombok.RequiredArgsConstructor;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeries;
+import org.ta4j.core.BaseBarSeriesBuilder;
 
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
@@ -33,7 +36,7 @@ public class InstrumentBarSeriesManager {
                 interval -> {
                     List<Candle> allCandles = candleRepository.findAllByInstrumentAndTimeframe(instrument, interval);
                     candleMap.put(interval, allCandles);
-                    BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
+                    BarSeries series = new BaseBarSeriesBuilder().withName(instrument.getTradingsymbol()).build();
                     ExtendedBarSeries barSeries = ExtendedBarSeries.builder()
                             .interval(getIntervalByName(interval.getKiteKey()))
                             .seriesType(SeriesType.EQUITY) // FIXME Hardcode it for now. we will soon need to make it
@@ -47,13 +50,13 @@ public class InstrumentBarSeriesManager {
     }
 
     protected void addBarToSeries(ExtendedBarSeries series, Candle candle) {
-        ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
+        Instant date = candle.getTimestamp();
         double open = candle.getOpen();
         double high = candle.getHigh();
         double low = candle.getLow();
         double close = candle.getClose();
         double volume = candle.getVolume();
-        series.addBar(date, open, high, low, close, volume);
+        series.addBar(BarsLoader.getBar(open, high, low, close, volume, date));
     }
 
     Interval getIntervalByName(String name) {

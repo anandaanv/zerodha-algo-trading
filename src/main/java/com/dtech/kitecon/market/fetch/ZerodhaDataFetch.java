@@ -38,8 +38,8 @@ public class ZerodhaDataFetch implements MarketDataFetch{
       throws DataFetchException {
     try {
       HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
-          dateRange.getStartDate().toInstant()),
-          Date.from(dateRange.getEndDate().toInstant()),
+          dateRange.getStartDate()),
+          Date.from(dateRange.getEndDate()),
           instrumentToken,
           interval.getKiteKey(), false, true);
     } catch (Throwable e) {

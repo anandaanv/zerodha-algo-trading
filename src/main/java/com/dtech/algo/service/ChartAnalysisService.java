@@ -1,20 +1,11 @@
 package com.dtech.algo.service;
 
-import com.dtech.algo.chart.MatplotChartCreator;
-import com.dtech.algo.chart.config.ChartConfig;
-import com.dtech.algo.chart.config.ChartType;
 import com.dtech.algo.controller.dto.ChartAnalysisRequest;
 import com.dtech.algo.controller.dto.ChartAnalysisResponse;
 import com.dtech.algo.controller.dto.TradingViewChartRequest;
 import com.dtech.algo.controller.dto.TradingViewChartResponse;
-import com.dtech.algo.exception.StrategyException;
-import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.algo.series.Interval;
-import com.dtech.algo.strategy.config.BarSeriesConfig;
 import com.dtech.kitecon.controller.BarSeriesHelper;
-import com.dtech.algo.service.OpenAiClientService;
-import com.dtech.algo.service.TradingViewChartService;
-import com.dtech.kitecon.controller.DataFetchController;
 import com.dtech.kitecon.repository.IndexSymbolRepository;
 import com.dtech.kitecon.service.DataFetchService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -29,10 +20,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Service for analyzing charts across multiple timeframes
@@ -43,7 +31,6 @@ import java.util.stream.Collectors;
 public class ChartAnalysisService {
 
     private final BarSeriesHelper barSeriesHelper;
-    private final MatplotChartCreator chartCreator;
     private final TradingViewChartService tradingViewChartService;
     private final OpenAiClientService openAiService;
     private final OpenAiConversationsService openAiConversationsService;
@@ -63,7 +50,7 @@ public class ChartAnalysisService {
     private boolean useConversations;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    
+
     /**
      * Analyzes charts for a given symbol across multiple timeframes
      *
@@ -79,19 +66,19 @@ public class ChartAnalysisService {
             if (indexSymbolRepository.existsByIndexName(symbol)) {
                 List<String> stocks = indexSymbolRepository.findAllSymbolsByIndexName(symbol);
                 for (String stock : stocks) {
-                   ChartAnalysisResponse stockResponse = analyzeStock(request, stock);
-                   symbolAnalysisMap.put(stock, stockResponse.getAnalysis());
-                   symbolJsonAnalysisMap.put(stock, stockResponse.getJsonAnalysis());
+                    ChartAnalysisResponse stockResponse = analyzeStock(request, stock);
+                    symbolAnalysisMap.put(stock, stockResponse.getAnalysis());
+                    symbolJsonAnalysisMap.put(stock, stockResponse.getJsonAnalysis());
                 }
             } else {
-               ChartAnalysisResponse stockResponse = analyzeStock(request, symbol);
-               symbolAnalysisMap.put(symbol, stockResponse.getAnalysis());
-               symbolJsonAnalysisMap.put(symbol, stockResponse.getJsonAnalysis());
+                ChartAnalysisResponse stockResponse = analyzeStock(request, symbol);
+                symbolAnalysisMap.put(symbol, stockResponse.getAnalysis());
+                symbolJsonAnalysisMap.put(symbol, stockResponse.getJsonAnalysis());
             }
 
             return ChartAnalysisResponse.builder()
                     .analysis(symbolAnalysisMap.size() == 1 ? symbolAnalysisMap.values().iterator().next() : "Multiple symbols analyzed")
-                    .jsonAnalysis(symbolJsonAnalysisMap.size() == 1 ? symbolJsonAnalysisMap.values().iterator().next() : 
+                    .jsonAnalysis(symbolJsonAnalysisMap.size() == 1 ? symbolJsonAnalysisMap.values().iterator().next() :
                             Map.of("message", "Multiple symbols analyzed", "symbolCount", symbolJsonAnalysisMap.size()))
                     .symbolAnalysis(symbolAnalysisMap)
                     .symbolJsonAnalysis(symbolJsonAnalysisMap)
@@ -122,20 +109,16 @@ public class ChartAnalysisService {
             Files.createDirectories(tempPath);
         }
 
-        if (useTradingViewCharts) {
-            // Use new TradingView chart service for comprehensive analysis
-            return generateTradingViewAnalysis(request, symbol, timeframes, candleCount);
-        } else {
-            // Fallback to old matplotlib charts for backward compatibility
-            return generateMatplotlibAnalysis(request, symbol, timeframes, candleCount);
-        }
+        // Use new TradingView chart service for comprehensive analysis
+        return generateTradingViewAnalysis(request, symbol, timeframes, candleCount);
+
     }
 
     /**
      * Generate analysis using the new TradingView chart with all indicators
      */
-    private ChartAnalysisResponse generateTradingViewAnalysis(ChartAnalysisRequest request, String symbol, 
-            List<Interval> timeframes, int candleCount) throws IOException, InterruptedException {
+    private ChartAnalysisResponse generateTradingViewAnalysis(ChartAnalysisRequest request, String symbol,
+                                                              List<Interval> timeframes, int candleCount) throws IOException, InterruptedException {
         try {
             // Determine optimal layout based on number of timeframes
             String layout = determineOptimalLayout(timeframes.size());
@@ -226,81 +209,6 @@ public class ChartAnalysisService {
         }
     }
 
-    /**
-     * Fallback method using matplotlib charts (existing implementation)
-     */
-    private ChartAnalysisResponse generateMatplotlibAnalysis(ChartAnalysisRequest request, String symbol, 
-            List<Interval> timeframes, int candleCount) throws IOException, InterruptedException {
-
-        List<File> chartFiles = new ArrayList<>();
-
-        // Generate charts for each timeframe (existing logic)
-        for (Interval timeframe : timeframes) {
-            try {
-                // Get bar series for the timeframe
-                IntervalBarSeries barSeries = barSeriesHelper.getIntervalBarSeries(symbol, timeframe.name());
-
-                if (barSeries == null) {
-                    log.warn("No bar series found for symbol {} with timeframe {}", symbol, timeframe);
-                    continue;
-                }
-
-                // Limit to requested number of candles
-                int startIndex = Math.max(0, barSeries.getEndIndex() - candleCount + 1);
-
-                // Create chart config
-                List<IntervalBarSeries> barSeriesList = new ArrayList<>();
-                barSeriesList.add(barSeries);
-
-                Map<String, String> options = new HashMap<>();
-                options.put("width", "1200");
-                options.put("height", "800");
-                options.put("startIndex", String.valueOf(startIndex));
-
-                ChartConfig chartConfig = ChartConfig.builder()
-                        .title(symbol + " - " + timeframe.name())
-                        .chartType(ChartType.CANDLESTICK)
-                        .showVolume(true)
-                        .showLegend(true)
-                        .displayedBars(candleCount)
-                        .barSeries(barSeriesList)
-                        .additionalOptions(options)
-                        .build();
-
-                // Generate chart image
-                String filename = symbol + "_" + timeframe.name();
-                String filePath = tempDirectory + "/" + filename + ".png";
-
-                // Generate chart and save to file
-                chartCreator.createChart(chartConfig, tempDirectory + "/" + filename);
-
-                File chartFile = new File(filePath);
-                if (chartFile.exists()) {
-                    chartFiles.add(chartFile);
-                }
-            } catch (Exception e) {
-                log.error("Error generating chart for symbol {} with timeframe {}", symbol, timeframe, e);
-            }
-        }
-
-        // If no charts were generated, return error
-        if (chartFiles.isEmpty()) {
-            return ChartAnalysisResponse.builder()
-                    .analysis("Failed to generate any charts for analysis.")
-                    .build();
-        }
-
-        // Call OpenAI for analysis (using default prompt for matplotlib charts)
-        String analysis = useConversations
-                ? openAiConversationsService.analyzeCharts(chartFiles, symbol, Interval.OneHour)
-                : openAiService.analyzeCharts(chartFiles, symbol);
-
-        // For matplotlib charts, keep as text analysis (no JSON parsing)
-        return ChartAnalysisResponse.builder()
-                .analysis(analysis)
-                .jsonAnalysis(Map.of("analysisType", "text", "content", analysis))
-                .build();
-    }
 
     /**
      * Create an enhanced prompt for technical analysis with all indicators (single timeframe - backward compatibility)

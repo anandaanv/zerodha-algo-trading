@@ -16,6 +16,7 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeries;
+import org.ta4j.core.BaseBarSeriesBuilder;
 
 @RequiredArgsConstructor
 @Component
@@ -35,7 +36,7 @@ public class InstrumentDataLoader {
             return barsLoader.loadInstrumentSeries(instrument, interval);
           } catch (DataFetchException e) {
             log.catching(e);
-            return new BaseBarSeries();
+            return new BaseBarSeriesBuilder().build();
           }
         }));
   }
@@ -51,7 +52,7 @@ public class InstrumentDataLoader {
             return barsLoader.loadInstrumentSeriesWithLiveData(instrument, startDate, interval);
           } catch (DataFetchException e) {
             log.catching(e);
-            return new BaseBarSeries();
+            return new BaseBarSeriesBuilder().build();
           }
         }));
   }
