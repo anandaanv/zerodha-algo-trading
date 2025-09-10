@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type SymbolItem = {
   tradingsymbol: string;
@@ -62,16 +63,20 @@ export default function SymbolPicker({ open, value, onClose, onSelect, fetchSymb
 
   if (!open) return null;
 
-  return (
+  // Modal content rendered into document.body via portal
+  const modal = (
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
-        position: "absolute",
+        position: "fixed",
         inset: 0,
         background: "rgba(0,0,0,0.25)",
         zIndex: 2000,
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "flex-start",
+        paddingTop: 12,
       }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -97,8 +102,7 @@ export default function SymbolPicker({ open, value, onClose, onSelect, fetchSymb
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{
-              width: "100%",
-              padding: "8px 10px",
+              width: "95%",
               borderRadius: 6,
               border: "1px solid #ddd",
               outline: "none",
@@ -155,4 +159,6 @@ export default function SymbolPicker({ open, value, onClose, onSelect, fetchSymb
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }

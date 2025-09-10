@@ -842,9 +842,7 @@ export default function ProApp() {
                 onChange={(e) => setSymbolQuery(e.target.value)}
                 style={{
                   width: "100%",
-                  padding: "8px 10px",
-                  borderRadius: 6,
-                  border: "1px solid #ddd",
+                  border: "none",
                   outline: "none",
                 }}
               />
