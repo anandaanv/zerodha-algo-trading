@@ -7,6 +7,7 @@ import com.dtech.algo.series.SeriesType;
 import lombok.*;
 import org.mapstruct.control.DeepClone;
 
+import java.time.Instant;
 import java.time.LocalDate;
 
 @Data
@@ -23,8 +24,8 @@ public class BarSeriesConfig implements Cloneable {
   @EqualsAndHashCode.Include
   private String instrument;
   private String name;
-  private LocalDate startDate;
-  private LocalDate endDate;
+  private Instant startDate;
+  private Instant endDate;
 
   public BarSeriesConfig clone() throws CloneNotSupportedException {
     return (BarSeriesConfig) super.clone();

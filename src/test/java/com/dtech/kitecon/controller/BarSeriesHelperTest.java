@@ -16,7 +16,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -60,8 +62,8 @@ public class BarSeriesHelperTest {
                 .exchange(Exchange.NSE)
                 .instrument("RELIANCE")
                 .instrumentType(InstrumentType.EQ)
-                .startDate(LocalDate.now().minusDays(30))
-                .endDate(LocalDate.now())
+                .startDate(Instant.now().minus(30, ChronoUnit.DAYS))
+                .endDate(Instant.now())
                 .name("RELIANCE_MINUTE")
                 .build();
 

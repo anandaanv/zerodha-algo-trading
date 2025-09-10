@@ -17,7 +17,9 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.Bar;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,8 +52,8 @@ public class BarSeriesHelper {
                 .exchange(Exchange.NSE)
                 .instrument(symbol)
                 .instrumentType(InstrumentType.EQ)
-                .startDate(LocalDate.now().minusDays(duration))
-                .endDate(LocalDate.now())
+                .startDate(Instant.now().minus(duration, ChronoUnit.DAYS))
+                .endDate(Instant.now())
                 .name(symbol + "_" + timeframe)
                 .build();
     }

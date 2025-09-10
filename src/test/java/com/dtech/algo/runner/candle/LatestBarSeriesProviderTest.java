@@ -14,7 +14,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.times;
@@ -31,7 +33,7 @@ class LatestBarSeriesProviderTest {
 
     @Test
     void loadBarSeries() throws StrategyException {
-        LocalDate date = LocalDate.now().minusDays(10);
+        Instant date = Instant.now().minus(10, ChronoUnit.DAYS);
         ExtendedBarSeries barSeries = new ExtendedBarSeries();
         Mockito.doReturn(barSeries)
                 .when(delegate).loadBarSeries(Mockito.any(BarSeriesConfig.class));
@@ -44,7 +46,7 @@ class LatestBarSeriesProviderTest {
 
     }
 
-    private BarSeriesConfig getBarSeriesConfigSbinCash15Min(LocalDate endDate, LocalDate startDate) {
+    private BarSeriesConfig getBarSeriesConfigSbinCash15Min(Instant endDate, Instant startDate) {
         return BarSeriesConfig.builder()
                 .seriesType(SeriesType.EQUITY)
                 .exchange(Exchange.NSE)
