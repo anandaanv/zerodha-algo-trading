@@ -7,7 +7,6 @@ import com.dtech.algo.openai.OpenAiResponseRepository;
 import com.dtech.algo.series.Interval;
 import com.openai.client.OpenAIClient;
 import com.openai.models.conversations.Conversation;
-import com.openai.models.conversations.ConversationUpdateParams;
 import com.openai.models.conversations.items.ItemCreateParams;
 import com.openai.models.files.FileCreateParams;
 import com.openai.models.files.FileObject;
