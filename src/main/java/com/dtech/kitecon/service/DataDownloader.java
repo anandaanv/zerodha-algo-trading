@@ -64,8 +64,8 @@ public class DataDownloader {
                     Date.from(endDate),
                     String.valueOf(instrument.getInstrumentToken()),
                     interval.getKiteKey(), false, true);
-            LocalDateTime timeStart = ZonedDateTime.parse(candles.dataArrayList.getFirst().timeStamp, dateFormat).toLocalDateTime().minusSeconds(1);
-            LocalDateTime timesEnd = ZonedDateTime.parse(candles.dataArrayList.getLast().timeStamp, dateFormat).toLocalDateTime().plusSeconds(1);
+            Instant timeStart = Instant.parse(candles.dataArrayList.getFirst().timeStamp).minus(1, ChronoUnit.SECONDS);
+            Instant timesEnd = Instant.parse(candles.dataArrayList.getLast().timeStamp).plus(1, ChronoUnit.SECONDS);
             List<Candle> existingData = candleRepository.findAllByInstrumentAndTimeframeAndTimestampBetween(instrument, interval,
                     timeStart,
                     timesEnd);

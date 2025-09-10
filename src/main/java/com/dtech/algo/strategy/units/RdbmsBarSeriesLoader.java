@@ -14,12 +14,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.BaseBarSeries;
 import org.ta4j.core.BaseBarSeriesBuilder;
 
 import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 
@@ -42,8 +40,8 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
         Instrument instrument = resolveInstrument(barSeriesConfig);
         List<Candle> candles = candleRepository.findAllByInstrumentAndTimeframeAndTimestampBetween(
                 instrument, barSeriesConfig.getInterval(),
-                barSeriesConfig.getStartDate().atStartOfDay(),
-                barSeriesConfig.getEndDate().plusDays(1).atStartOfDay());
+                barSeriesConfig.getStartDate(),
+                barSeriesConfig.getEndDate().plus(1, ChronoUnit.DAYS));
         IntervalBarSeries intervalBarSeries = getBarSeries(instrument, candles, barSeriesConfig);
         barSeriesCache.put(key, intervalBarSeries);
         return intervalBarSeries;
@@ -51,7 +49,8 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
 
     protected IntervalBarSeries getBarSeries(Instrument instrument, List<? extends Candle> candles, BarSeriesConfig barSeriesConfig) {
         candles.sort(Comparator.comparing(Candle::getTimestamp));
-        BarSeries series = new BaseBarSeriesBuilder().withName(instrument.getTradingsymbol()).build();
+        BarSeries series = new BaseBarSeriesBuilder().withName(instrument.getTradingsymbol())
+                .build();
         candles.forEach(candle -> addBarToSeries(series, candle));
         return ExtendedBarSeries.builder()
                 .interval(barSeriesConfig.getInterval())

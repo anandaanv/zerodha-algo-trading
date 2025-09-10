@@ -15,14 +15,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.Bar;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.BaseBarSeries;
 import org.ta4j.core.BaseBarSeriesBuilder;
 import org.ta4j.core.num.DoubleNumFactory;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -297,7 +294,7 @@ public class ZigZagService {
 
         List<com.dtech.kitecon.data.Candle> candles = candleRepository.findAllByInstrumentAndTimeframe(instrument, interval);
         candles.sort(Comparator.comparing(com.dtech.kitecon.data.Candle::getTimestamp));
-        BarSeries series = new BaseBarSeriesBuilder().withName(tradingSymbol).withNumFactory(DoubleNumFactory.getInstance()).build();
+        BarSeries series = new BaseBarSeriesBuilder().withName(tradingSymbol).build();
         candles.forEach(c ->
                 series.addBar(BarsLoader.getBar(c.getOpen(), c.getHigh(), c.getLow(), c.getClose(), Optional.ofNullable(c.getVolume()).orElse(0L), c.getTimestamp())));
         List<ZigZagPoint> pivots = detect(series, params);

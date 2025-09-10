@@ -40,6 +40,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.ta4j.core.*;
 import org.ta4j.core.bars.TimeBarBuilder;
+import org.ta4j.core.num.DecimalNumFactory;
 
 /**
  * This class build a Ta4j time series from a CSV file containing bars.
@@ -78,7 +79,7 @@ public abstract class BarsLoader {
   }
 
     public static Bar getBar(double open, double high, double low, double close, double volume, Instant timestamp) {
-        return new TimeBarBuilder()
+        return new TimeBarBuilder(DecimalNumFactory.getInstance())
                 .openPrice(open)
                 .closePrice(close)
                 .highPrice(high)
