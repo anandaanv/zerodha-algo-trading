@@ -13,8 +13,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
+import org.ta4j.core.indicators.averages.EMAIndicator;
 import org.ta4j.core.indicators.pivotpoints.TimeLevel;
-import org.ta4j.core.indicators.range.OpeningRangeLow;
 
 import jakarta.validation.constraints.NotNull;
 
@@ -27,8 +27,8 @@ class IndicatorRegistryTest {
   @Test
   void getIndicatorClass() {
     IndicatorRegistry registry = getIndicatorRegistry();
-    Class indicatorClass = registry.getIndicatorClass("opening-range-low");
-    assertEquals(OpeningRangeLow.class, indicatorClass);
+    Class indicatorClass = registry.getIndicatorClass("ema");
+    assertEquals(EMAIndicator.class, indicatorClass);
   }
 
   @Test

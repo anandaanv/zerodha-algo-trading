@@ -1,5 +1,6 @@
 package com.dtech.kitecon.data;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 import com.dtech.algo.series.Interval;
@@ -31,7 +32,7 @@ public class Candle {
   @Column
 
   @EqualsAndHashCode.Include
-  protected LocalDateTime timestamp;
+  protected Instant timestamp;
   @ManyToOne(targetEntity = Instrument.class)
 
   @EqualsAndHashCode.Include
@@ -51,7 +52,7 @@ public class Candle {
 
 
   public Candle(Double open, Double high, Double low, Double close, Long volume, Long oi,
-                LocalDateTime timestamp, Instrument instrument, Interval interval) {
+                Instant timestamp, Instrument instrument, Interval interval) {
     this.open = open;
     this.high = high;
     this.low = low;

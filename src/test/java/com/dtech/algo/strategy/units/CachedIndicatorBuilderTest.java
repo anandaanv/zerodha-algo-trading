@@ -13,9 +13,12 @@ import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.IndicatorConfig;
 import com.dtech.algo.strategy.config.IndicatorInput;
 import com.dtech.algo.strategy.config.IndicatorInputType;
+import com.dtech.kitecon.strategy.dataloader.BarsLoader;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
@@ -27,11 +30,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.ta4j.core.Bar;
-import org.ta4j.core.BarSeries;
-import org.ta4j.core.BaseBar;
-import org.ta4j.core.BaseBarSeries;
-import org.ta4j.core.Indicator;
+import org.ta4j.core.*;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 import org.ta4j.core.num.Num;
 
@@ -84,10 +83,10 @@ class CachedIndicatorBuilderTest {
     String barCount = "bar-count";
     Mockito.doReturn("10")
         .when(constantsCache).get(barCount);
-    BarSeries baseBarSeries = new BaseBarSeries();
-    ZonedDateTime now = ZonedDateTime.now().minus(1, ChronoUnit.DAYS);
+    BarSeries baseBarSeries = new BaseBarSeriesBuilder().build();
+    Instant now = Instant.now().minus(1, ChronoUnit.DAYS);
     for(int x = 0; x < 100; x++) {
-      baseBarSeries.addBar(now.plus(x, ChronoUnit.MINUTES), x, x, x, x, x);
+      baseBarSeries.addBar(BarsLoader.getBar(x, x, x, x, x, now.plus(x, ChronoUnit.MINUTES)));
     }
     ExtendedBarSeries series = ExtendedBarSeries.builder()
         .delegate(baseBarSeries)
@@ -121,10 +120,10 @@ class CachedIndicatorBuilderTest {
     String timeLevelDay = "DAY";
     Mockito.doReturn("10")
             .when(constantsCache).get(barCount);
-    BarSeries baseBarSeries = new BaseBarSeries();
-    ZonedDateTime now = ZonedDateTime.now().minus(1, ChronoUnit.DAYS);
+    BarSeries baseBarSeries = new BaseBarSeriesBuilder().build();
+    Instant now = Instant.now().minus(1, ChronoUnit.DAYS);
     for(int x = 0; x < 100; x++) {
-      baseBarSeries.addBar(now.plus(x, ChronoUnit.MINUTES), x, x, x, x, x);
+      baseBarSeries.addBar(BarsLoader.getBar(x, x, x, x, x, now.plus(x, ChronoUnit.MINUTES)));
     }
     ExtendedBarSeries series = ExtendedBarSeries.builder()
             .delegate(baseBarSeries)

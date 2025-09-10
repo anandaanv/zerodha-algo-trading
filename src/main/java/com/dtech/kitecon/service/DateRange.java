@@ -1,6 +1,8 @@
 package com.dtech.kitecon.service;
 
+import java.time.Instant;
 import java.time.ZonedDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -12,19 +14,19 @@ import lombok.Data;
 @Data
 public class DateRange {
 
-  private ZonedDateTime startDate;
-  private ZonedDateTime endDate;
+  private Instant startDate;
+  private Instant endDate;
 
   public List<DateRange> split(int days) {
     List<DateRange> result = new ArrayList<>();
-    ZonedDateTime startRef = startDate;
-    ZonedDateTime endRef = startDate.plusDays(days);
+    Instant startRef = startDate;
+    Instant endRef = startDate.plus(days, ChronoUnit.DAYS);
     while (endRef.isBefore(endDate)) {
       result.add(DateRange.builder()
           .endDate(endRef)
           .startDate(startRef).build());
       startRef = endRef;
-      endRef = startRef.plusDays(days);
+      endRef = startRef.plus(days, ChronoUnit.DAYS);
     }
     result.add(DateRange.builder()
         .endDate(endDate)

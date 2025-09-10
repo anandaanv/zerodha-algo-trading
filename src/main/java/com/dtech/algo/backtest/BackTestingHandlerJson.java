@@ -11,14 +11,13 @@ import lombok.RequiredArgsConstructor;
 import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
 import org.springframework.stereotype.Component;
-import org.ta4j.core.*;
+import org.ta4j.core.AnalysisCriterion;
+import org.ta4j.core.BarSeries;
+import org.ta4j.core.Position;
 import org.ta4j.core.Trade.TradeType;
-import org.ta4j.core.analysis.criteria.*;
-import org.ta4j.core.analysis.criteria.pnl.AverageLossCriterion;
-import org.ta4j.core.analysis.criteria.pnl.AverageProfitCriterion;
-import org.ta4j.core.analysis.criteria.pnl.GrossProfitCriterion;
-import org.ta4j.core.analysis.criteria.pnl.ProfitLossCriterion;
-import org.ta4j.core.indicators.AbstractIndicator;
+import org.ta4j.core.TradingRecord;
+import org.ta4j.core.backtest.BarSeriesManager;
+import org.ta4j.core.criteria.AbstractAnalysisCriterion;
 import org.ta4j.core.num.DecimalNum;
 
 import java.lang.reflect.InvocationTargetException;
@@ -26,9 +25,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
-
-import static com.dtech.algo.indicators.IndicatorRegistry.getClassesFromPackage;
 
 @RequiredArgsConstructor
 @Component
@@ -85,8 +81,8 @@ public class BackTestingHandlerJson {
     //FIXME Criterion should have a method to get name. This map population is pathetic.
     Map<String, Double> backtestresultsMap = new LinkedHashMap<>();
 
-    Set<Class<? extends AbstractAnalysisCriterion>> criterias = getClassesFromPackage("org.ta4j.core.analysis.criteria.pnl");
-    criterias.addAll(getClassesFromPackage("org.ta4j.core.analysis.criteria"));
+    Set<Class<? extends AbstractAnalysisCriterion>> criterias = getClassesFromPackage("org.ta4j.core.criteria.pnl");
+    criterias.addAll(getClassesFromPackage("org.ta4j.core.criteria"));
     criterias.forEach(criteria -> {
       try {
         AbstractAnalysisCriterion constructor = criteria.getDeclaredConstructor().newInstance();

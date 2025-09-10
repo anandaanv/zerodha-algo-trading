@@ -9,13 +9,17 @@ import com.dtech.chartpattern.persistence.ZigZagSnapshotRepository;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.service.DataFetchService;
+import com.dtech.kitecon.strategy.dataloader.BarsLoader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.Bar;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeries;
+import org.ta4j.core.BaseBarSeriesBuilder;
+import org.ta4j.core.num.DoubleNumFactory;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -174,7 +178,7 @@ public class ZigZagService {
         // Keep only pivots within the last N bars using sequence (epoch seconds) cutoff
         final int MAX_BARS = 1000;
         int cutoffIdx = Math.max(0, series.getBarCount() - MAX_BARS);
-        long cutoffEpoch = series.getBar(cutoffIdx).getEndTime().toEpochSecond();
+        long cutoffEpoch = series.getBar(cutoffIdx).getEndTime().getEpochSecond();
 
         java.util.List<ZigZagPoint> trimmed = new java.util.ArrayList<>();
         for (ZigZagPoint p : pivots) {
@@ -271,13 +275,11 @@ public class ZigZagService {
 
     private ZigZagPoint toPoint(BarSeries series, int idx, double price, ZigZagPoint.Type type, double atrAtPivot) {
         Bar bar = series.getBar(idx);
-        ZonedDateTime zdt = bar.getEndTime();
-        LocalDateTime ldt = zdt.withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
-        // No barIndex is used; sequence is epoch seconds from bar end-time
+        Instant zdt = bar.getEndTime();
         return ZigZagPoint.builder()
                 .type(type)
-                .timestamp(ldt)
-                .sequence(zdt.toEpochSecond())
+                .timestamp(zdt)
+                .sequence(zdt.getEpochSecond())
                 .value(price)
                 .atrAtPivot(atrAtPivot)
                 .build();
@@ -295,9 +297,9 @@ public class ZigZagService {
 
         List<com.dtech.kitecon.data.Candle> candles = candleRepository.findAllByInstrumentAndTimeframe(instrument, interval);
         candles.sort(Comparator.comparing(com.dtech.kitecon.data.Candle::getTimestamp));
-        BarSeries series = new BaseBarSeries(tradingSymbol);
-        candles.forEach(c -> series.addBar(ZonedDateTime.of(c.getTimestamp(), ZoneId.systemDefault()),
-                c.getOpen(), c.getHigh(), c.getLow(), c.getClose(), Optional.ofNullable(c.getVolume()).orElse(0L)));
+        BarSeries series = new BaseBarSeriesBuilder().withName(tradingSymbol).withNumFactory(DoubleNumFactory.getInstance()).build();
+        candles.forEach(c ->
+                series.addBar(BarsLoader.getBar(c.getOpen(), c.getHigh(), c.getLow(), c.getClose(), Optional.ofNullable(c.getVolume()).orElse(0L), c.getTimestamp())));
         List<ZigZagPoint> pivots = detect(series, params);
 
         if (persist) {
@@ -368,7 +370,7 @@ public class ZigZagService {
                 // Very simple parsing by tokens
                 String[] fields = s.substring(1, s.length() - 1).split(",");
                 ZigZagPoint.Type type = null;
-                LocalDateTime ts = null;
+                Instant ts = null;
                 Long seq = null;
                 Double value = null;
                 Double atr = null;
@@ -382,7 +384,7 @@ public class ZigZagService {
                     String val = raw.replaceAll("^\"|\"$", "");
                     switch (key) {
                         case "type" -> type = ZigZagPoint.Type.valueOf(val);
-                        case "ts" -> ts = LocalDateTime.parse(val);
+                        case "ts" -> ts = Instant.parse(val);
                         case "seq" -> seq = Long.parseLong(val);
                         case "value" -> value = Double.parseDouble(val);
                         case "atr" -> atr = Double.parseDouble(val);

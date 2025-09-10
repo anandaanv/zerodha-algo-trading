@@ -9,12 +9,15 @@ import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
+import com.dtech.kitecon.strategy.dataloader.BarsLoader;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeries;
+import org.ta4j.core.BaseBarSeriesBuilder;
 
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Comparator;
@@ -48,7 +51,7 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
 
     protected IntervalBarSeries getBarSeries(Instrument instrument, List<? extends Candle> candles, BarSeriesConfig barSeriesConfig) {
         candles.sort(Comparator.comparing(Candle::getTimestamp));
-        BarSeries series = new BaseBarSeries(instrument.getTradingsymbol());
+        BarSeries series = new BaseBarSeriesBuilder().withName(instrument.getTradingsymbol()).build();
         candles.forEach(candle -> addBarToSeries(series, candle));
         return ExtendedBarSeries.builder()
                 .interval(barSeriesConfig.getInterval())
@@ -59,13 +62,13 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
     }
 
     protected void addBarToSeries(BarSeries series, Candle candle) {
-        ZonedDateTime date = ZonedDateTime.of(candle.getTimestamp(), ZoneId.systemDefault());
+        Instant date = candle.getTimestamp();
         double open = candle.getOpen();
         double high = candle.getHigh();
         double low = candle.getLow();
         double close = candle.getClose();
         double volume = candle.getVolume();
-        series.addBar(date, open, high, low, close, volume);
+        series.addBar(BarsLoader.getBar(open, high, low, close, volume, date));
     }
 
     public Instrument resolveInstrument(BarSeriesConfig barSeriesConfig) {

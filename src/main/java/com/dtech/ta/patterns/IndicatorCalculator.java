@@ -1,7 +1,7 @@
 package com.dtech.ta.patterns;
 
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.indicators.EMAIndicator;
+import org.ta4j.core.indicators.averages.EMAIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.StochasticOscillatorKIndicator;
 import org.ta4j.core.indicators.adx.ADXIndicator;

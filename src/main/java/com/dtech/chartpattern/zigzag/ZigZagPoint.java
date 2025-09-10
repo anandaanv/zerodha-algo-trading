@@ -15,7 +15,7 @@ public class ZigZagPoint {
     public enum Type { HIGH, LOW }
 
     private Type type;
-    private LocalDateTime timestamp;
+    private Instant timestamp;
     private int barIndex;
     private long sequence;        // stable sequence based on timestamp ordering (epoch seconds)
     private double value;         // price at pivot (high for HIGH, low for LOW)

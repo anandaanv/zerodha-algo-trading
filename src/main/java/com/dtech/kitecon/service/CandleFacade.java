@@ -7,7 +7,9 @@ import org.springframework.stereotype.Component;
 import org.ta4j.core.BaseBar;
 
 import java.text.ParseException;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -35,7 +37,7 @@ public class CandleFacade {
     dbCandle.setClose(candle.close);
     dbCandle.setVolume(candle.volume);
     dbCandle.setOi(candle.oi);
-    dbCandle.setTimestamp(getLocalDateTime(ZonedDateTime.parse(candle.timeStamp, dateFormat)));
+    dbCandle.setTimestamp(Instant.parse(candle.timeStamp));
     return dbCandle;
   }
 
@@ -60,7 +62,7 @@ public class CandleFacade {
     dbCandle.setClose(baseBar.getClosePrice().doubleValue());
     dbCandle.setVolume(baseBar.getVolume().longValue());
     dbCandle.setOi(0L);
-    dbCandle.setTimestamp(getLocalDateTime(baseBar.getEndTime()));
+    dbCandle.setTimestamp(baseBar.getEndTime());
   }
 
   public List<Candle> buildCandlesFromOLSHStream(Interval interval, DateTimeFormatter dateFormat,
@@ -81,11 +83,11 @@ public class CandleFacade {
   }
 
   public List<Candle> buildCandlesFromOLSHStreamFailSafe(Interval interval, DateTimeFormatter dateFormat,
-                                                         Instrument instrument, HistoricalData candles, Map<LocalDateTime, Candle> datamap) {
+                                                         Instrument instrument, HistoricalData candles, Map<Instant, Candle> datamap) {
       return candles.dataArrayList.stream().map(candle ->
             {
               try {
-                LocalDateTime localDateTime = getLocalDateTime(ZonedDateTime.parse(candle.timeStamp, dateFormat));
+                Instant localDateTime = Instant.parse(candle.timeStamp);
                 if(datamap.containsKey(localDateTime)) {
                   return setupDbCandle(instrument, dateFormat, candle, interval, datamap.get(localDateTime));
                 } else {

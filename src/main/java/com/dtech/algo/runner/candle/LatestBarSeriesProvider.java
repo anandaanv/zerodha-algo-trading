@@ -14,6 +14,7 @@ import org.ta4j.core.Bar;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -67,7 +68,7 @@ public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
             ZonedDateTime tickTime = tick.getTickTimestamp() != null ? 
                 ZonedDateTime.ofInstant(tick.getTickTimestamp().toInstant(), ZonedDateTime.now().getZone()) : 
                 ZonedDateTime.now();
-            ZonedDateTime barEndTime = barTimeCalculator.calculateBarEndTime(tickTime, barSeries.getInterval());
+            Instant barEndTime = barTimeCalculator.calculateBarEndTime(tickTime, barSeries.getInterval()).toInstant();
 
             // Check if we're still in the current bar or need a new one
             int lastBarIndex = barSeries.getEndIndex();
@@ -76,7 +77,7 @@ public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
 
             if (lastBarIndex >= 0) {
                 Bar lastBar = barSeries.getBar(lastBarIndex);
-                ZonedDateTime lastBarTime = lastBar.getEndTime();
+                Instant lastBarTime = lastBar.getEndTime();
                 isNewBar = barEndTime.isAfter(lastBarTime);
 
                 // Cache the completed bar before creating a new one
@@ -174,7 +175,7 @@ public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
                           index, newHigh, newLow, tickPrice, newVolume);
             } else {
                 // If not a BaseBar, fall back to using barSeries.addBar to replace the current bar
-                ZonedDateTime endTime = currentBar.getEndTime();
+                Instant endTime = currentBar.getEndTime();
                 Number openPrice = currentBar.getOpenPrice().doubleValue();
 
                 // Remove the current bar

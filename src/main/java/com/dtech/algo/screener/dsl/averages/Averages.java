@@ -3,8 +3,8 @@ package com.dtech.algo.screener.dsl.averages;
 import com.dtech.algo.screener.ScreenerContext;
 import com.dtech.algo.screener.dsl.KDsl;
 import org.ta4j.core.BarSeries;
-import org.ta4j.core.indicators.EMAIndicator;
-import org.ta4j.core.indicators.SMAIndicator;
+import org.ta4j.core.indicators.averages.EMAIndicator;
+import org.ta4j.core.indicators.averages.SMAIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 
 public final class Averages {

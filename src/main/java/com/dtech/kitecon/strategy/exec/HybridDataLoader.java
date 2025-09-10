@@ -8,6 +8,8 @@ import com.dtech.kitecon.market.fetch.DataFetchException;
 import com.dtech.kitecon.market.fetch.ZerodhaDataFetch;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.strategy.dataloader.BarsLoader;
+
+import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,9 +42,9 @@ public class HybridDataLoader extends BarsLoader {
     if (barSeries.isEmpty()) {
       return barSeries;
     }
-    ZonedDateTime endTime = barSeries.getLastBar().getEndTime();
+    Instant endTime = barSeries.getLastBar().getEndTime();
     todaysFeed.stream()
-        .filter(baseCandle -> baseCandle.getTimestamp().isAfter(endTime.toLocalDateTime()))
+        .filter(baseCandle -> baseCandle.getTimestamp().isAfter(endTime))
         .forEach(candle -> super.addBarToSeries(barSeries, candle));
     return barSeries;
   }
