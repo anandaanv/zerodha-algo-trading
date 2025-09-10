@@ -24,4 +24,6 @@ public interface InstrumentRepository extends JpaRepository<Instrument, Long> {
 
   Instrument findByTradingsymbolAndExchangeIn(String symbol, String[] exchanges);
 
+  // Simple prefix query without exchange/expiry constraints used by the symbol search API
+  List<Instrument> findAllByTradingsymbolStartingWith(String symbol);
 }

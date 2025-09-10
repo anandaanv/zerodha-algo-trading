@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-export type SymbolItem = { name: string };
+export type SymbolItem = {
+  tradingsymbol: string;
+  name?: string;
+  lastPrice?: number | null;
+  expiry?: string | null;
+  strike?: string | null;
+  instrumentType?: string | null;
+  segment?: string | null;
+  exchange?: string | null;
+  lotSize?: number | null;
+  tickSize?: number | null;
+};
 
 type Props = {
   open: boolean;
@@ -100,9 +111,9 @@ export default function SymbolPicker({ open, value, onClose, onSelect, fetchSymb
           {!loading &&
             items.map((s) => (
               <button
-                key={s.name}
+                key={s.tradingsymbol}
                 onClick={() => {
-                  onSelect(s.name);
+                  onSelect(s.tradingsymbol);
                   onClose();
                 }}
                 style={{
@@ -113,9 +124,17 @@ export default function SymbolPicker({ open, value, onClose, onSelect, fetchSymb
                   borderBottom: "1px solid #f5f5f5",
                   background: "#fff",
                   cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
                 }}
               >
-                {s.name}
+                <div style={{ fontWeight: 700, color: "#222" }}>{s.tradingsymbol}</div>
+                <div style={{ fontSize: 12, color: "#666", marginTop: 2, display: "flex", gap: 8 }}>
+                  <span>{s.name ?? ""}</span>
+                  {typeof s.lastPrice === "number" && <span>· ₹{s.lastPrice.toFixed(2)}</span>}
+                  {s.expiry && <span>· exp: {new Date(s.expiry).toLocaleDateString()}</span>}
+                </div>
               </button>
             ))}
         </div>
