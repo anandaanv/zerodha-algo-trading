@@ -275,16 +275,69 @@ export default function ProApp() {
     }
   }
 
-  const handleSave = useCallback(() => {
+  // Save overlays to backend server
+  async function saveOverlaysToServer(symbol: string, period: string) {
+    try {
+      const instances = pluginMapRef.current;
+      const payload: Record<string, any> = {};
+      for (const def of getAllPlugins()) {
+        const data = (instances[def.key] as any)?.exportAll?.() ?? [];
+        payload[def.key] = data;
+      }
+      await fetch("/api/chart-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, period, overlays: payload }),
+      });
+    } catch (e) {
+      console.warn("Save overlays to server failed", e);
+    }
+  }
+
+  // Load overlays from backend server and import into plugin instances
+  async function loadOverlaysFromServer(symbol: string, period: string) {
+    try {
+      const url = new URL("/api/chart-state", window.location.origin);
+      url.searchParams.set("symbol", symbol);
+      url.searchParams.set("period", String(period));
+      const res = await fetch(url.toString());
+      if (!res.ok) return false;
+      const dto = await res.json();
+      const overlays = dto?.overlays ?? {};
+      const instances = pluginMapRef.current;
+      for (const def of getAllPlugins()) {
+        const data = overlays[def.key] ?? [];
+        try {
+          (instances[def.key] as any)?.importAll?.(data);
+        } catch (e) {
+          // ignore per-plugin import errors
+          console.warn("Import overlay failed for", def.key, e);
+        }
+      }
+      // Backward compatibility for earlier keys (if backend stored older keys)
+      if (overlays.trendlines && instances["trendline"]) (instances["trendline"] as any)?.importAll?.(overlays.trendlines);
+      if (overlays.rays && instances["ray"]) (instances["ray"] as any)?.importAll?.(overlays.rays);
+      return true;
+    } catch (e) {
+      console.warn("Load overlays from server failed", e);
+      return false;
+    }
+  }
+
+  const handleSave = useCallback(async () => {
     const now = Date.now();
     const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
     const base = collectCurrentState();
     const history = loadHistory();
     const next: SavedState[] = [{ id, timestamp: now, ...base }, ...history].slice(0, 50);
     persistHistory(next);
-    // Save overlays keyed by symbol and period
+    // Save overlays keyed by symbol and period locally and to server (if available)
     if (base.symbol && base.period) {
-      saveOverlaysToLocal(base.symbol, String(base.period));
+      const sym = String(base.symbol);
+      const per = String(base.period);
+      saveOverlaysToLocal(sym, per);
+      // best-effort server save (don't block UI)
+      void saveOverlaysToServer(sym, per);
     }
   }, []);
 
@@ -415,8 +468,14 @@ export default function ProApp() {
 
         await loadCandles(nextSymbol, nextPeriod);
 
-        // Load overlays for new selection
-        loadOverlaysFromLocal(nextSymbol, nextPeriod);
+        // Try to load overlays from server first, fallback to local storage if server unavailable or no data
+        try {
+          const ok = await loadOverlaysFromServer(nextSymbol, nextPeriod);
+          if (!ok) loadOverlaysFromLocal(nextSymbol, nextPeriod);
+        } catch (e) {
+          // fallback to local load on error
+          loadOverlaysFromLocal(nextSymbol, nextPeriod);
+        }
       };
 
       // store to ref so handlers can call it
@@ -425,9 +484,14 @@ export default function ProApp() {
       // Initial load: apply restored/default selection
       await applySelection(startSymbol, startPeriod, { savePreviousOverlays: false });
 
-      // Load saved overlays after chart/plugins are ready (redundant but safe)
-      setTimeout(() => {
-        loadOverlaysFromLocal(startSymbol, startPeriod);
+      // Load saved overlays after chart/plugins are ready: try server first, fallback to local
+      setTimeout(async () => {
+        try {
+          const ok = await loadOverlaysFromServer(startSymbol, startPeriod);
+          if (!ok) loadOverlaysFromLocal(startSymbol, startPeriod);
+        } catch {
+          loadOverlaysFromLocal(startSymbol, startPeriod);
+        }
       }, 0);
 
       // Handle resize
