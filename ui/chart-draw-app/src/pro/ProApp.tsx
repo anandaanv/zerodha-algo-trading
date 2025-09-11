@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useCallback, useState, useMemo } from "react";
-import { createChart, type IChartApi, type CandlestickData } from "lightweight-charts";
-import { getPluginsByGroup, getAllPlugins } from "./plugins/PluginRegistry";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {type CandlestickData, createChart, type IChartApi} from "lightweight-charts";
+import {getAllPlugins, getPluginsByGroup} from "./plugins/PluginRegistry";
 // Ensure plugin modules are imported so they self-register
 import "./plugins/generic/lines/MultiPointLinePlugin";
 import "./plugins/generic/lines/TrendLinePlugin";
@@ -12,8 +12,7 @@ import "./plugins/generic/elliott/CorrectiveABCPlugin";
 import "./plugins/generic/patterns/ChannelPlugin";
 import "./plugins/generic/patterns/TrianglePlugin";
 import "./plugins/generic/elliott/WXYXZPlugin";
-import SimplePropertiesDialog, { type SimpleStyle } from "./SimplePropertiesDialog";
-type SymbolItem = { name: string };
+import SimplePropertiesDialog, {type SimpleStyle} from "./SimplePropertiesDialog";
 
 type BarRow = {
   time?: number;
@@ -57,7 +56,7 @@ export default function ProApp() {
   const [symbolLoading, setSymbolLoading] = useState(false);
   const applySelectionRef = useRef<((s: string, p: string) => Promise<void>) | null>(null);
 
-    // Symbol search for picker
+    // Symbol search for picker - normalize response to { tradingsymbol, name?, lastPrice?, expiry?, ... }
     const fetchSymbols = useCallback(async (query: string): Promise<SymbolItem[]> => {
         const q = (query || "").trim();
         try {
@@ -67,9 +66,21 @@ export default function ProApp() {
             if (res.ok) {
                 const arr = await res.json();
                 return (Array.isArray(arr) ? arr : []).map((it: any) => {
-                    if (typeof it === "string") return { name: it };
-                    if (it?.tradingsymbol) return { name: it.tradingsymbol as string };
-                    return { name: String(it) };
+                    if (!it) return { tradingsymbol: String(it) };
+                    // Accept different shapes from server: { tradingsymbol, name, lastPrice, expiry, ... } or simple strings
+                    if (typeof it === "string") return { tradingsymbol: it };
+                    return {
+                        tradingsymbol: (it.tradingsymbol ?? it.name ?? String(it)).toString(),
+                        name: it.name ?? undefined,
+                        lastPrice: typeof it.lastPrice === "number" ? it.lastPrice : (it.lastPrice ? Number(it.lastPrice) : undefined),
+                        expiry: it.expiry ?? undefined,
+                        strike: it.strike ?? undefined,
+                        instrumentType: it.instrumentType ?? undefined,
+                        segment: it.segment ?? undefined,
+                        exchange: it.exchange ?? undefined,
+                        lotSize: typeof it.lotSize === "number" ? it.lotSize : (it.lotSize ? Number(it.lotSize) : undefined),
+                        tickSize: typeof it.tickSize === "number" ? it.tickSize : (it.tickSize ? Number(it.tickSize) : undefined),
+                    } as SymbolItem;
                 });
             }
         } catch {
@@ -78,7 +89,7 @@ export default function ProApp() {
         // fallback list
         const base = ["TCS", "INFY", "RELIANCE", "HDFCBANK", "SBIN", "TATASTEEL", "ITC"];
         const filtered = base.filter(s => s.toLowerCase().includes(q.toLowerCase()));
-        return filtered.map(s => ({ name: s }));
+        return filtered.map(s => ({ tradingsymbol: s }));
     }, []);
 
   // Load initial items when picker opens
