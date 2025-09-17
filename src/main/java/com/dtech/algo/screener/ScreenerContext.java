@@ -1,5 +1,6 @@
 package com.dtech.algo.screener;
 
+import com.dtech.algo.series.IntervalBarSeries;
 import lombok.Builder;
 import lombok.Value;
 import org.ta4j.core.BarSeries;
@@ -10,7 +11,7 @@ import java.util.Map;
 @Builder(toBuilder = true)
 public class ScreenerContext {
     // Alias -> BarSeries (e.g., "base", "wave", "index")
-    Map<String, BarSeries> aliases;
+    Map<String, IntervalBarSeries> aliases;
 
     // Arbitrary parameters (e.g., fast=9, slow=21)
     Map<String, Object> params;

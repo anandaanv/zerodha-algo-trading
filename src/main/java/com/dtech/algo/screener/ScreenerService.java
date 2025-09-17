@@ -1,17 +1,20 @@
 package com.dtech.algo.screener;
 
+import com.dtech.algo.controller.dto.ChartAnalysisRequest;
 import com.dtech.algo.screener.db.Screener;
 import com.dtech.algo.screener.db.ScreenerRepository;
-import com.dtech.kitecon.controller.BarSeriesHelper;
+import com.dtech.algo.screener.enums.WorkflowStep;
+import com.dtech.algo.series.Interval;
+import com.dtech.algo.service.ChartAnalysisService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -20,9 +23,9 @@ public class ScreenerService {
 
     private final ScreenerRepository screenerRepository;
     private final ObjectMapper objectMapper;
-    private final BarSeriesHelper barSeriesHelper;
     private final ScreenerRegistryService screenerRegistryService;
-
+    private final ScreenerContextLoader loader;
+    private final ChartAnalysisService chartAnalysisService;
     /**
      * Run the screener identified by ID for a given underlying symbol.
      *
@@ -48,7 +51,6 @@ public class ScreenerService {
                 .orElseThrow(() -> new IllegalArgumentException("Screener mapping is missing for id=" + screenerId));
 
         // Build context via loader
-        var loader = new ScreenerContextLoader(barSeriesHelper, new ScreenerContextLoader.DefaultOptionSymbolResolver());
         String tf = timeframe != null && !timeframe.isBlank() ? timeframe : screener.getTimeframe();
         ScreenerContext baseCtx = loader.load(symbol, mapping, nowIndex, tf);
 
@@ -64,12 +66,34 @@ public class ScreenerService {
 
         UnitOfWork next = null;
         if (hasOpenAI) {
-            next = new OpenAIUOW(screener.getPromptJson(), next);
+            next = getOpenAIUOW(screener, next);
         }
 
         UnitOfWork head = new ScreenerUOW(screenerRegistryService, screenerId, next);
 
         head.run(ctx);
+    }
+
+    @NotNull
+    private OpenAIUOW getOpenAIUOW(Screener screener, UnitOfWork next) {
+        return new OpenAIUOW(screener.getPromptJson(), next) {
+            @Override
+            public void run(ScreenerContext ctx) {
+
+                try {
+                    String[] ints = new ObjectMapper().readValue(screener.getChartsJson(), String[].class);
+                    List<Interval> intervals = Arrays.stream(ints).map(Interval::valueOf).toList();
+                    ChartAnalysisRequest request = ChartAnalysisRequest.builder()
+                        .symbol(ctx.getSymbol())
+                        .timeframes(intervals)
+                        .candleCount(300)
+                        .build();
+                System.out.println(chartAnalysisService.analyzeCharts(request));
+            }catch (JsonProcessingException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        };
     }
 
     private ScreenerConfig parseConfig(String json) {

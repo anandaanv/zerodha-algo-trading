@@ -14,8 +14,8 @@ public class OpenAIUOW implements UnitOfWork {
 
     @Override
     public void run(ScreenerContext ctx) {
-        // Placeholder: in future, use promptJson + ctx to call OpenAI and possibly emit signals
-        log.debug("OpenAIUOW.run called for screener id={}, symbol={}", 
+        // Placeholder: in future, use promptJson + chartsJson + ctx to call OpenAI and possibly emit signals
+        log.debug("OpenAIUOW.run screenerId={}, symbol={}",
                 ctx.getScreener() != null ? ctx.getScreener().getId() : null, ctx.getSymbol());
         if (next != null) {
             next.run(ctx);

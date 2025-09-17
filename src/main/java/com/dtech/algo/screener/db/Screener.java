@@ -45,6 +45,11 @@ public class Screener {
     @Column(name = "prompt_json", columnDefinition = "TEXT")
     private String promptJson;
 
+    // JSON array declaring which charts (aliases + intervals) should be sent to OpenAI
+    @Lob
+    @Column(name = "charts_json", columnDefinition = "TEXT")
+    private String chartsJson;
+
     // If true, (re)compile and register script before execution
     @Builder.Default
     private Boolean dirty = false;

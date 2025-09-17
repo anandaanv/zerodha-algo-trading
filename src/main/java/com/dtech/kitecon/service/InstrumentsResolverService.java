@@ -9,6 +9,7 @@ import com.dtech.kitecon.market.fetch.MarketDataFetch;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -19,6 +20,7 @@ import java.util.stream.Collectors;
  * Resolves NFO instruments (futures/options) for a given NSE underlying trading symbol.
  * Uses InstrumentRepository queries and the instrument.strike field to pick options.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class InstrumentsResolverService {
@@ -130,6 +132,7 @@ public class InstrumentsResolverService {
         try {
             return marketDataFetch.getLastPrice(instrument);
         } catch (DataFetchException e) {
+            log.error("Error fetching last price for instrument: {}", instrument, e);
             return barSeriesHelper.getLastPrice(instrument);
         }
     }
