@@ -5,9 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.ta4j.core.BarSeries;
-import org.ta4j.core.indicators.averages.SMAIndicator;
-import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 
 import jakarta.annotation.PostConstruct;
 import javax.script.Invocable;
@@ -30,6 +27,7 @@ public class ScreenerRegistryService {
 
     @Getter
     private final Map<String, ScreenerScript> registry = new ConcurrentHashMap<>();
+    private final Map<Long, ScreenerScript> registryById = new ConcurrentHashMap<>();
 
     // Cached Kotlin JSR-223 engine (initialized once at startup)
     private javax.script.ScriptEngine kotlinEngine;
@@ -52,9 +50,7 @@ public class ScreenerRegistryService {
         }
 
         // Initialize Kotlin JSR-223 engine once with the thread context ClassLoader (works with Boot/DevTools)
-        ClassLoader tccl = Thread.currentThread().getContextClassLoader();
-        ScriptEngineManager manager = new ScriptEngineManager(tccl);
-        this.kotlinEngine = manager.getEngineByName("kotlin");
+        initEngineIfRequired();
         if (this.kotlinEngine == null) {
             log.warn("Kotlin JSR-223 engine not found on classpath. Skipping all .kscr.kts scripts under {}", dir.toAbsolutePath());
             log.info("Screener registry initialized. Compiled: 0, total registered: {}", registry.size());
@@ -65,7 +61,7 @@ public class ScreenerRegistryService {
         for (Path p : scripts) {
             String name = deriveName(p);
             try {
-                ScreenerScript script = compileKotlinScript(p);
+                ScreenerScript script = compileKotlinScriptFromFile(p);
                 if (script != null) {
                     registry.put(name, script);
                     compiled++;
@@ -89,6 +85,41 @@ public class ScreenerRegistryService {
             throw new IllegalArgumentException("Screener not found: " + name);
         }
         script.evaluate(ctx, callback);
+    }
+
+    public void run(long id, ScreenerContext ctx, SignalCallback callback) {
+        ScreenerScript script = registryById.get(id);
+        if (script == null) {
+            throw new IllegalArgumentException("Screener not registered for id: " + id);
+        }
+        script.evaluate(ctx, callback);
+    }
+
+    /**
+     * Registers/compiles a Kotlin screener by id from raw script text.
+     */
+    public void registerScript(long id, String code) {
+        initEngineIfRequired();
+        if (this.kotlinEngine == null) {
+            throw new IllegalStateException("Kotlin JSR-223 engine not available on classpath.");
+        }
+        try {
+            ScreenerScript compiled = compileKotlinScriptFromString(code);
+            if (compiled != null) {
+                registryById.put(id, compiled);
+                log.info("Registered screener (id={}) into registry", id);
+            }
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Failed to compile/register screener id=" + id + ": " + e.getMessage(), e);
+        }
+    }
+
+    private void initEngineIfRequired() {
+        if (this.kotlinEngine == null) {
+            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
+            ScriptEngineManager manager = new ScriptEngineManager(tccl);
+            this.kotlinEngine = manager.getEngineByName("kotlin");
+        }
     }
 
     private List<Path> discoverScripts(Path dir) {
@@ -115,10 +146,10 @@ public class ScreenerRegistryService {
     }
 
     /**
-     * Compile a Kotlin script via JSR-223. The script must define:
+     * Compile a Kotlin script via JSR-223 from a file. The script must define:
      *   fun screener(ctx: com.dtech.algo.screener.ScreenerContext, cb: com.dtech.algo.screener.SignalCallback)
      */
-    private ScreenerScript compileKotlinScript(Path scriptPath) throws Exception {
+    private ScreenerScript compileKotlinScriptFromFile(Path scriptPath) throws Exception {
         if (this.kotlinEngine == null) {
             // Engine unavailability already logged at load time
             return null;
@@ -136,6 +167,26 @@ public class ScreenerRegistryService {
                 log.error("Script {} missing function 'screener(ctx, cb)'.", scriptPath.getFileName());
             } catch (Throwable t) {
                 log.error("Error executing script {}: {}", scriptPath.getFileName(), t.getMessage(), t);
+            }
+        };
+    }
+
+    /**
+     * Compile a Kotlin script from raw string using the same engine.
+     */
+    private ScreenerScript compileKotlinScriptFromString(String code) throws Exception {
+        this.kotlinEngine.eval(code);
+        if (!(this.kotlinEngine instanceof Invocable inv)) {
+            log.warn("Kotlin engine is not Invocable. Skipping code registration.");
+            return null;
+        }
+        return (ctx, callback) -> {
+            try {
+                inv.invokeFunction("screener", ctx, callback);
+            } catch (NoSuchMethodException e) {
+                log.error("Registered script missing function 'screener(ctx, cb)'.");
+            } catch (Throwable t) {
+                log.error("Error executing registered script: {}", t.getMessage(), t);
             }
         };
     }

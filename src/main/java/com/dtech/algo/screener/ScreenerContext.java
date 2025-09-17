@@ -7,7 +7,7 @@ import org.ta4j.core.BarSeries;
 import java.util.Map;
 
 @Value
-@Builder
+@Builder(toBuilder = true)
 public class ScreenerContext {
     // Alias -> BarSeries (e.g., "base", "wave", "index")
     Map<String, BarSeries> aliases;
@@ -21,6 +21,9 @@ public class ScreenerContext {
     // Optional metadata for reporting
     String symbol;
     String timeframe;
+
+    // The Screener entity that initiated this context (for downstream decisions)
+    com.dtech.algo.screener.db.Screener screener;
 
     public BarSeries getSeries(String alias) {
         return aliases != null ? aliases.get(alias) : null;

@@ -9,4 +9,8 @@ public interface SignalCallback {
     default void onEvent(String type, ScreenerContext ctx, Map<String, Object> meta) {
         // no-op by default
     }
+
+    default void match(String type, ScreenerContext ctx, Map<String, Object> meta) {
+        // no-op by default
+    }
 }
