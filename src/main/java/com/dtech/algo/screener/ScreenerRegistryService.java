@@ -179,48 +179,4 @@ public class ScreenerRegistryService {
         }
         return null;
     }
-
-    // Built-in SMA crossover screener (fallback)
-    private ScreenerResult smaCrossoverBuiltin(ScreenerContext ctx) {
-        String alias = Optional.ofNullable(ctx.getParam("alias"))
-                .map(Object::toString).orElse("base");
-        int fast = Optional.ofNullable(ctx.getParam("fast"))
-                .map(Object::toString).map(Integer::parseInt).orElse(9);
-        int slow = Optional.ofNullable(ctx.getParam("slow"))
-                .map(Object::toString).map(Integer::parseInt).orElse(21);
-
-        BarSeries series = ctx.getSeries(alias);
-        int i = ctx.getNowIndex();
-        if (series == null) {
-            return ScreenerResult.builder()
-                    .entry(false).exit(false)
-                    .debug(Map.of("warn", "series '" + alias + "' missing"))
-                    .build();
-        }
-        if (i < 1) {
-            return ScreenerResult.builder().entry(false).exit(false)
-                    .debug(Map.of("warn", "insufficient bars")).build();
-        }
-
-        ClosePriceIndicator close = new ClosePriceIndicator(series);
-        SMAIndicator f = new SMAIndicator(close, fast);
-        SMAIndicator s = new SMAIndicator(close, slow);
-
-        double fPrev = f.getValue(i - 1).doubleValue();
-        double sPrev = s.getValue(i - 1).doubleValue();
-        double fNow = f.getValue(i).doubleValue();
-        double sNow = s.getValue(i).doubleValue();
-
-        boolean entry = (fPrev <= sPrev) && (fNow > sNow);
-        boolean exit = (fPrev >= sPrev) && (fNow < sNow);
-        double score = fNow - sNow;
-
-        return ScreenerResult.builder()
-                .entry(entry)
-                .exit(exit)
-                .score(score)
-                .tags(entry ? Set.of("sma-cross-up") : (exit ? Set.of("sma-cross-down") : Set.of()))
-                .debug(Map.of("fast", fast, "slow", slow, "fNow", fNow, "sNow", sNow))
-                .build();
-    }
 }
