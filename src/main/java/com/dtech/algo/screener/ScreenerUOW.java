@@ -43,5 +43,5 @@ public class ScreenerUOW implements UnitOfWork {
         if (next != null) next.match(type, ctx, meta);
     }
 
-    private static final SignalCallback NOOP = new SignalCallback() {};
+    private static final SignalCallback NOOP = null;
 }

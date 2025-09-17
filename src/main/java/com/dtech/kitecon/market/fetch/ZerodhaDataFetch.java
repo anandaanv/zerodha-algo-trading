@@ -8,12 +8,14 @@ import com.dtech.kitecon.service.CandleFacade;
 import com.dtech.kitecon.service.DateRange;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
+import com.zerodhatech.models.LTPQuote;
 import com.zerodhatech.models.Profile;
 import java.io.IOException;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -85,7 +87,10 @@ public class ZerodhaDataFetch implements MarketDataFetch{
 
     public Double getLastPrice(Instrument instrument) throws DataFetchException {
         try {
-            return kiteConnectConfig.getKiteConnect().getLTP(new String[]{instrument.getTradingsymbol()}).get(instrument.getTradingsymbol()).lastPrice;
+            String instrumentToken = "" + instrument.getInstrumentToken();
+            Map<String, LTPQuote> ltp = kiteConnectConfig.getKiteConnect()
+                    .getLTP(new String[]{instrumentToken});
+            return ltp.get(instrumentToken).lastPrice;
         } catch (Throwable e) {
             throw new DataFetchException(e);
         }

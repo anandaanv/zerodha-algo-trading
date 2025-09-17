@@ -39,7 +39,7 @@ public class ASTASignalService {
                 return SignalType.None;
             }
 
-            Map<String, BarSeries> aliases = new HashMap<>();
+            Map<String, IntervalBarSeries> aliases = new HashMap<>();
             aliases.put("wave", wave);
             if (tide != null) {
                 aliases.put("tide", tide);

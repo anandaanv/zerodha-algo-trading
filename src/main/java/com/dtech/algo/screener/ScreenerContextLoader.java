@@ -1,8 +1,10 @@
 package com.dtech.algo.screener;
 
 import com.dtech.algo.runner.candle.LatestBarSeriesProvider;
+import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.kitecon.controller.BarSeriesHelper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeries;
 
@@ -37,12 +39,13 @@ import java.util.regex.Pattern;
  * The loader populates ScreenerContext.aliases with alias -> BarSeries.
  */
 @RequiredArgsConstructor
+@Service
 public class ScreenerContextLoader {
 
     private static final Pattern OPTION_PATTERN = Pattern.compile("^(CE|PE)(-?\\d+)$", Pattern.CASE_INSENSITIVE);
 
     private final BarSeriesHelper barSeriesProvider;
-    private final OptionSymbolResolver optionSymbolResolver;
+    private final OptionSymbolResolver optionSymbolResolver = new DefaultOptionSymbolResolver();
 
     /**
      * Build a ScreenerContext for the provided mapping.
@@ -53,7 +56,7 @@ public class ScreenerContextLoader {
      */
     public ScreenerContext load(String baseSymbol, Map<String, SeriesSpec> mapping, int nowIndex, String timeframe) {
         Objects.requireNonNull(mapping, "mapping must not be null");
-        Map<String, BarSeries> aliases = new HashMap<>();
+        Map<String, IntervalBarSeries> aliases = new HashMap<>();
 
         for (Map.Entry<String, SeriesSpec> e : mapping.entrySet()) {
             String alias = e.getKey();
@@ -83,7 +86,7 @@ public class ScreenerContextLoader {
                 }
             }
 
-            BarSeries series = barSeriesProvider.getIntervalBarSeries(instrumentToLoad, interval);
+            IntervalBarSeries series = barSeriesProvider.getIntervalBarSeries(instrumentToLoad, interval);
             aliases.put(alias, series);
         }
 
