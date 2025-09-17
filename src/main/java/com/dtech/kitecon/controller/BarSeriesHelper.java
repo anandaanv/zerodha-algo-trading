@@ -224,4 +224,11 @@ public class BarSeriesHelper {
         }
         return successCount;
     }
+
+    public Double getLastPrice(Instrument instrument) throws StrategyException {
+        BarSeriesConfig config = createBarSeriesConfig(instrument.getTradingsymbol(),
+                Interval.Day.name());
+        return barSeriesLoader.loadBarSeries(config).getLastBar().getClosePrice().doubleValue();
+    }
+
 }

@@ -1,10 +1,13 @@
 package com.dtech.algo.runner.candle;
 
 import com.dtech.algo.exception.StrategyException;
+import com.dtech.algo.series.Exchange;
+import com.dtech.algo.series.InstrumentType;
 import com.dtech.algo.series.Interval;
 import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
+import com.dtech.kitecon.data.Instrument;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.cache.annotation.Cacheable;
