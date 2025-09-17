@@ -14,9 +14,15 @@ public interface MarketDataFetch {
 
   String getProfile() throws IOException, KiteException;
 
-  void fetch(DateRange dateRange, String instrumentToken, Interval interval)
+  List<Candle> fetch(DateRange dateRange, String instrumentToken, Interval interval)
       throws DataFetchException;
 
-  List<Candle> fetchTodaysData(Instrument instrument, Interval interval)
+    List<Candle> fetch(DateRange dateRange, String instrumentToken, Interval interval, boolean continuous)
+            throws DataFetchException;
+
+    List<Candle> fetchTodaysData(Instrument instrument, Interval interval)
           throws DataFetchException;
-}
+
+    public Double getLastPrice(Instrument instrument) throws DataFetchException;
+
+    }

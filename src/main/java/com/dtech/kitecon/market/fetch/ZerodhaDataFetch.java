@@ -14,6 +14,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -34,14 +35,29 @@ public class ZerodhaDataFetch implements MarketDataFetch{
   }
 
   @Override
-  public void fetch(DateRange dateRange, String instrumentToken, Interval interval)
+  public List<Candle> fetch(DateRange dateRange, String instrumentToken, Interval interval)
       throws DataFetchException {
-    try {
-      HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
-          dateRange.getStartDate()),
-          Date.from(dateRange.getEndDate()),
-          instrumentToken,
-          interval.getKiteKey(), false, true);
+      return fetch(dateRange, instrumentToken, interval, false);
+  }
+
+    @Override
+    public List<Candle> fetch(DateRange dateRange, String instrumentToken, Interval interval, boolean continuous)
+            throws DataFetchException {
+        try {
+            HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
+                            dateRange.getStartDate()),
+                    Date.from(dateRange.getEndDate()),
+                    instrumentToken,
+                    interval.getKiteKey(), continuous, true);
+            List<Candle> baseCandles = candleFacade.buildCandlesFromOLSHStream(interval, dateFormat, // reuse existing parser
+              // create an Instrument placeholder with only token if needed (caller passes instrument separately),
+              // but this method signature receives only token; we will let callers call the other fetch variant
+              // that also passes an Instrument where needed. To keep minimal change, we parse without instrument-specific fields.
+              new Instrument() {{
+                setInstrumentToken(Long.parseLong(instrumentToken));
+              }},
+              candles);
+      return baseCandles;
     } catch (Throwable e) {
       throw new DataFetchException(e);
     }
@@ -66,5 +82,14 @@ public class ZerodhaDataFetch implements MarketDataFetch{
       throw new DataFetchException(e);
     }
   }
+
+    public Double getLastPrice(Instrument instrument) throws DataFetchException {
+        try {
+            return kiteConnectConfig.getKiteConnect().getLTP(new String[]{instrument.getTradingsymbol()}).get(instrument.getTradingsymbol()).lastPrice;
+        } catch (Throwable e) {
+            throw new DataFetchException(e);
+        }
+    }
+
 
 }

@@ -18,10 +18,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalUnit;
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import jakarta.transaction.Transactional;
@@ -54,28 +51,31 @@ public class DataDownloader {
         Instrument instrument = downloadRequest.getInstrument();
         Instant startDate = dateRange.getStartDate();
         Instant endDate = dateRange.getEndDate();
-//    candleRepository
-//        .deleteByInstrumentAndTimeframeAndTimestampBetween(instrument, interval,
-//            startDate.minusSeconds(1).toLocalDateTime(),
-//            endDate.toLocalDateTime().plusSeconds(1));
         try {
             HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
                             startDate),
                     Date.from(endDate),
                     String.valueOf(instrument.getInstrumentToken()),
-                    interval.getKiteKey(), false, true);
-            Instant timeStart = Instant.parse(candles.dataArrayList.getFirst().timeStamp).minus(1, ChronoUnit.SECONDS);
-            Instant timesEnd = Instant.parse(candles.dataArrayList.getLast().timeStamp).plus(1, ChronoUnit.SECONDS);
-            List<Candle> existingData = candleRepository.findAllByInstrumentAndTimeframeAndTimestampBetween(instrument, interval,
-                    timeStart,
-                    timesEnd);
+                    interval.getKiteKey(), downloadRequest.isContinuous(), true);
+            Map<Instant, Candle> dataMap = new HashMap<>();
+            if(downloadRequest.isClean()) {
+                candleRepository.deleteByInstrumentAndTimeframe(instrument, interval);
+            } else {
+                Instant timeStart = CandleFacade.getInstant(dateFormat, candles.dataArrayList.getFirst()).minus(1, ChronoUnit.SECONDS);
+                Instant timesEnd = CandleFacade.getInstant(dateFormat, candles.dataArrayList.getLast()).plus(1, ChronoUnit.SECONDS);
+                List<Candle> existingData = candleRepository.findAllByInstrumentAndTimeframeAndTimestampBetween(instrument, interval,
+                        timeStart,
+                        timesEnd);
+                dataMap = existingData.stream().collect(Collectors.toMap(candle -> candle.getTimestamp(), candle -> candle));
+            }
 
-            Map<Instant, Candle> datamap = existingData.stream().collect(Collectors.toMap(candle -> candle.getTimestamp(), candle -> candle));
             List<Candle> databaseCandles = candleFacade.buildCandlesFromOLSHStreamFailSafe(
-                    interval, dateFormat, instrument, candles, datamap);
+                    interval, dateFormat, instrument, candles, dataMap);
             candleRepository.saveAll(databaseCandles);
         } catch (InputException ex) {
-            log.error(ex.message);
+            log.error(ex.getMessage());
+        } catch (RuntimeException ex) {
+            log.catching(ex);
         }
 
     }

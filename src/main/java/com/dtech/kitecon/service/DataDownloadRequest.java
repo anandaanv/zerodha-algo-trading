@@ -14,4 +14,6 @@ public class DataDownloadRequest {
   private Instrument instrument;
   private DateRange dateRange;
   private Interval interval;
+  private boolean clean;
+  private boolean continuous;
 }

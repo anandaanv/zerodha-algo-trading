@@ -95,7 +95,7 @@ public class DataFetchService {
     public void updateInstrumentToLatest(String instrumentName, Interval interval, String[] exchanges) {
         LocalDateTime startDate = LocalDateTime.now().minus(4, ChronoUnit.MONTHS);
         List<Instrument> primaryInstruments = getInstrumentList(instrumentName, exchanges, startDate);
-        primaryInstruments.forEach(instrument -> this.updateInstrument(instrument, interval));
+        primaryInstruments.forEach(instrument -> this.updateInstrument(instrument, interval, false));
     }
 
     private List<Instrument> getInstrumentList(String instrumentName, String[] exchanges,
@@ -117,10 +117,10 @@ public class DataFetchService {
                 .getTotalAvailableDuration(instrument.getExchange(), interval);
         Instant startTime = endTime.minus(totalAvailableDuration, ChronoUnit.DAYS);
         int sliceSize = historicalDateLimit.getDuration(instrument.getExchange(), interval);
-        fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, startTime);
+        fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, startTime, false);
     }
 
-    public void updateInstrument(Instrument instrument, Interval interval) {
+    public void updateInstrument(Instrument instrument, Interval interval, boolean clean) {
         Instant endTime = Instant.now();
         Candle latestCandle = candleRepository
                 .findFirstByInstrumentAndTimeframeOrderByTimestampDesc(instrument, interval);
@@ -129,12 +129,12 @@ public class DataFetchService {
         } else {
             Instant latestTimestamp = latestCandle.getTimestamp();
             int sliceSize = historicalDateLimit.getDuration(instrument.getExchange(), interval);
-            fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, latestTimestamp);
+            fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, latestTimestamp, clean);
         }
     }
 
-    private void fetchDataAndUpdateDatabase(Instrument instrument, Interval interval,
-                                            Instant endTime, int sliceSize, Instant startDate) {
+    public void fetchDataAndUpdateDatabase(Instrument instrument, Interval interval,
+                                           Instant endTime, int sliceSize, Instant startDate, boolean clean) {
         List<DateRange> dateRangeList = DateRange.builder()
                 .endDate(endTime)
                 .startDate(startDate)
@@ -146,6 +146,7 @@ public class DataFetchService {
                     .dateRange(dateRange)
                     .instrument(instrument)
                     .interval(interval)
+                    .clean(clean)
                     .build();
             RateLimiter rateLimiter = RateLimiter.create(3.0); // rate is "2 permits per second"
             try {
