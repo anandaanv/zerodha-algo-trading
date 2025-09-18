@@ -1,0 +1,28 @@
+package com.dtech.algo.screener.web.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.util.List;
+import java.util.Map;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ScreenerUpsertRequest {
+    private String script;
+    private String timeframe;
+
+    // Will be serialized into configJson
+    // mapping: structure aligned with backend expectations
+    private Map<String, Object> mapping;
+    // workflow steps, e.g., ["SCRIPT", "OPENAI"]
+    private List<String> workflow;
+
+    // Stored as-is into promptJson (stringified JSON)
+    private String promptJson;
+
+    // Charts to analyze; stored as JSON array string in chartsJson
+    private List<String> charts;
+}
