@@ -1,0 +1,21 @@
+/* Minimal styles for screener pages */
+:root { color-scheme: light dark; }
+body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, Apple Color Emoji, Segoe UI Emoji; }
+.container { max-width: 980px; margin: 24px auto; padding: 0 16px; }
+.card { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); color: #e6edf3; }
+h1 { font-size: 28px; margin: 0 0 16px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+label { display: block; font-weight: 600; margin-bottom: 6px; }
+input[type="text"], input[type="number"], textarea, select { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #334155; background: #0b1324; color: #e6edf3; }
+textarea { min-height: 120px; }
+.row { margin-bottom: 14px; }
+.muted { color: #9fb2c8; font-size: 12px; }
+.btn { padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; background: #1e293b; color: #e6edf3; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn.primary { background: #2563eb; border-color: #2563eb; }
+.toolbar { display: flex; gap: 10px; margin-top: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #334155; border-radius: 999px; }
+.inline { display: inline-flex; align-items: center; gap: 8px; }
+.error { color: #ef4444; }
+.success { color: #22c55e; }
+.section-title { margin-top: 20px; font-size: 18px; }
+code.inline { background: #0b1324; padding: 2px 6px; border-radius: 8px; border: 1px solid #334155; }
