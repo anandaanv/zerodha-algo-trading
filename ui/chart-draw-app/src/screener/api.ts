@@ -16,6 +16,26 @@ export type ScreenerResponse = {
   chartsJson: string;
 };
 
+export type IntervalUiMapping = Record<string, string>; // { "1m": "OneMinute", ... }
+
+export async function getIntervalUiMapping(): Promise<IntervalUiMapping> {
+  const res = await fetch("/api/intervals/mapping");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getSeriesEnums(): Promise<string[]> {
+  const res = await fetch("/api/screener-meta/series-enums");
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function createScreener(payload: UpsertPayload): Promise<ScreenerResponse> {
   const res = await fetch("/api/screeners", {
     method: "POST",
