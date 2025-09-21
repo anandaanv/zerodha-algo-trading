@@ -1,28 +1,51 @@
-import React, { useMemo, useState } from "react";
-import { UpsertPayload, createScreener } from "../api";
+import React, { useEffect, useMemo, useState } from "react";
+import { UpsertPayload, createScreener, getIntervalUiMapping, getSeriesEnums, IntervalUiMapping } from "../api";
 
-const WORKFLOW_OPTIONS = ["SCRIPT", "OPENAI"] as const;
+type AliasRow = {
+  alias: string;
+  interval: string;
+  seriesEnum: string;
+};
 
 export default function ScreenerForm() {
-  const [timeframe, setTimeframe] = useState("DAY_1");
-  const [script, setScript] = useState<string>("// Write your screener script here");
-  const [mappingJson, setMappingJson] = useState<string>(`{
-  "NSE_EQ": { "symbol": "NIFTY", "interval": "DAY_1", "candles": 500 }
-}`);
-  const [workflow, setWorkflow] = useState<string[]>(["SCRIPT"]);
-  const [promptJson, setPromptJson] = useState<string>(`{
-  "system": "You are a helpful assistant for chart analysis.",
-  "temperature": 0.2
-}`);
-  const [chartsInput, setChartsInput] = useState<string>("DAY_1,HOUR_1");
+  const [rows, setRows] = useState<AliasRow[]>([]);
+  const [tfMap, setTfMap] = useState<IntervalUiMapping>({});
+  const [seriesEnums, setSeriesEnums] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const requiresOpenAI = useMemo(() => workflow.includes("OPENAI"), [workflow]);
+  const tfOptions = useMemo(() => Object.entries(tfMap).map(([label, enumName]) => ({ label, value: enumName })), [tfMap]);
 
-  function toggleWorkflow(opt: (typeof WORKFLOW_OPTIONS)[number]) {
-    setWorkflow((prev) => (prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]));
+  useEffect(() => {
+    async function load() {
+      try {
+        const [map, enums] = await Promise.all([getIntervalUiMapping(), getSeriesEnums()]);
+        setTfMap(map || {});
+        setSeriesEnums(enums || []);
+        const firstTf = Object.values(map || {})[0] || "";
+        const firstSe = (enums && enums[0]) || "";
+        setRows([{ alias: "wave", interval: firstTf, seriesEnum: firstSe }]);
+      } catch (e: any) {
+        setError(e.message || "Failed to load metadata.");
+      }
+    }
+    load();
+  }, []);
+
+  function addRow() {
+    const idx = rows.length + 1;
+    const firstTf = tfOptions[0]?.value || "";
+    const firstSe = seriesEnums[0] || "";
+    setRows((prev) => [...prev, { alias: `alias${idx}`, interval: firstTf, seriesEnum: firstSe }]);
+  }
+
+  function removeRow(index: number) {
+    setRows((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateRow(index: number, patch: Partial<AliasRow>) {
+    setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -31,29 +54,49 @@ export default function ScreenerForm() {
     setError(null);
     setSuccess(null);
 
-    let mapping: Record<string, unknown> | undefined;
-    try {
-      mapping = mappingJson.trim() ? JSON.parse(mappingJson) : undefined;
-    } catch {
+    if (rows.length === 0) {
       setSubmitting(false);
-      setError("Mapping JSON is invalid.");
+      setError("Please add at least one alias.");
       return;
     }
 
-    let charts: string[] | undefined;
-    try {
-      charts = chartsInput.split(",").map((s) => s.trim()).filter(Boolean);
-    } catch {
-      charts = undefined;
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (!r.alias.trim()) {
+        setSubmitting(false);
+        setError("Alias cannot be empty.");
+        return;
+      }
+      if (seen.has(r.alias.trim())) {
+        setSubmitting(false);
+        setError(`Duplicate alias: ${r.alias}`);
+        return;
+      }
+      seen.add(r.alias.trim());
+      if (!r.interval) {
+        setSubmitting(false);
+        setError(`Please select Interval for alias "${r.alias}".`);
+        return;
+      }
+      if (!r.seriesEnum) {
+        setSubmitting(false);
+        setError(`Please select SeriesEnum for alias "${r.alias}".`);
+        return;
+      }
     }
 
+    const mapping: Record<string, unknown> = {};
+    rows.forEach((r) => {
+      mapping[r.alias.trim()] = { reference: r.seriesEnum, interval: r.interval };
+    });
+
+    const timeframe = rows[0].interval;
+
     const payload: UpsertPayload = {
-      script,
+      script: rows.map((r) => `// ${r.alias}: ${r.seriesEnum} @ ${r.interval}`).join("\n") + "\n",
       timeframe,
       mapping,
-      workflow,
-      promptJson: requiresOpenAI ? promptJson : undefined,
-      charts,
+      workflow: ["SCRIPT"],
     };
 
     try {
@@ -68,56 +111,49 @@ export default function ScreenerForm() {
 
   return (
     <form onSubmit={onSubmit}>
-      <div className="grid">
-        <div>
-          <div className="row">
-            <label>Timeframe</label>
-            <input type="text" placeholder="e.g. DAY_1" value={timeframe} onChange={(e) => setTimeframe(e.target.value)} />
-            <div className="muted">
-              Must match backend interval names used elsewhere, e.g., <code className="inline">DAY_1</code>, <code className="inline">HOUR_1</code>.
-            </div>
-          </div>
+      <div className="row">
+        <label>Aliases</label>
+        <div className="muted">Add multiple aliases. Each alias has SeriesEnum, Interval, and a name.</div>
+      </div>
 
-          <div className="row">
-            <label>Workflow</label>
-            <div className="toolbar">
-              {WORKFLOW_OPTIONS.map((opt) => (
-                <label className="pill" key={opt}>
-                  <input type="checkbox" checked={workflow.includes(opt)} onChange={() => toggleWorkflow(opt)} />
-                  {opt}
-                </label>
+      {rows.map((r, i) => (
+        <div className="row" key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "center" }}>
+          <div>
+            <label>SeriesEnum</label>
+            <select value={r.seriesEnum} onChange={(e) => updateRow(i, { seriesEnum: e.target.value })}>
+              {seriesEnums.map((se) => (
+                <option key={se} value={se}>
+                  {se}
+                </option>
               ))}
-            </div>
-            <div className="muted">Enable OPENAI to attach an AI analysis step after the script.</div>
+            </select>
           </div>
-
-          {requiresOpenAI && (
-            <div className="row">
-              <label>Prompt JSON (only if OPENAI selected)</label>
-              <textarea spellCheck={false} value={promptJson} onChange={(e) => setPromptJson(e.target.value)} />
-              <div className="muted">Provide JSON prompt config consumed by your AI step.</div>
-            </div>
-          )}
-
-          <div className="row">
-            <label>Charts Intervals (comma-separated)</label>
-            <input type="text" placeholder="e.g. DAY_1,HOUR_1,MIN_5" value={chartsInput} onChange={(e) => setChartsInput(e.target.value)} />
-            <div className="muted">These intervals will be analyzed in the AI step (if enabled).</div>
+          <div>
+            <label>Interval</label>
+            <select value={r.interval} onChange={(e) => updateRow(i, { interval: e.target.value })}>
+              {tfOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label} ({opt.value})
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-
-        <div>
-          <div className="row">
-            <label>Script</label>
-            <textarea spellCheck={false} value={script} onChange={(e) => setScript(e.target.value)} />
+          <div>
+            <label>Alias name</label>
+            <input type="text" placeholder="e.g. wave, tide" value={r.alias} onChange={(e) => updateRow(i, { alias: e.target.value })} />
           </div>
-
-          <div className="row">
-            <label>Mapping JSON</label>
-            <textarea spellCheck={false} value={mappingJson} onChange={(e) => setMappingJson(e.target.value)} />
-            <div className="muted">Define series mapping required by your screener.</div>
+          <div>
+            <button type="button" className="btn" onClick={() => removeRow(i)} disabled={rows.length === 1}>
+              Remove
+            </button>
           </div>
         </div>
+      ))}
+
+      <div className="toolbar" style={{ marginTop: 8 }}>
+        <button type="button" className="btn" onClick={addRow}>
+          Add alias
+        </button>
       </div>
 
       {error && <div className="row error">{error}</div>}
@@ -131,15 +167,14 @@ export default function ScreenerForm() {
           type="button"
           className="btn"
           onClick={() => {
-            setScript("");
-            setMappingJson("");
-            setPromptJson("");
-            setChartsInput("");
-            setWorkflow(["SCRIPT"]);
-            setTimeframe("");
+            const firstTf = tfOptions[0]?.value || "";
+            const firstSe = seriesEnums[0] || "";
+            setRows([{ alias: "wave", interval: firstTf, seriesEnum: firstSe }]);
+            setError(null);
+            setSuccess(null);
           }}
         >
-          Clear
+          Reset
         </button>
       </div>
     </form>

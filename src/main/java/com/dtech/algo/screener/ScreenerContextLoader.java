@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.dtech.algo.screener.enums.SeriesEnum;
+import com.dtech.algo.screener.enums.SeriesEnum;
 
 /**
  * Loads a ScreenerContext from a mapping of alias -> SeriesSpec (reference and interval).
@@ -62,28 +64,24 @@ public class ScreenerContextLoader {
             String alias = e.getKey();
             SeriesSpec spec = e.getValue();
 
-            String reference = spec.reference().trim();
+            SeriesEnum reference = spec.reference();
             String interval = spec.interval().trim();
 
             String instrumentToLoad;
-            String refUpper = reference.toUpperCase(Locale.ROOT);
 
-            if ("SPOT".equals(refUpper)) {
+            if (reference == SeriesEnum.SPOT) {
                 instrumentToLoad = baseSymbol; // treat as spot
-            } else if ("FUT".equals(refUpper)) {
+            } else if (reference.isFuture()) {
                 instrumentToLoad = optionSymbolResolver.resolveFuture(baseSymbol);
+            } else if (reference.isOption()) {
+                OptionNomination nomination = new OptionNomination(
+                        InstrumentType.valueOf(reference.optionPrefix()),
+                        reference.optionOffset()
+                );
+                instrumentToLoad = optionSymbolResolver.resolveOption(baseSymbol, nomination);
             } else {
-                // try to parse option nomination like CE1, PE-1, etc.
-                Matcher m = OPTION_PATTERN.matcher(refUpper);
-                if (m.matches()) {
-                    String type = m.group(1).toUpperCase(Locale.ROOT); // CE or PE
-                    int offset = Integer.parseInt(m.group(2)); // can be negative for -1 etc.
-                    OptionNomination nomination = new OptionNomination(InstrumentType.valueOf(type), offset);
-                    instrumentToLoad = optionSymbolResolver.resolveOption(baseSymbol, nomination);
-                } else {
-                    // Not recognized -> treat as literal instrument name
-                    instrumentToLoad = reference;
-                }
+                // Fallback: treat as literal instrument name (shouldn't occur with enum)
+                instrumentToLoad = reference.name();
             }
 
             IntervalBarSeries series = barSeriesProvider.getIntervalBarSeries(instrumentToLoad, interval);
@@ -105,9 +103,12 @@ public class ScreenerContextLoader {
     /**
      * Simple container for series specification.
      */
-    public static record SeriesSpec(String reference, String interval) {
-        public static SeriesSpec of(String reference, String interval) {
+    public static record SeriesSpec(SeriesEnum reference, String interval) {
+        public static SeriesSpec of(SeriesEnum reference, String interval) {
             return new SeriesSpec(reference, interval);
+        }
+        public static SeriesSpec of(String reference, String interval) {
+            return new SeriesSpec(SeriesEnum.fromString(reference), interval);
         }
     }
 
