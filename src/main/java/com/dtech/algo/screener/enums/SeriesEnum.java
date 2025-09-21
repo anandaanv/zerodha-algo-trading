@@ -16,14 +16,27 @@ import java.util.regex.Pattern;
  * - FUT1 and FUT2 cover near and next futures (both map to resolveFuture in default resolver).
  */
 public enum SeriesEnum {
-    SPOT,
-    FUT1, FUT2,
+    SPOT(-1),
+    FUT1(0), FUT2(0),
 
-    CE1, CE2, CE3, CE4, CE5,
-    CE_1, CE_2, CE_3, CE_4, CE_5,
+    CE1(1), CE2(2), CE3(3), CE4(4), CE5(5),
+    CE_1(1), CE_2(2), CE_3(3), CE_4(4), CE_5(5),
 
-    PE1, PE2, PE3, PE4, PE5,
-    PE_1, PE_2, PE_3, PE_4, PE_5;
+    PE1(1), PE2(2), PE3(3), PE4(4), PE5(5),
+    PE_1(1), PE_2(2), PE_3(3), PE_4(4), PE_5(5);
+
+    private final int distance;
+
+    SeriesEnum(int distance) {
+        this.distance = distance;
+    }
+
+    /**
+     * Distance from spot for options (absolute strike steps). 0 for SPOT/FUTx.
+     */
+    public int distance() {
+        return distance;
+    }
 
     public boolean isSpot() {
         return this == SPOT;
