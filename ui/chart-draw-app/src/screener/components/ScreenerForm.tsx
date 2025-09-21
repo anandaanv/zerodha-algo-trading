@@ -7,15 +7,24 @@ type AliasRow = {
   seriesEnum: string;
 };
 
+const WORKFLOW_OPTIONS = ["SCRIPT", "OPENAI"] as const;
+
 export default function ScreenerForm() {
   const [rows, setRows] = useState<AliasRow[]>([]);
   const [tfMap, setTfMap] = useState<IntervalUiMapping>({});
   const [seriesEnums, setSeriesEnums] = useState<string[]>([]);
+  // Additional fields
+  const [script, setScript] = useState<string>("");
+  const [workflow, setWorkflow] = useState<string[]>(["SCRIPT"]);
+  const [promptJson, setPromptJson] = useState<string>("{}");
+  const [chartsInput, setChartsInput] = useState<string>("");
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const tfOptions = useMemo(() => Object.entries(tfMap).map(([label, enumName]) => ({ label, value: enumName })), [tfMap]);
+  const requiresOpenAI = useMemo(() => workflow.includes("OPENAI"), [workflow]);
 
   useEffect(() => {
     async function load() {
@@ -46,6 +55,10 @@ export default function ScreenerForm() {
 
   function updateRow(index: number, patch: Partial<AliasRow>) {
     setRows((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  function toggleWorkflow(opt: (typeof WORKFLOW_OPTIONS)[number]) {
+    setWorkflow((prev) => (prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]));
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -85,18 +98,28 @@ export default function ScreenerForm() {
       }
     }
 
+    // Build mapping
     const mapping: Record<string, unknown> = {};
     rows.forEach((r) => {
       mapping[r.alias.trim()] = { reference: r.seriesEnum, interval: r.interval };
     });
 
+    // timeframe metadata: first alias interval
     const timeframe = rows[0].interval;
 
+    // Parse charts list
+    let charts: string[] | undefined = undefined;
+    if (chartsInput && chartsInput.trim()) {
+      charts = chartsInput.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+
     const payload: UpsertPayload = {
-      script: rows.map((r) => `// ${r.alias}: ${r.seriesEnum} @ ${r.interval}`).join("\n") + "\n",
+      script,
       timeframe,
       mapping,
-      workflow: ["SCRIPT"],
+      workflow,
+      promptJson: requiresOpenAI ? promptJson : undefined,
+      charts,
     };
 
     try {
@@ -111,6 +134,7 @@ export default function ScreenerForm() {
 
   return (
     <form onSubmit={onSubmit}>
+      {/* Alias rows */}
       <div className="row">
         <label>Aliases</label>
         <div className="muted">Add multiple aliases. Each alias has SeriesEnum, Interval, and a name.</div>
@@ -156,6 +180,43 @@ export default function ScreenerForm() {
         </button>
       </div>
 
+      {/* Script */}
+      <div className="row">
+        <label>Script</label>
+        <textarea spellCheck={false} value={script} onChange={(e) => setScript(e.target.value)} placeholder="// Your screener script here" />
+        <div className="muted">You can reference the aliases defined above in your script.</div>
+      </div>
+
+      {/* Workflow */}
+      <div className="row">
+        <label>Workflow</label>
+        <div className="toolbar">
+          {WORKFLOW_OPTIONS.map((opt) => (
+            <label className="pill" key={opt}>
+              <input type="checkbox" checked={workflow.includes(opt)} onChange={() => toggleWorkflow(opt)} />
+              {opt}
+            </label>
+          ))}
+        </div>
+        <div className="muted">Enable OPENAI to attach an AI analysis step after the script.</div>
+      </div>
+
+      {/* Prompt JSON shown only if OPENAI */}
+      {requiresOpenAI && (
+        <div className="row">
+          <label>Prompt JSON</label>
+          <textarea spellCheck={false} value={promptJson} onChange={(e) => setPromptJson(e.target.value)} />
+          <div className="muted">Provide JSON prompt configuration for the AI step.</div>
+        </div>
+      )}
+
+      {/* Charts */}
+      <div className="row">
+        <label>Charts Intervals (comma-separated)</label>
+        <input type="text" placeholder="e.g. DAY_1,HOUR_1" value={chartsInput} onChange={(e) => setChartsInput(e.target.value)} />
+        <div className="muted">These intervals will be analyzed in the AI step (if enabled).</div>
+      </div>
+
       {error && <div className="row error">{error}</div>}
       {success && <div className="row success">{success}</div>}
 
@@ -170,6 +231,10 @@ export default function ScreenerForm() {
             const firstTf = tfOptions[0]?.value || "";
             const firstSe = seriesEnums[0] || "";
             setRows([{ alias: "wave", interval: firstTf, seriesEnum: firstSe }]);
+            setScript("");
+            setWorkflow(["SCRIPT"]);
+            setPromptJson("{}");
+            setChartsInput("");
             setError(null);
             setSuccess(null);
           }}
