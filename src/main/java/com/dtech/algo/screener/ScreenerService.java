@@ -76,20 +76,28 @@ public class ScreenerService {
 
     @NotNull
     private OpenAIUOW getOpenAIUOW(Screener screener, UnitOfWork next) {
-        return new OpenAIUOW(screener.getPromptJson(), next) {
+        // promptId takes precedence over text promptJson
+        String effectivePrompt = (screener.getPromptId() != null && !screener.getPromptId().isBlank())
+                ? screener.getPromptId()
+                : screener.getPromptJson();
+
+        return new OpenAIUOW(effectivePrompt, next) {
             @Override
             public void run(ScreenerContext ctx) {
-
                 try {
-                    String[] ints = new ObjectMapper().readValue(screener.getChartsJson(), String[].class);
-                    List<Interval> intervals = Arrays.stream(ints).map(Interval::valueOf).toList();
-                    ChartAnalysisRequest request = ChartAnalysisRequest.builder()
-                        .symbol(ctx.getSymbol())
-                        .timeframes(intervals)
-                        .candleCount(300)
-                        .build();
-                System.out.println(chartAnalysisService.analyzeCharts(request));
-            }catch (JsonProcessingException e) {
+                    // chartsJson contains alias names to be sent to AI
+                    String[] aliasArr = new ObjectMapper().readValue(screener.getChartsJson(), String[].class);
+                    List<String> chartAliases = Arrays.stream(aliasArr).map(String::trim).filter(s -> !s.isBlank()).toList();
+
+                    // If you still want to do chart analysis, integrate by resolving aliases to series here.
+                    // For now, we just attach aliases to context params for downstream use.
+                    Map<String, Object> params = new HashMap<>(ctx.getParams() == null ? Map.of() : ctx.getParams());
+                    params.put("chartAliases", chartAliases);
+                    ScreenerContext enriched = ctx.toBuilder().params(params).build();
+
+                    // Proceed to next unit (OpenAI prompt handling, etc.)
+                    super.run(enriched);
+                } catch (JsonProcessingException e) {
                     throw new RuntimeException(e);
                 }
             }

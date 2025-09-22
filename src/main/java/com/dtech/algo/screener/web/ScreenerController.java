@@ -89,6 +89,8 @@ public class ScreenerController {
         s.setTimeframe(request.getTimeframe());
         s.setConfigJson(buildConfigJson(request));
         s.setPromptJson(request.getPromptJson());
+        s.setPromptId(request.getPromptId());
+        // charts represent alias names to be sent to AI
         s.setChartsJson(writeJsonArray(request.getCharts()));
     }
 

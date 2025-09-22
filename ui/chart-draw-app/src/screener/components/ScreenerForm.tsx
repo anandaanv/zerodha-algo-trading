@@ -16,6 +16,7 @@ export default function ScreenerForm() {
   // Additional fields
   const [script, setScript] = useState<string>("");
   const [workflow, setWorkflow] = useState<string[]>(["SCRIPT"]);
+  const [promptId, setPromptId] = useState<string>("");
   const [promptJson, setPromptJson] = useState<string>("{}");
   const [chartsInput, setChartsInput] = useState<string>("");
 
@@ -120,7 +121,9 @@ export default function ScreenerForm() {
       timeframe,
       mapping,
       workflow,
-      promptJson: requiresOpenAI ? promptJson : undefined,
+      // Precedence: if promptId provided, send it; else send promptJson (only when OPENAI selected)
+      promptId: requiresOpenAI && promptId.trim() ? promptId.trim() : undefined,
+      promptJson: requiresOpenAI && !promptId.trim() ? promptJson : undefined,
       charts,
     };
 
@@ -235,20 +238,38 @@ export default function ScreenerForm() {
         <div className="muted">Enable OPENAI to attach an AI analysis step after the script.</div>
       </div>
 
-      {/* Prompt JSON shown only if OPENAI */}
+      {/* Prompt */}
       {requiresOpenAI && (
-        <div className="row">
-          <label>Prompt JSON</label>
-          <textarea spellCheck={false} value={promptJson} onChange={(e) => setPromptJson(e.target.value)} />
-          <div className="muted">Provide JSON prompt configuration for the AI step.</div>
-        </div>
+        <>
+          <div className="row">
+            <label>Prompt ID (optional)</label>
+            <input
+              type="text"
+              placeholder="If provided, takes precedence over Prompt Text"
+              value={promptId}
+              onChange={(e) => setPromptId(e.target.value)}
+            />
+            <div className="muted">Provide a prompt identifier to fetch a stored prompt.</div>
+          </div>
+          {!promptId.trim() && (
+            <div className="row">
+              <label>Prompt Text (JSON or plain)</label>
+              <textarea
+                spellCheck={false}
+                value={promptJson}
+                onChange={(e) => setPromptJson(e.target.value)}
+              />
+              <div className="muted">If Prompt ID is empty, this text will be used.</div>
+            </div>
+          )}
+        </>
       )}
 
-      {/* Charts */}
+      {/* Chart Aliases */}
       <div className="row">
-        <label>Charts Intervals (comma-separated)</label>
-        <input type="text" placeholder="e.g. DAY_1,HOUR_1" value={chartsInput} onChange={(e) => setChartsInput(e.target.value)} />
-        <div className="muted">These intervals will be analyzed in the AI step (if enabled).</div>
+        <label>Chart Aliases (comma-separated)</label>
+        <input type="text" placeholder="e.g. wave,tide" value={chartsInput} onChange={(e) => setChartsInput(e.target.value)} />
+        <div className="muted">Aliases defined above that you want to send to AI.</div>
       </div>
 
       {error && <div className="row error">{error}</div>}

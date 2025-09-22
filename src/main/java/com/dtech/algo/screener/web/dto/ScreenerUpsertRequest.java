@@ -23,6 +23,9 @@ public class ScreenerUpsertRequest {
     // Stored as-is into promptJson (stringified JSON)
     private String promptJson;
 
-    // Charts to analyze; stored as JSON array string in chartsJson
+    // Optional prompt id; if provided, it takes precedence over promptJson
+    private String promptId;
+
+    // Chart aliases to send to AI; stored as JSON array string in chartsJson
     private List<String> charts;
 }
