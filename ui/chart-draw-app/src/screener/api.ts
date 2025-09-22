@@ -52,6 +52,19 @@ export async function createScreener(payload: UpsertPayload): Promise<ScreenerRe
   return res.json();
 }
 
+export async function updateScreener(id: number, payload: UpsertPayload): Promise<ScreenerResponse> {
+  const res = await fetch(`/api/screeners/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function listScreeners(): Promise<ScreenerResponse[]> {
   const res = await fetch("/api/screeners");
   if (!res.ok) {

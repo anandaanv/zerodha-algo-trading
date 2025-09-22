@@ -46,7 +46,7 @@ export default function ScreenerListPage() {
           <td>{wf.length ? wf.join(", ") : "-"}</td>
           <td>
             <Link className="btn" to={`/screener/${s.id}`}>
-              View
+              Edit
             </Link>
           </td>
         </tr>
