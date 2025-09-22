@@ -1,7 +1,12 @@
 package com.dtech.algo.screener.web.dto;
 
-import com.dtech.algo.screener.db.Screener;
+import com.dtech.algo.screener.ScreenerConfig;
+import com.dtech.algo.screener.domain.Screener;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Builder;
+
+import java.util.List;
+import java.util.Map;
 
 @Builder
 public record ScreenerResponse(
@@ -12,14 +17,27 @@ public record ScreenerResponse(
         String promptJson,
         String chartsJson
 ) {
-    public static ScreenerResponse from(Screener s) {
-        return ScreenerResponse.builder()
-                .id(s.getId())
-                .timeframe(s.getTimeframe())
-                .script(s.getScript())
-                .configJson(s.getConfigJson())
-                .promptJson(s.getPromptJson())
-                .chartsJson(s.getChartsJson())
-                .build();
+    /**
+     * Build response from domain Screener by serializing config and charts.
+     */
+    public static ScreenerResponse fromDomain(Screener s, ObjectMapper objectMapper) {
+        try {
+            ScreenerConfig cfg = ScreenerConfig.builder()
+                    .mapping(s.getMapping() == null ? Map.of() : s.getMapping())
+                    .workflow(s.getWorkflow() == null ? List.of() : s.getWorkflow())
+                    .build();
+            String cfgJson = objectMapper.writeValueAsString(cfg);
+            String chartsJson = objectMapper.writeValueAsString(s.getCharts() == null ? List.of() : s.getCharts());
+            return ScreenerResponse.builder()
+                    .id(s.getId())
+                    .timeframe(s.getTimeframe())
+                    .script(s.getScript())
+                    .configJson(cfgJson)
+                    .promptJson(s.getPromptJson())
+                    .chartsJson(chartsJson)
+                    .build();
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Failed to build response: " + e.getMessage(), e);
+        }
     }
 }

@@ -23,8 +23,8 @@ public class ScreenerContext {
     String symbol;
     String timeframe;
 
-    // The Screener entity that initiated this context (for downstream decisions)
-    com.dtech.algo.screener.db.Screener screener;
+    // Business Screener model (parsed from entity)
+    com.dtech.algo.screener.domain.Screener screener;
 
     public BarSeries getSeries(String alias) {
         return aliases != null ? aliases.get(alias) : null;

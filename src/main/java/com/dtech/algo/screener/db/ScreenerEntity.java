@@ -11,7 +11,7 @@ import java.time.Instant;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Screener {
+public class ScreenerEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
