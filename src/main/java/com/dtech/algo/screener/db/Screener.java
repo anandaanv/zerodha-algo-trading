@@ -40,12 +40,16 @@ public class Screener {
     @Column(length = 64)
     private String timeframe;
 
-    // OpenAI prompt JSON (object or id)
+    // OpenAI prompt JSON (object)
     @Lob
     @Column(name = "prompt_json", columnDefinition = "TEXT")
     private String promptJson;
 
-    // JSON array declaring which charts (aliases + intervals) should be sent to OpenAI
+    // Optional prompt identifier; if provided, it takes precedence over promptJson
+    @Column(name = "prompt_id", length = 255)
+    private String promptId;
+
+    // JSON array declaring which charts (aliases) should be sent to OpenAI
     @Lob
     @Column(name = "charts_json", columnDefinition = "TEXT")
     private String chartsJson;

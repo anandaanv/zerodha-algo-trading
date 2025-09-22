@@ -3,7 +3,10 @@ export type UpsertPayload = {
   timeframe: string;
   mapping?: Record<string, unknown>;
   workflow?: string[];
+  // Either provide promptId or promptJson; promptId takes precedence
+  promptId?: string;
   promptJson?: string;
+  // Chart aliases to send to AI
   charts?: string[];
 };
 
