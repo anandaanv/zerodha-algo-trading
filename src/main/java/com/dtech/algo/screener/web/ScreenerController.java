@@ -1,18 +1,20 @@
 package com.dtech.algo.screener.web;
 
+import com.dtech.algo.screener.ScreenerContextLoader;
 import com.dtech.algo.screener.ScreenerService;
-import com.dtech.algo.screener.db.Screener;
+import com.dtech.algo.screener.db.ScreenerEntity;
 import com.dtech.algo.screener.db.ScreenerRepository;
+import com.dtech.algo.screener.domain.Screener;
 import com.dtech.algo.screener.web.dto.ScreenerResponse;
 import com.dtech.algo.screener.web.dto.ScreenerUpsertRequest;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @RestController
 @RequiredArgsConstructor
@@ -27,33 +29,43 @@ public class ScreenerController {
 
     @GetMapping
     public List<ScreenerResponse> list() {
-        return screenerRepository.findAll().stream().map(ScreenerResponse::from).toList();
+        return screenerRepository.findAll().stream()
+                .map(e -> Screener.fromEntity(e, objectMapper))
+                .map(d -> ScreenerResponse.fromDomain(d, objectMapper))
+                .toList();
     }
 
     @GetMapping("/{id}")
     public ScreenerResponse get(@PathVariable long id) {
-        Screener s = screenerRepository.findById(id)
+        ScreenerEntity e = screenerRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + id));
-        return ScreenerResponse.from(s);
+        Screener d = Screener.fromEntity(e, objectMapper);
+        return ScreenerResponse.fromDomain(d, objectMapper);
     }
 
     @PostMapping
     public ScreenerResponse create(@RequestBody ScreenerUpsertRequest request) {
-        Screener s = new Screener();
-        applyUpsert(s, request);
-        s.setDirty(true);
-        Screener saved = screenerRepository.save(s);
-        return ScreenerResponse.from(saved);
+        Screener domain = buildDomainFromRequest(request, null);
+        ScreenerEntity toSave = domain.toEntity(objectMapper);
+        toSave.setDirty(true);
+        ScreenerEntity saved = screenerRepository.save(toSave);
+        Screener persisted = Screener.fromEntity(saved, objectMapper);
+        return ScreenerResponse.fromDomain(persisted, objectMapper);
     }
 
     @PutMapping("/{id}")
     public ScreenerResponse update(@PathVariable long id, @RequestBody ScreenerUpsertRequest request) {
-        Screener s = screenerRepository.findById(id)
+        ScreenerEntity existing = screenerRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + id));
-        applyUpsert(s, request);
-        s.setDirty(true);
-        Screener saved = screenerRepository.save(s);
-        return ScreenerResponse.from(saved);
+        Screener domain = buildDomainFromRequest(request, id);
+        ScreenerEntity toSave = domain.toEntity(objectMapper);
+        // Preserve flags/timestamps not set by domain
+        toSave.setDirty(true);
+        toSave.setDeleted(existing.getDeleted());
+        toSave.setCreatedAt(existing.getCreatedAt());
+        ScreenerEntity saved = screenerRepository.save(toSave);
+        Screener persisted = Screener.fromEntity(saved, objectMapper);
+        return ScreenerResponse.fromDomain(persisted, objectMapper);
     }
 
     @PostMapping("/{id}/run")
@@ -84,33 +96,30 @@ public class ScreenerController {
         }
     }
 
-    private void applyUpsert(Screener s, ScreenerUpsertRequest request) {
-        s.setScript(request.getScript());
-        s.setTimeframe(request.getTimeframe());
-        s.setConfigJson(buildConfigJson(request));
-        s.setPromptJson(request.getPromptJson());
-        s.setPromptId(request.getPromptId());
-        // charts represent alias names to be sent to AI
-        s.setChartsJson(writeJsonArray(request.getCharts()));
-    }
-
-    private String buildConfigJson(ScreenerUpsertRequest request) {
-        Map<String, Object> cfg = new HashMap<>();
-        if (request.getMapping() != null) cfg.put("mapping", request.getMapping());
-        if (request.getWorkflow() != null) cfg.put("workflow", request.getWorkflow());
-        try {
-            return objectMapper.writeValueAsString(cfg);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Invalid config JSON: " + e.getMessage(), e);
+    private Screener buildDomainFromRequest(ScreenerUpsertRequest req, Long id) {
+        Map<String, ScreenerContextLoader.SeriesSpec> typedMapping = Map.of();
+        if (req.getMapping() != null) {
+            typedMapping = req.getMapping().entrySet().stream().collect(Collectors.toMap(
+                    Map.Entry::getKey,
+                    e -> objectMapper.convertValue(e.getValue(), ScreenerContextLoader.SeriesSpec.class)
+            ));
         }
-    }
+        List<com.dtech.algo.screener.enums.WorkflowStep> steps = Optional.ofNullable(req.getWorkflow())
+                .orElse(List.of()).stream()
+                .map(s -> com.dtech.algo.screener.enums.WorkflowStep.valueOf(s))
+                .toList();
 
-    private String writeJsonArray(List<String> values) {
-        if (values == null) return "[]";
-        try {
-            return objectMapper.writeValueAsString(values);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Invalid array JSON: " + e.getMessage(), e);
-        }
+        return Screener.builder()
+                .id(id == null ? 0L : id)
+                .name(null)
+                .script(req.getScript())
+                .timeframe(req.getTimeframe())
+                .promptId(req.getPromptId())
+                .promptJson(req.getPromptJson())
+                .mapping(typedMapping)
+                .workflow(steps)
+                .charts(Optional.ofNullable(req.getCharts()).orElse(List.of()))
+                .symbols(List.of())
+                .build();
     }
 }
