@@ -7,9 +7,30 @@ type AliasRow = {
   seriesEnum: string;
 };
 
+type SeriesSpec = { reference: string; interval: string };
+
+type ScreenerInitial = {
+  script: string;
+  timeframe?: string;
+  mapping?: Record<string, SeriesSpec>;
+  workflow?: string[];
+  promptId?: string;
+  promptJson?: string;
+  charts?: string[];
+};
+
+type Props = {
+  mode?: "create" | "edit";
+  initial?: ScreenerInitial | null;
+  onSubmit?: (payload: UpsertPayload) => Promise<void> | void;
+  submitLabel?: string;
+};
+
 const WORKFLOW_OPTIONS = ["SCRIPT", "OPENAI"] as const;
 
-export default function ScreenerForm() {
+export default function ScreenerForm(props: Props) {
+  const { mode, initial, onSubmit: externalSubmit, submitLabel } = props;
+
   const [rows, setRows] = useState<AliasRow[]>([]);
   const [tfMap, setTfMap] = useState<IntervalUiMapping>({});
   const [seriesEnums, setSeriesEnums] = useState<string[]>([]);
@@ -25,9 +46,11 @@ export default function ScreenerForm() {
   const [success, setSuccess] = useState<string | null>(null);
   const [validating, setValidating] = useState(false);
   const [validateMsg, setValidateMsg] = useState<string | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   const tfOptions = useMemo(() => Object.entries(tfMap).map(([label, enumName]) => ({ label, value: enumName })), [tfMap]);
   const requiresOpenAI = useMemo(() => workflow.includes("OPENAI"), [workflow]);
+  const isEditMode = (mode === "edit") || !!externalSubmit || !!initial;
 
   useEffect(() => {
     async function load() {
@@ -35,15 +58,39 @@ export default function ScreenerForm() {
         const [map, enums] = await Promise.all([getIntervalUiMapping(), getSeriesEnums()]);
         setTfMap(map || {});
         setSeriesEnums(enums || []);
+
         const firstTf = Object.values(map || {})[0] || "";
         const firstSe = (enums && enums[0]) || "";
-        setRows([{ alias: "wave", interval: firstTf, seriesEnum: firstSe }]);
+
+        if (!initialized) {
+          if (initial) {
+            // Build rows from initial mapping, fallback to defaults if empty
+            const initRows: AliasRow[] = initial.mapping
+              ? Object.entries(initial.mapping).map(([alias, spec]) => ({
+                  alias,
+                  interval: spec?.interval || firstTf,
+                  seriesEnum: spec?.reference || firstSe,
+                }))
+              : [];
+            setRows(initRows.length ? initRows : [{ alias: "wave", interval: firstTf, seriesEnum: firstSe }]);
+            setScript(initial.script || "");
+            setWorkflow(initial.workflow && initial.workflow.length ? initial.workflow : ["SCRIPT"]);
+            setPromptId(initial.promptId || "");
+            setPromptJson(initial.promptJson ?? "{}");
+            setChartsInput((initial.charts && initial.charts.length ? initial.charts : []).join(","));
+          } else {
+            // Create mode defaults
+            setRows([{ alias: "wave", interval: firstTf, seriesEnum: firstSe }]);
+          }
+          setInitialized(true);
+        }
       } catch (e: any) {
         setError(e.message || "Failed to load metadata.");
       }
     }
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial, initialized]);
 
   function addRow() {
     const idx = rows.length + 1;
@@ -128,14 +175,21 @@ export default function ScreenerForm() {
     };
 
     try {
-      const res = await createScreener(payload);
-      setSuccess(`Created screener #${res.id}`);
+      if (externalSubmit) {
+        await externalSubmit(payload);
+        setSuccess("Saved.");
+      } else {
+        const res = await createScreener(payload);
+        setSuccess(`Created screener #${res.id}`);
+      }
     } catch (err: any) {
-      setError(err.message || "Failed to create screener.");
+      setError(err.message || (externalSubmit ? "Failed to save screener." : "Failed to create screener."));
     } finally {
       setSubmitting(false);
     }
   }
+
+  const submitBtnLabel = submitLabel ?? (isEditMode ? (submitting ? "Saving…" : "Save") : (submitting ? "Creating…" : "Create Screener"));
 
   return (
     <form onSubmit={onSubmit}>
@@ -277,7 +331,7 @@ export default function ScreenerForm() {
 
       <div className="toolbar">
         <button type="submit" className="btn primary" disabled={submitting}>
-          {submitting ? "Creating…" : "Create Screener"}
+          {submitBtnLabel}
         </button>
         <button
           type="button"
@@ -285,11 +339,29 @@ export default function ScreenerForm() {
           onClick={() => {
             const firstTf = tfOptions[0]?.value || "";
             const firstSe = seriesEnums[0] || "";
-            setRows([{ alias: "wave", interval: firstTf, seriesEnum: firstSe }]);
-            setScript("");
-            setWorkflow(["SCRIPT"]);
-            setPromptJson("{}");
-            setChartsInput("");
+
+            if (initial) {
+              const initRows: AliasRow[] = initial.mapping
+                ? Object.entries(initial.mapping).map(([alias, spec]) => ({
+                    alias,
+                    interval: spec?.interval || firstTf,
+                    seriesEnum: spec?.reference || firstSe,
+                  }))
+                : [{ alias: "wave", interval: firstTf, seriesEnum: firstSe }];
+              setRows(initRows);
+              setScript(initial.script || "");
+              setWorkflow(initial.workflow && initial.workflow.length ? initial.workflow : ["SCRIPT"]);
+              setPromptId(initial.promptId || "");
+              setPromptJson(initial.promptJson ?? "{}");
+              setChartsInput((initial.charts && initial.charts.length ? initial.charts : []).join(","));
+            } else {
+              setRows([{ alias: "wave", interval: firstTf, seriesEnum: firstSe }]);
+              setScript("");
+              setWorkflow(["SCRIPT"]);
+              setPromptId("");
+              setPromptJson("{}");
+              setChartsInput("");
+            }
             setError(null);
             setSuccess(null);
           }}
