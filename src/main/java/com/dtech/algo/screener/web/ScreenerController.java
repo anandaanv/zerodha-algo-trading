@@ -23,6 +23,7 @@ public class ScreenerController {
     private final ScreenerRepository screenerRepository;
     private final ObjectMapper objectMapper;
     private final ScreenerService screenerService;
+    private final com.dtech.algo.screener.ScreenerRegistryService screenerRegistryService;
 
     @GetMapping
     public List<ScreenerResponse> list() {
@@ -61,6 +62,26 @@ public class ScreenerController {
                     @RequestParam int nowIndex,
                     @RequestParam(required = false) String timeframe) {
         screenerService.run(id, symbol, nowIndex, timeframe, null);
+    }
+
+    /**
+     * Validate a screener Kotlin script without persisting anything.
+     * Returns { "ok": true } on success or { "ok": false, "error": "..." } on failure.
+     */
+    @PostMapping("/validate")
+    public Map<String, Object> validate(@RequestBody Map<String, String> body) {
+        String code = body == null ? null : body.get("script");
+        if (code == null || code.isBlank()) {
+            return Map.of("ok", false, "error", "Script is empty");
+        }
+        try {
+            screenerRegistryService.validateScript(code);
+            return Map.of("ok", true);
+        } catch (Exception e) {
+            String msg = e.getMessage();
+            if (msg == null && e.getCause() != null) msg = e.getCause().getMessage();
+            return Map.of("ok", false, "error", msg == null ? e.toString() : msg);
+        }
     }
 
     private void applyUpsert(Screener s, ScreenerUpsertRequest request) {

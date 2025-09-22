@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { UpsertPayload, createScreener, getIntervalUiMapping, getSeriesEnums, IntervalUiMapping } from "../api";
+import { UpsertPayload, createScreener, getIntervalUiMapping, getSeriesEnums, IntervalUiMapping, validateScreenerScript } from "../api";
 
 type AliasRow = {
   alias: string;
@@ -22,6 +22,8 @@ export default function ScreenerForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [validateMsg, setValidateMsg] = useState<string | null>(null);
 
   const tfOptions = useMemo(() => Object.entries(tfMap).map(([label, enumName]) => ({ label, value: enumName })), [tfMap]);
   const requiresOpenAI = useMemo(() => workflow.includes("OPENAI"), [workflow]);
@@ -184,6 +186,38 @@ export default function ScreenerForm() {
       <div className="row">
         <label>Script</label>
         <textarea spellCheck={false} value={script} onChange={(e) => setScript(e.target.value)} placeholder="// Your screener script here" />
+        <div className="toolbar" style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className="btn"
+            onClick={async () => {
+              setValidateMsg(null);
+              setError(null);
+              setSuccess(null);
+              setValidating(true);
+              try {
+                const res = await validateScreenerScript(script);
+                if (res.ok) {
+                  setValidateMsg("Script compiled successfully.");
+                } else {
+                  setValidateMsg(res.error || "Compilation failed.");
+                }
+              } catch (e: any) {
+                setValidateMsg(e.message || "Compilation failed.");
+              } finally {
+                setValidating(false);
+              }
+            }}
+            disabled={validating || !script.trim()}
+          >
+            {validating ? "Validating…" : "Validate Script"}
+          </button>
+        </div>
+        {validateMsg && (
+          <div className={/successfully/.test(validateMsg) ? "row success" : "row error"} style={{ marginTop: 8 }}>
+            {validateMsg}
+          </div>
+        )}
         <div className="muted">You can reference the aliases defined above in your script.</div>
       </div>
 

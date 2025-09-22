@@ -110,16 +110,55 @@ public class ScreenerRegistryService {
                 log.info("Registered screener (id={}) into registry", id);
             }
         } catch (Exception e) {
+            log.error("Failed to compile/register screener id=" + id + ": " + e.getMessage(), e);
             throw new IllegalArgumentException("Failed to compile/register screener id=" + id + ": " + e.getMessage(), e);
         }
     }
 
+    /**
+     * Validate a screener script without registering it.
+     * Uses a fresh Kotlin engine instance to avoid any shared-state collisions.
+     *
+     * @throws IllegalArgumentException if compilation fails
+     */
+    public void validateScript(String code) {
+        try {
+            getNewEngine(ClassLoader.getSystemClassLoader()).eval(code);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Compilation error: " + e.getMessage(), e);
+        }
+    }
+
+    private void logEngineParams() {
+        System.out.println("Engine CL: " + kotlinEngine.getClass().getClassLoader());
+        System.out.println("Intrinsics CL: " + kotlin.jvm.internal.Intrinsics.class.getClassLoader());
+        System.out.println("This class CL: " + getClass().getClassLoader());
+        System.out.println("TCCL: " + Thread.currentThread().getContextClassLoader());
+    }
+
+    /**
+     * Renames a top-level function named 'screener' to the given unique name.
+     * This is a lightweight text transform designed for typical scripts of the form:
+     *   fun screener(ctx: ScreenerContext, cb: SignalCallback) = ...
+     */
+    private String renameTopLevelScreener(String src, String uniqueName) {
+        if (src == null || src.isBlank()) return src;
+        // Replace only the function declaration 'fun screener(' with the unique name
+        // Keep whitespace tolerant; do not touch other identifiers
+        return src.replaceFirst("(?m)\\bfun\\s+screener\\s*\\(", "fun " + uniqueName + "(");
+    }
+
     private void initEngineIfRequired() {
         if (this.kotlinEngine == null) {
-            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
-            ScriptEngineManager manager = new ScriptEngineManager(tccl);
-            this.kotlinEngine = manager.getEngineByName("kotlin");
+            ClassLoader tccl = ClassLoader.getSystemClassLoader();
+            this.kotlinEngine = getNewEngine(tccl);
         }
+
+    }
+
+    private ScriptEngine getNewEngine(ClassLoader tccl) {
+        ScriptEngineManager manager = new ScriptEngineManager(tccl);
+        return manager.getEngineByName("kotlin");
     }
 
     private List<Path> discoverScripts(Path dir) {
