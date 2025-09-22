@@ -79,3 +79,16 @@ export async function runScreener(id: number, params: { symbol: string; nowIndex
     throw new Error(text || `Run failed: ${res.status}`);
   }
 }
+
+export async function validateScreenerScript(script: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/screeners/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ script }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    return { ok: false, error: text || `Validate request failed: ${res.status}` };
+  }
+  return res.json();
+}
