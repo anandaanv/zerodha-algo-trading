@@ -23,6 +23,7 @@ public class ScreenerService {
     private final ObjectMapper objectMapper;
     private final ScreenerRegistryService screenerRegistryService;
     private final ScreenerContextLoader loader;
+    private final com.dtech.algo.service.OpenAIScreenService openAIScreenService;
 
     /**
      * Run the screener identified by ID for a given underlying symbol.
@@ -66,7 +67,7 @@ public class ScreenerService {
 
     private OpenAIUOW getOpenAIUOW(Screener screener, UnitOfWork next) {
         String effectivePrompt = screener.getEffectivePrompt();
-        return new OpenAIUOW(effectivePrompt, next) {
+        return new OpenAIUOW(effectivePrompt, openAIScreenService, next) {
             @Override
             public void run(ScreenerContext ctx) {
                 // Domain already carries charts as aliases in screener.getCharts()

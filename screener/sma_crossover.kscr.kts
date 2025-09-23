@@ -6,4 +6,12 @@ fun screener(ctx: ScreenerContext, cb: SignalCallback) = dsl(ctx, cb).run {
     val long = sma("wave", 20).crossesOver(sma(50))
     entryIf(long, "sma-crossover")
     exitIf(!long, "sma-crossdown")
+
+    // Return ScreenerOutput via DSL
+    output(
+        long,
+        mapOf(
+            "signal" to if (long) "long" else "none"
+        )
+    )
 }

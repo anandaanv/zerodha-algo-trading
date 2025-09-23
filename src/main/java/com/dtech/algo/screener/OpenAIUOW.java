@@ -1,5 +1,6 @@
 package com.dtech.algo.screener;
 
+import com.dtech.algo.controller.dto.OpenAIAnalysisRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -10,15 +11,48 @@ import java.util.Map;
 public class OpenAIUOW implements UnitOfWork {
 
     private final String promptJson;
+    private final com.dtech.algo.service.OpenAIScreenService openAIScreenService;
     private final UnitOfWork next;
 
     @Override
     public void run(ScreenerContext ctx) {
-        // Placeholder: in future, use promptJson + chartsJson + ctx to call OpenAI and possibly emit signals
-        log.debug("OpenAIUOW.run screenerId={}, symbol={}",
-                ctx.getScreener() != null ? ctx.getScreener().getId() : null, ctx.getSymbol());
-        if (next != null) {
-            next.run(ctx);
+        // Invoke OpenAI using request data from context/screener (no hardcoded prompt)
+        try {
+            var screener = ctx.getScreener();
+            String symbol = ctx.getSymbol();
+
+            String promptId = screener != null ? screener.getPromptId() : null;
+            String promptJsonLocal = screener != null ? screener.getPromptJson() : promptJson;
+
+            OpenAIAnalysisRequest request =
+                    com.dtech.algo.controller.dto.OpenAIAnalysisRequest.builder()
+                            .symbol(symbol)
+                            .mapping(screener != null ? screener.getMapping() : null)
+                            .promptId(promptId)
+                            .promptJson(promptJsonLocal)
+                            .build();
+
+            com.dtech.algo.controller.dto.ChartAnalysisResponse response = openAIScreenService.analyze(request);
+
+            // Attach results to context params for downstream steps
+            var params = new java.util.HashMap<>(ctx.getParams() == null ? java.util.Map.of() : ctx.getParams());
+            params.put("openAiAnalysis", response.getAnalysis());
+            params.put("openAiJsonAnalysis", response.getJsonAnalysis());
+            ScreenerContext updated = ctx.toBuilder().params(params).build();
+
+            log.debug("OpenAIUOW.run screenerId={}, symbol={}, analysisLen={}",
+                    screener != null ? screener.getId() : null,
+                    symbol,
+                    response.getAnalysis() != null ? response.getAnalysis().length() : 0);
+
+            if (next != null) {
+                next.run(updated);
+            }
+        } catch (Exception e) {
+            log.error("OpenAIUOW.run error: {}", e.getMessage(), e);
+            if (next != null) {
+                next.run(ctx);
+            }
         }
     }
 

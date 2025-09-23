@@ -2,6 +2,7 @@ package com.dtech.algo.screener.dsl;
 
 import com.dtech.algo.screener.ScreenerContext;
 import com.dtech.algo.screener.SignalCallback;
+import com.dtech.algo.screener.ScreenerOutput;
 import com.dtech.algo.screener.dsl.averages.Averages;
 import com.dtech.algo.screener.dsl.bands.Bands;
 import com.dtech.algo.screener.dsl.oscillators.Oscillators;
@@ -96,6 +97,18 @@ public class KDsl {
         m.put("tags", tags != null ? tags : new HashSet<>());
         m.put("debug", debug != null ? debug : Map.of());
         return m;
+    }
+
+    // --- Output helper for Kotlin scripts ---
+    public ScreenerOutput output(boolean passed) {
+        return output(passed, Map.of());
+    }
+
+    public ScreenerOutput output(boolean passed, Map<String, Object> debug) {
+        ScreenerOutput out = new ScreenerOutput();
+        out.setPassed(passed);
+        out.setDebug(debug != null ? debug : Map.of());
+        return out;
     }
 
     // --- Convenience ---

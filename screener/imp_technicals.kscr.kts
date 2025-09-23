@@ -60,4 +60,15 @@ fun screener(ctx: ScreenerContext, cb: SignalCallback) = dsl(ctx, cb).run {
 
     entryIf(finalBuy, "imp-tech-buy")
     exitIf(finalSell, "imp-tech-sell")
+
+    // Return ScreenerOutput via DSL
+    output(
+        finalBuy,
+        mapOf(
+            "finalBuy" to finalBuy,
+            "finalSell" to finalSell,
+            "emaAlignedUp" to emaAlignedUp,
+            "emaAlignedDown" to emaAlignedDown
+        )
+    )
 }

@@ -75,10 +75,6 @@ public class ScreenerRegistryService {
         log.info("Screener registry initialized. Compiled: {}, total registered: {}", compiled, registry.size());
     }
 
-    public Set<String> listNames() {
-        return Collections.unmodifiableSet(registry.keySet());
-    }
-
     public void run(String name, ScreenerContext ctx, SignalCallback callback) {
         ScreenerScript script = registry.get(name);
         if (script == null) {
@@ -87,12 +83,12 @@ public class ScreenerRegistryService {
         script.evaluate(ctx, callback);
     }
 
-    public void run(long id, ScreenerContext ctx, SignalCallback callback) {
+    public ScreenerOutput run(long id, ScreenerContext ctx, SignalCallback callback) {
         ScreenerScript script = registryById.get(id);
         if (script == null) {
             throw new IllegalArgumentException("Screener not registered for id: " + id);
         }
-        script.evaluate(ctx, callback);
+        return script.evaluate(ctx, callback);
     }
 
     /**
@@ -201,13 +197,29 @@ public class ScreenerRegistryService {
         }
         return (ctx, callback) -> {
             try {
-                inv.invokeFunction("screener", ctx, callback);
+                Object ret = inv.invokeFunction("screener", ctx, callback);
+                if (ret instanceof ScreenerOutput so) {
+                    return so;
+                }
+                return toOutput(ret);
             } catch (NoSuchMethodException e) {
                 log.error("Script {} missing function 'screener(ctx, cb)'.", scriptPath.getFileName());
+                return ScreenerOutput.builder()
+                        .passed(false)
+                        .debug(Map.of("error", "Missing function screener(ctx, cb)"))
+                        .build();
             } catch (Throwable t) {
                 log.error("Error executing script {}: {}", scriptPath.getFileName(), t.getMessage(), t);
+                return getErrorOutput(t);
             }
         };
+    }
+
+    private static ScreenerOutput getErrorOutput(Throwable t) {
+        return ScreenerOutput.builder()
+                .passed(false)
+                .debug(Map.of("error", t.getMessage()))
+                .build();
     }
 
     /**
@@ -221,38 +233,16 @@ public class ScreenerRegistryService {
         }
         return (ctx, callback) -> {
             try {
-                inv.invokeFunction("screener", ctx, callback);
+                Object ret = inv.invokeFunction("screener", ctx, callback);
+                return toOutput(ret);
             } catch (NoSuchMethodException e) {
                 log.error("Registered script missing function 'screener(ctx, cb)'.");
+                return getErrorOutput(e);
             } catch (Throwable t) {
                 log.error("Error executing registered script: {}", t.getMessage(), t);
+                return getErrorOutput(t);
             }
         };
-    }
-
-    @SuppressWarnings("unchecked")
-    private ScreenerResult toResult(Object ret) {
-        if (ret instanceof ScreenerResult sr) return sr;
-        if (ret instanceof Map<?, ?> m) {
-            boolean entry = asBool(m.get("entry"));
-            boolean exit = asBool(m.get("exit"));
-            Double score = asDouble(m.get("score"));
-            Set<String> tags = Optional.ofNullable((Collection<?>) m.get("tags"))
-                    .map(c -> c.stream().map(String::valueOf).collect(Collectors.toSet()))
-                    .orElseGet(Set::of);
-            Map<String, Object> debug = Optional.ofNullable((Map<String, Object>) m.get("debug"))
-                    .orElseGet(Map::of);
-            return ScreenerResult.builder()
-                    .entry(entry)
-                    .exit(exit)
-                    .score(score)
-                    .tags(tags)
-                    .debug(debug)
-                    .build();
-        }
-        return ScreenerResult.builder().entry(false).exit(false)
-                .debug(Map.of("error", "Unsupported return type: " + (ret == null ? "null" : ret.getClass().getName())))
-                .build();
     }
 
     private boolean asBool(Object v) {
@@ -268,5 +258,34 @@ public class ScreenerRegistryService {
             try { return Double.parseDouble(s); } catch (Exception ignore) {}
         }
         return null;
+    }
+
+    /**
+     * Convert various return types from scripts into ScreenerOutput.
+     * Supports: ScreenerOutput, Boolean, Map with "passed" flag; falls back to passed=false.
+     */
+    @SuppressWarnings("unchecked")
+    private ScreenerOutput toOutput(Object ret) {
+        if (ret instanceof ScreenerOutput so) return so;
+        if (ret instanceof Boolean b) {
+            return ScreenerOutput.builder().passed(b).build();
+        }
+        if (ret instanceof Map<?, ?> m) {
+            boolean passed = asBool(((Map<?, ?>) m).get("passed"));
+            Map<String, Object> debug;
+            try {
+                debug = (Map<String, Object>) m;
+            } catch (Exception ignore) {
+                debug = Map.of();
+            }
+            return ScreenerOutput.builder()
+                    .passed(passed)
+                    .debug(debug)
+                    .build();
+        }
+        return ScreenerOutput.builder()
+                .passed(false)
+                .debug(Map.of("info", "Unsupported or null return type: " + (ret == null ? "null" : ret.getClass().getName())))
+                .build();
     }
 }
