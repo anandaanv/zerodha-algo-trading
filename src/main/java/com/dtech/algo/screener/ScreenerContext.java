@@ -1,5 +1,6 @@
 package com.dtech.algo.screener;
 
+import com.dtech.algo.screener.domain.Screener;
 import com.dtech.algo.series.IntervalBarSeries;
 import lombok.Builder;
 import lombok.Value;
@@ -24,7 +25,7 @@ public class ScreenerContext {
     String timeframe;
 
     // Business Screener model (parsed from entity)
-    com.dtech.algo.screener.domain.Screener screener;
+    Screener screener;
 
     public BarSeries getSeries(String alias) {
         return aliases != null ? aliases.get(alias) : null;

@@ -2,40 +2,28 @@ package com.dtech.algo.service;
 
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
-import com.openai.core.JsonArray;
-import com.openai.core.JsonField;
 import com.openai.models.beta.threads.ThreadCreateAndRunParams;
-import com.openai.models.beta.threads.ThreadCreateParams;
-import com.openai.models.beta.threads.messages.*;
+import com.openai.models.beta.threads.messages.ImageFile;
+import com.openai.models.beta.threads.messages.ImageFileContentBlock;
+import com.openai.models.beta.threads.messages.MessageContentPartParam;
+import com.openai.models.beta.threads.messages.TextContentBlockParam;
 import com.openai.models.beta.threads.runs.Run;
 import com.openai.models.beta.threads.runs.RunRetrieveParams;
-import com.openai.models.beta.threads.runs.RunStatus;
-import com.openai.models.evals.runs.RunCreateParams;
 import com.openai.models.files.FileCreateParams;
 import com.openai.models.files.FileObject;
 import com.openai.models.files.FilePurpose;
-import com.openai.models.graders.gradermodels.LabelModelGrader;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.content.Media;
-import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.FileUrlResource;
 import org.springframework.stereotype.Service;
-import org.springframework.util.MimeTypeUtils;
 
-import java.awt.*;
 import java.io.File;
-import java.net.MalformedURLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Stream;
 
 /**
  * Service for interacting with OpenAI API

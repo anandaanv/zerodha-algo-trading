@@ -14,7 +14,15 @@ public class ScreenerUOW implements UnitOfWork {
     @Override
     public void run(ScreenerContext ctx) {
         SignalCallback cb = next != null ? next : NOOP;
-        registry.run(screenerId, ctx, cb);
+        ScreenerOutput output = getScreenerOutput(ctx, cb);
+        if (output.isPassed()) {
+            next().run(ctx);
+        }
+    }
+
+    private ScreenerOutput getScreenerOutput(ScreenerContext ctx, SignalCallback cb) {
+        ScreenerOutput output = registry.run(screenerId, ctx, cb);
+        return output;
     }
 
     @Override
