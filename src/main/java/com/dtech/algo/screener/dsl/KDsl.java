@@ -105,10 +105,7 @@ public class KDsl {
     }
 
     public ScreenerOutput output(boolean passed, Map<String, Object> debug) {
-        ScreenerOutput out = new ScreenerOutput();
-        out.setPassed(passed);
-        out.setDebug(debug != null ? debug : Map.of());
-        return out;
+        return ScreenerOutput.builder().passed(passed).debug(debug).build();
     }
 
     // --- Convenience ---
