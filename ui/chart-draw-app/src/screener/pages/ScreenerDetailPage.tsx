@@ -79,6 +79,7 @@ export default function ScreenerDetailPage() {
             mode="edit"
             initial={initial}
             submitLabel="Save"
+            screenerId={screenerId}
             onSubmit={async (payload) => {
               await updateScreener(screenerId, payload);
             }}

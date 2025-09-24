@@ -4,6 +4,7 @@ import com.dtech.algo.screener.db.ScreenerEntity;
 import com.dtech.algo.screener.db.ScreenerRepository;
 import com.dtech.algo.screener.domain.Screener;
 import com.dtech.algo.screener.enums.WorkflowStep;
+import com.dtech.algo.screener.kotlinrunner.KotlinScriptExecutor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class ScreenerService {
     private final ScreenerRegistryService screenerRegistryService;
     private final ScreenerContextLoader loader;
     private final com.dtech.algo.service.OpenAIScreenService openAIScreenService;
+    private final KotlinScriptExecutor kotlinScriptExecutor;
 
     /**
      * Run the screener identified by ID for a given underlying symbol.
@@ -32,11 +34,8 @@ public class ScreenerService {
         // Load entity and convert to domain
         ScreenerEntity entity = screenerRepository.findById(screenerId)
                 .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + screenerId));
-        if (Boolean.TRUE.equals(entity.getDirty())) {
-            screenerRegistryService.registerScript(entity.getId(), entity.getScript());
-            entity.setDirty(false);
-            screenerRepository.save(entity);
-        }
+        entity.setDirty(false);
+        screenerRepository.save(entity);
         Screener screener = Screener.fromEntity(entity, objectMapper);
 
         Map<String, ScreenerContextLoader.SeriesSpec> mapping = Optional.ofNullable(screener.getMapping())
@@ -61,9 +60,44 @@ public class ScreenerService {
             next = getOpenAIUOW(screener, next);
         }
 
-        UnitOfWork head = new ScreenerUOW(screenerRegistryService, screenerId, next);
+        UnitOfWork head = new ScreenerUOW(kotlinScriptExecutor, entity.getScript(), next);
         head.run(ctx);
     }
+
+//    public void runOld(long screenerId, String symbol, int nowIndex, @Nullable String timeframe, @Nullable SignalCallback callback) {
+//        // Load entity and convert to domain
+//        ScreenerEntity entity = screenerRepository.findById(screenerId)
+//                .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + screenerId));
+//        screenerRegistryService.registerScript(entity.getId(), entity.getScript(), entity.getDirty());
+//        entity.setDirty(false);
+//        screenerRepository.save(entity);
+//        Screener screener = Screener.fromEntity(entity, objectMapper);
+//
+//        Map<String, ScreenerContextLoader.SeriesSpec> mapping = Optional.ofNullable(screener.getMapping())
+//                .orElseThrow(() -> new IllegalArgumentException("Screener mapping is missing for id=" + screenerId));
+//
+//        // Build context via loader
+//        String tf = timeframe != null && !timeframe.isBlank() ? timeframe : screener.getTimeframe();
+//        ScreenerContext baseCtx = loader.load(symbol, mapping, nowIndex, tf);
+//
+//        // Attach domain screener to the context
+//        ScreenerContext ctx = baseCtx.toBuilder()
+//                .screener(screener)
+//                .build();
+//
+//        // Build callback chain flags via domain
+//        boolean hasOpenAI = Optional.ofNullable(screener.getWorkflow())
+//                .orElse(List.of(WorkflowStep.SCRIPT))
+//                .contains(WorkflowStep.OPENAI);
+//
+//        UnitOfWork next = null;
+//        if (hasOpenAI) {
+//            next = getOpenAIUOW(screener, next);
+//        }
+//
+//        UnitOfWork head = new ScreenerUOW(null /*screenerRegistryService*/, screenerId, next);
+//        head.run(ctx);
+//    }
 
     private OpenAIUOW getOpenAIUOW(Screener screener, UnitOfWork next) {
         String effectivePrompt = screener.getEffectivePrompt();

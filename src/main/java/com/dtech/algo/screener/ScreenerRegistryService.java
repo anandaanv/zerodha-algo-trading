@@ -94,7 +94,10 @@ public class ScreenerRegistryService {
     /**
      * Registers/compiles a Kotlin screener by id from raw script text.
      */
-    public void registerScript(long id, String code) {
+    public void registerScript(long id, String code, boolean force) {
+        if(!force && registryById.containsKey(id)) {
+            return;
+        }
         initEngineIfRequired();
         if (this.kotlinEngine == null) {
             throw new IllegalStateException("Kotlin JSR-223 engine not available on classpath.");
@@ -149,7 +152,6 @@ public class ScreenerRegistryService {
             ClassLoader tccl = ClassLoader.getSystemClassLoader();
             this.kotlinEngine = getNewEngine(tccl);
         }
-
     }
 
     private ScriptEngine getNewEngine(ClassLoader tccl) {

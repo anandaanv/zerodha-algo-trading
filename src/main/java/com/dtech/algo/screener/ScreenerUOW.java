@@ -1,5 +1,6 @@
 package com.dtech.algo.screener;
 
+import com.dtech.algo.screener.kotlinrunner.KotlinScriptExecutor;
 import lombok.RequiredArgsConstructor;
 
 import java.util.Map;
@@ -7,8 +8,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ScreenerUOW implements UnitOfWork {
 
-    private final ScreenerRegistryService registry;
-    private final long screenerId;
+    private final KotlinScriptExecutor registry;
+    private final String code;
     private final UnitOfWork next;
 
     @Override
@@ -21,8 +22,13 @@ public class ScreenerUOW implements UnitOfWork {
     }
 
     private ScreenerOutput getScreenerOutput(ScreenerContext ctx, SignalCallback cb) {
-        ScreenerOutput output = registry.run(screenerId, ctx, cb);
-        return output;
+        ScreenerOutput output = null;
+        try {
+            Object entry = registry.evalReturnObject(code, null);
+            return registry.invokeMethod(entry, "screener", ctx, cb);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -51,5 +57,15 @@ public class ScreenerUOW implements UnitOfWork {
         if (next != null) next.match(type, ctx, meta);
     }
 
-    private static final SignalCallback NOOP = null;
+    private static final SignalCallback NOOP = new SignalCallback() {
+        @Override
+        public void onEntry(ScreenerContext ctx, String... tags) {
+
+        }
+
+        @Override
+        public void onExit(ScreenerContext ctx, String... tags) {
+
+        }
+    };
 }

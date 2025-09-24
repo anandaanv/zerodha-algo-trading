@@ -53,7 +53,7 @@ dependencies {
     implementation 'org.ta4j:ta4j-core:0.18'
     implementation 'org.ta4j:ta4j-examples:0.18'
     testImplementation 'com.h2database:h2'
-    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+//    developmentOnly 'org.springframework.boot:spring-boot-devtools'
     implementation group: 'mysql', name: 'mysql-connector-java', version: '8.0.33'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
