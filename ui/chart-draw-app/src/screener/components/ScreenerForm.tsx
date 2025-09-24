@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { UpsertPayload, createScreener, getIntervalUiMapping, getSeriesEnums, IntervalUiMapping, validateScreenerScript } from "../api";
+import { UpsertPayload, createScreener, getIntervalUiMapping, getSeriesEnums, IntervalUiMapping, validateScreenerScript, runScreener } from "../api";
 
 type AliasRow = {
   alias: string;
@@ -24,12 +24,14 @@ type Props = {
   initial?: ScreenerInitial | null;
   onSubmit?: (payload: UpsertPayload) => Promise<void> | void;
   submitLabel?: string;
+  // When provided, enables "Test Screener" calls against backend run endpoint
+  screenerId?: number;
 };
 
 const WORKFLOW_OPTIONS = ["SCRIPT", "OPENAI"] as const;
 
 export default function ScreenerForm(props: Props) {
-  const { mode, initial, onSubmit: externalSubmit, submitLabel } = props;
+  const { mode, initial, onSubmit: externalSubmit, submitLabel, screenerId } = props;
 
   const [rows, setRows] = useState<AliasRow[]>([]);
   const [tfMap, setTfMap] = useState<IntervalUiMapping>({});
@@ -40,6 +42,14 @@ export default function ScreenerForm(props: Props) {
   const [promptId, setPromptId] = useState<string>("");
   const [promptJson, setPromptJson] = useState<string>("{}");
   const [chartsInput, setChartsInput] = useState<string>("");
+
+  // Test run fields
+  const [testSymbol, setTestSymbol] = useState<string>("");
+  const [testTimeframe, setTestTimeframe] = useState<string>("");
+  const [testNowIndex, setTestNowIndex] = useState<number>(0);
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState<string | null>(null);
+  const [testError, setTestError] = useState<boolean>(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -324,6 +334,86 @@ export default function ScreenerForm(props: Props) {
         <label>Chart Aliases (comma-separated)</label>
         <input type="text" placeholder="e.g. wave,tide" value={chartsInput} onChange={(e) => setChartsInput(e.target.value)} />
         <div className="muted">Aliases defined above that you want to send to AI.</div>
+      </div>
+
+      {/* Test Screener */}
+      <div className="row" style={{ borderTop: "1px solid var(--border-color, #eee)", marginTop: 16, paddingTop: 16 }}>
+        <label>Test Screener</label>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+          <div>
+            <label>Symbol</label>
+            <input
+              type="text"
+              placeholder="e.g. INFY, AAPL"
+              value={testSymbol}
+              onChange={(e) => setTestSymbol(e.target.value)}
+            />
+          </div>
+          <div>
+            <label>Timeframe</label>
+            <select
+              value={testTimeframe || (rows[0]?.interval || "")}
+              onChange={(e) => setTestTimeframe(e.target.value)}
+            >
+              {tfOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label} ({opt.value})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label>nowIndex</label>
+            <input
+              type="number"
+              value={testNowIndex}
+              onChange={(e) => setTestNowIndex(Number(e.target.value) || 0)}
+            />
+          </div>
+          <div>
+            <button
+              type="button"
+              className="btn"
+              disabled={!screenerId || !testSymbol.trim() || testing}
+              onClick={async () => {
+                setTestMsg(null);
+                setTestError(false);
+                if (!screenerId) {
+                  setTestMsg("Save the screener first to enable testing.");
+                  setTestError(true);
+                  return;
+                }
+                try {
+                  setTesting(true);
+                  await runScreener(screenerId, {
+                    symbol: testSymbol.trim(),
+                    nowIndex: testNowIndex,
+                    timeframe: testTimeframe || rows[0]?.interval || undefined,
+                  });
+                  setTestMsg(`Test ran successfully for ${testSymbol.trim()}.`);
+                  setTestError(false);
+                } catch (e: any) {
+                  setTestMsg(e?.message || "Test run failed.");
+                  setTestError(true);
+                } finally {
+                  setTesting(false);
+                }
+              }}
+            >
+              {testing ? "Testing…" : "Test Screener"}
+            </button>
+          </div>
+        </div>
+        {!screenerId && (
+          <div className="muted" style={{ marginTop: 8 }}>
+            Save the screener to enable test runs.
+          </div>
+        )}
+        {testMsg && (
+          <div className={`row ${testError ? "error" : "success"}`} style={{ marginTop: 8 }}>
+            {testMsg}
+          </div>
+        )}
       </div>
 
       {error && <div className="row error">{error}</div>}
