@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ScreenerResponse, getScreener, updateScreener } from "../api";
+import { ScreenerResponse, getScreener, updateScreener, getIntervalUiMapping, IntervalUiMapping, RunConfig } from "../api";
 import ScreenerForm from "../components/ScreenerForm";
 
 function tryParse(json: string): any {
@@ -27,6 +27,17 @@ export default function ScreenerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Scheduling UI state
+  const [tfMap, setTfMap] = useState<IntervalUiMapping>({});
+  const [scheduleTimeframe, setScheduleTimeframe] = useState<string>("");
+  const [symbolsInput, setSymbolsInput] = useState<string>("");
+  const [runConfigs, setRunConfigs] = useState<RunConfig[]>([]);
+  const [scheduling, setScheduling] = useState<boolean>(false);
+  const [scheduleMsg, setScheduleMsg] = useState<string | null>(null);
+  const [scheduleError, setScheduleError] = useState<boolean>(false);
+
+  const tfOptions = useMemo(() => Object.entries(tfMap).map(([label, enumName]) => ({ label, value: enumName })), [tfMap]);
+
   useEffect(() => {
     let mounted = true;
     setLoading(true);
@@ -40,6 +51,21 @@ export default function ScreenerDetailPage() {
       mounted = false;
     };
   }, [screenerId]);
+
+  useEffect(() => {
+    let mounted = true;
+    getIntervalUiMapping()
+      .then((map) => {
+        if (!mounted) return;
+        setTfMap(map || {});
+        const firstTf = Object.values(map || {})[0] || "";
+        setScheduleTimeframe(firstTf);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const initial = useMemo(() => {
     if (!data) return null;
@@ -57,6 +83,45 @@ export default function ScreenerDetailPage() {
       charts,
     };
   }, [data]);
+
+  function addRunConfig() {
+    const tf = scheduleTimeframe || (tfOptions[0]?.value || "");
+    const symbols = symbolsInput.split(",").map((s) => s.trim()).filter(Boolean);
+    if (!tf || symbols.length === 0) {
+      setScheduleMsg("Please provide timeframe and at least one symbol.");
+      setScheduleError(true);
+      return;
+    }
+    setRunConfigs((prev) => [...prev, { timeframe: tf, symbols }]);
+    setSymbolsInput("");
+  }
+
+  function removeRunConfig(index: number) {
+    setRunConfigs((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function onSchedule() {
+    if (!screenerId) return;
+    if (runConfigs.length === 0) {
+      setScheduleMsg("Please add at least one run config.");
+      setScheduleError(true);
+      return;
+    }
+    setScheduling(true);
+    setScheduleMsg(null);
+    setScheduleError(false);
+    try {
+      // Submit just the runConfigs; backend should merge/update ScreenerEntity.runconfig
+      await updateScreener(screenerId, { script: "", timeframe: "", runConfigs });
+      setScheduleMsg("Scheduling configuration saved.");
+      setRunConfigs([]);
+    } catch (e: any) {
+      setScheduleMsg(e?.message || "Failed to save scheduling configuration.");
+      setScheduleError(true);
+    } finally {
+      setScheduling(false);
+    }
+  }
 
   return (
     <div className="container">
@@ -85,6 +150,77 @@ export default function ScreenerDetailPage() {
             }}
           />
         )}
+      </div>
+
+      {/* Scheduling Section */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="toolbar" style={{ justifyContent: "space-between" }}>
+          <h2 style={{ margin: 0 }}>Scheduling</h2>
+        </div>
+        <div className="row">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "end" }}>
+            <div>
+              <label>Symbols (comma-separated)</label>
+              <input
+                type="text"
+                placeholder="e.g. INFY, TCS, RELIANCE"
+                value={symbolsInput}
+                onChange={(e) => setSymbolsInput(e.target.value)}
+              />
+            </div>
+            <div>
+              <label>Timeframe</label>
+              <select
+                value={scheduleTimeframe}
+                onChange={(e) => setScheduleTimeframe(e.target.value)}
+              >
+                {tfOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label} ({opt.value})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <button type="button" className="btn" onClick={addRunConfig}>
+                Add run config
+              </button>
+            </div>
+          </div>
+          <div className="muted" style={{ marginTop: 8 }}>
+            Add multiple run configurations. Each run config includes a timeframe and a list of symbols.
+          </div>
+        </div>
+
+        {runConfigs.length > 0 && (
+          <div className="row" style={{ marginTop: 8 }}>
+            <label>Pending run configs</label>
+            <ul style={{ paddingLeft: 16 }}>
+              {runConfigs.map((rc, i) => (
+                <li key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <div>
+                    <strong>{rc.timeframe}</strong> — {rc.symbols.join(", ")}
+                  </div>
+                  <button type="button" className="btn" onClick={() => removeRunConfig(i)}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {scheduleMsg && (
+          <div className={`row ${scheduleError ? "error" : "success"}`} style={{ marginTop: 8 }}>
+            {scheduleMsg}
+          </div>
+        )}
+
+        <div className="toolbar" style={{ marginTop: 8 }}>
+          <button type="button" className="btn primary" disabled={!screenerId || scheduling || runConfigs.length === 0} onClick={onSchedule}>
+            {scheduling ? "Scheduling…" : "Schedule"}
+          </button>
+        </div>
       </div>
     </div>
   );

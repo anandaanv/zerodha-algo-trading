@@ -8,6 +8,8 @@ export type UpsertPayload = {
   promptJson?: string;
   // Chart aliases to send to AI
   charts?: string[];
+  // Scheduling: array of run configurations to persist with the screener
+  runConfigs?: RunConfig[];
 };
 
 export type ScreenerResponse = {
@@ -20,6 +22,12 @@ export type ScreenerResponse = {
 };
 
 export type IntervalUiMapping = Record<string, string>; // { "1m": "OneMinute", ... }
+
+// Scheduling types
+export type RunConfig = {
+  timeframe: string;
+  symbols: string[];
+};
 
 export async function getIntervalUiMapping(): Promise<IntervalUiMapping> {
   const res = await fetch("/api/intervals/mapping");
