@@ -54,6 +54,11 @@ public class ScreenerEntity {
     @Column(name = "charts_json", columnDefinition = "TEXT")
     private String chartsJson;
 
+    // Scheduling configuration (array of RunConfig), stored as JSON
+    @Convert(converter = com.dtech.algo.screener.db.converter.SchedulingConfigConverter.class)
+    @Column(name = "scheduling_config", columnDefinition = "TEXT")
+    private com.dtech.algo.screener.model.SchedulingConfig schedulingConfig;
+
     // If true, (re)compile and register script before execution
     @Builder.Default
     private Boolean dirty = false;

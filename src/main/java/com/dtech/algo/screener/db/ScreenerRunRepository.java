@@ -1,5 +1,4 @@
 package com.dtech.algo.screener.db;
-
 import com.dtech.algo.screener.enums.SchedulingStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
