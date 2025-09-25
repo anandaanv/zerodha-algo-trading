@@ -45,12 +45,27 @@ public class SubscriptionUpdaterJob {
     @Value("${data.update.intervals:OneHour}")
     private String intervalsProperty;
 
+    // Enable/disable the scheduled updater via API (true by default)
+    private volatile boolean enabled = true;
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
     /**
      * Run hourly by default. Cron can be overridden using data.update.hourlyCron property.
      */
-//    @Scheduled(cron = "${data.update.hourlyCron:0 * * * * ?}")
+    @Scheduled(cron = "${data.update.hourlyCron:0 * * * * ?}")
     public void runUpdateJob() {
         try {
+            if (!enabled) {
+                log.info("SubscriptionUpdaterJob is disabled; skipping execution.");
+                return;
+            }
             Instant cutoff = Instant.now().minusSeconds(3600);
             List<Subscription> subscriptions = subscriptionRepository.findAllByLatestTimestampBeforeAndStatus(cutoff, activeStatus);
             subscriptions.addAll(
