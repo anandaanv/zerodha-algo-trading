@@ -1,5 +1,6 @@
 package com.dtech.algo.screener.web.dto;
 
+import com.dtech.algo.screener.model.RunConfig;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -28,4 +29,7 @@ public class ScreenerUpsertRequest {
 
     // Chart aliases to send to AI; stored as JSON array string in chartsJson
     private List<String> charts;
+
+    // Scheduling: array of run configurations to embed into ScreenerEntity.schedulingConfig
+    private List<RunConfig> runConfigs;
 }

@@ -15,7 +15,8 @@ public record ScreenerResponse(
         String script,
         String configJson,
         String promptJson,
-        String chartsJson
+        String chartsJson,
+        String schedulingConfigJson
 ) {
     /**
      * Build response from domain Screener by serializing config and charts.
@@ -28,6 +29,9 @@ public record ScreenerResponse(
                     .build();
             String cfgJson = objectMapper.writeValueAsString(cfg);
             String chartsJson = objectMapper.writeValueAsString(s.getCharts() == null ? List.of() : s.getCharts());
+            String schedulingJson = objectMapper.writeValueAsString(
+                    s.getSchedulingConfig() == null ? new com.dtech.algo.screener.model.SchedulingConfig() : s.getSchedulingConfig()
+            );
             return ScreenerResponse.builder()
                     .id(s.getId())
                     .timeframe(s.getTimeframe())
@@ -35,6 +39,7 @@ public record ScreenerResponse(
                     .configJson(cfgJson)
                     .promptJson(s.getPromptJson())
                     .chartsJson(chartsJson)
+                    .schedulingConfigJson(schedulingJson)
                     .build();
         } catch (Exception e) {
             throw new IllegalArgumentException("Failed to build response: " + e.getMessage(), e);

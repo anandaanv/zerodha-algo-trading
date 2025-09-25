@@ -84,6 +84,23 @@ export default function ScreenerDetailPage() {
     };
   }, [data]);
 
+  // Prefill scheduling run configs from response
+  useEffect(() => {
+    if (!data) return;
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(data.schedulingConfigJson || "{}");
+    } catch {
+      parsed = {};
+    }
+    const arr = Array.isArray(parsed?.runConfigs) ? parsed.runConfigs : [];
+    const normalized: RunConfig[] = arr.map((x: any) => ({
+      timeframe: String(x?.timeframe ?? ""),
+      symbols: Array.isArray(x?.symbols) ? x.symbols.map((s: any) => String(s)).filter(Boolean) : [],
+    })).filter(rc => rc.timeframe && rc.symbols.length > 0);
+    setRunConfigs(normalized);
+  }, [data]);
+
   function addRunConfig() {
     const tf = scheduleTimeframe || (tfOptions[0]?.value || "");
     const symbols = symbolsInput.split(",").map((s) => s.trim()).filter(Boolean);
