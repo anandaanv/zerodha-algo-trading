@@ -29,6 +29,7 @@ public class Screener {
     List<WorkflowStep> workflow;
     List<String> charts;   // alias names to send to AI
     List<String> symbols;  // optional subscribed symbols
+    com.dtech.algo.screener.model.SchedulingConfig schedulingConfig; // embedded scheduling config
 
     public String getEffectivePrompt() {
         return (promptId != null && !promptId.isBlank()) ? promptId : promptJson;
@@ -62,6 +63,7 @@ public class Screener {
                 .workflow(workflow)
                 .charts(charts)
                 .symbols(symbols)
+                .schedulingConfig(e.getSchedulingConfig())
                 .build();
     }
 
@@ -103,6 +105,7 @@ public class Screener {
                 .configJson(cfgJson)
                 .chartsJson(chartsJson)
                 .symbolsJson(symbolsJson)
+                .schedulingConfig(schedulingConfig)
                 .build();
     }
 

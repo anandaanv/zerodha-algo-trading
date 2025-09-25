@@ -57,8 +57,22 @@ public class ScreenerController {
     public ScreenerResponse update(@PathVariable long id, @RequestBody ScreenerUpsertRequest request) {
         ScreenerEntity existing = screenerRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + id));
-        Screener domain = buildDomainFromRequest(request, id);
-        ScreenerEntity toSave = domain.toEntity(objectMapper);
+        Screener existingDomain = Screener.fromEntity(existing, objectMapper);
+        Screener incoming = buildDomainFromRequest(request, id);
+
+        Screener merged = existingDomain.toBuilder()
+                .script(pick(incoming.getScript(), existingDomain.getScript()))
+                .timeframe(pick(incoming.getTimeframe(), existingDomain.getTimeframe()))
+                .promptId(pick(incoming.getPromptId(), existingDomain.getPromptId()))
+                .promptJson(pick(incoming.getPromptJson(), existingDomain.getPromptJson()))
+                .mapping(incoming.getMapping() == null || incoming.getMapping().isEmpty() ? existingDomain.getMapping() : incoming.getMapping())
+                .workflow(incoming.getWorkflow() == null || incoming.getWorkflow().isEmpty() ? existingDomain.getWorkflow() : incoming.getWorkflow())
+                .charts(incoming.getCharts() == null || incoming.getCharts().isEmpty() ? existingDomain.getCharts() : incoming.getCharts())
+                .symbols(existingDomain.getSymbols())
+                .schedulingConfig(incoming.getSchedulingConfig() != null ? incoming.getSchedulingConfig() : existingDomain.getSchedulingConfig())
+                .build();
+
+        ScreenerEntity toSave = merged.toEntity(objectMapper);
         // Preserve flags/timestamps not set by domain
         toSave.setDirty(true);
         toSave.setDeleted(existing.getDeleted());
@@ -109,6 +123,13 @@ public class ScreenerController {
                 .map(s -> com.dtech.algo.screener.enums.WorkflowStep.valueOf(s))
                 .toList();
 
+        com.dtech.algo.screener.model.SchedulingConfig sc = null;
+        if (req.getRunConfigs() != null) {
+            sc = com.dtech.algo.screener.model.SchedulingConfig.builder()
+                    .runConfigs(req.getRunConfigs())
+                    .build();
+        }
+
         return Screener.builder()
                 .id(id == null ? 0L : id)
                 .name(null)
@@ -120,6 +141,11 @@ public class ScreenerController {
                 .workflow(steps)
                 .charts(Optional.ofNullable(req.getCharts()).orElse(List.of()))
                 .symbols(List.of())
+                .schedulingConfig(sc)
                 .build();
+    }
+
+    private static String pick(String candidate, String existing) {
+        return (candidate != null && !candidate.isBlank()) ? candidate : existing;
     }
 }

@@ -48,7 +48,7 @@ public class SubscriptionUpdaterJob {
     /**
      * Run hourly by default. Cron can be overridden using data.update.hourlyCron property.
      */
-    @Scheduled(cron = "${data.update.hourlyCron:0 * * * * ?}")
+//    @Scheduled(cron = "${data.update.hourlyCron:0 * * * * ?}")
     public void runUpdateJob() {
         try {
             Instant cutoff = Instant.now().minusSeconds(3600);
