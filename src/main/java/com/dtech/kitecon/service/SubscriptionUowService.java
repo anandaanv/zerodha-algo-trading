@@ -44,7 +44,7 @@ public class SubscriptionUowService {
     )
     @Transactional
     public void tick() {
-        Instant now = com.dtech.kitecon.misc.TimeUtils.nowIst();
+        Instant now = Instant.now();
         Set<SubscriptionUowStatus> statuses = EnumSet.of(SubscriptionUowStatus.ACTIVE, SubscriptionUowStatus.FAILED);
         List<SubscriptionUow> batch = uowRepository.findTop2000ByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(statuses, now);
         if (batch.isEmpty()) {
@@ -94,11 +94,11 @@ public class SubscriptionUowService {
                 startInstant = null; // incremental mode inside fetcher
             } else {
                 int days = historicalDateLimit.getTotalAvailableDuration(inst.getExchange(), interval);
-                startInstant = com.dtech.kitecon.misc.TimeUtils.nowIst().minus(Duration.ofDays(days));
+                startInstant = Instant.now().minus(Duration.ofDays(days));
             }
 
             Optional<Instant> latestOpt = marketFetcher.fetchAndPersist(inst, interval, startInstant);
-            Instant now = com.dtech.kitecon.misc.TimeUtils.nowIst();
+            Instant now = Instant.now();
             if (latestOpt != null && latestOpt.isPresent()) {
                 Instant latest = latestOpt.get();
                 if (uow.getLatestTimestamp() == null || latest.isAfter(uow.getLatestTimestamp())) {
@@ -117,7 +117,7 @@ public class SubscriptionUowService {
             uow.setErrorMessage(null);
             uowRepository.save(uow);
         } catch (Throwable t) {
-            Instant now = com.dtech.kitecon.misc.TimeUtils.nowIst();
+            Instant now = Instant.now();
             log.warn("UOW processing failed for {} {}: {}", symbol, uow.getInterval(), t.getMessage());
             uow.setStatus(SubscriptionUowStatus.FAILED);
             uow.setLastUpdatedAt(now);
