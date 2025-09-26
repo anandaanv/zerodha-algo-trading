@@ -26,11 +26,12 @@ public class ScreenerService {
     private final ScreenerContextLoader loader;
     private final com.dtech.algo.service.OpenAIScreenService openAIScreenService;
     private final KotlinScriptExecutor kotlinScriptExecutor;
+    private final com.dtech.algo.screener.runtime.ScreenerRunLogService runLogService;
 
     /**
      * Run the screener identified by ID for a given underlying symbol.
      */
-    public void run(long screenerId, String symbol, int nowIndex, @Nullable String timeframe, @Nullable SignalCallback callback) {
+    public void run(long screenerId, String symbol, int nowIndex, @Nullable String timeframe, @Nullable SignalCallback callback, @Nullable Long screenerRunId) {
         // Load entity and convert to domain
         ScreenerEntity entity = screenerRepository.findById(screenerId)
                 .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + screenerId));
@@ -45,9 +46,16 @@ public class ScreenerService {
         String tf = timeframe != null && !timeframe.isBlank() ? timeframe : screener.getTimeframe();
         ScreenerContext baseCtx = loader.load(symbol, mapping, nowIndex, tf);
 
+        // Add runId into params so UOWs can persist logs
+        var params = new java.util.HashMap<String, Object>(baseCtx.getParams() == null ? java.util.Map.of() : baseCtx.getParams());
+        if (screenerRunId != null) {
+            params.put("screenerRunId", screenerRunId);
+        }
+
         // Attach domain screener to the context
         ScreenerContext ctx = baseCtx.toBuilder()
                 .screener(screener)
+                .params(params)
                 .build();
 
         // Build callback chain flags via domain
@@ -60,7 +68,18 @@ public class ScreenerService {
             next = getOpenAIUOW(screener, next);
         }
 
-        UnitOfWork head = new ScreenerUOW(kotlinScriptExecutor, entity.getScript(), next);
+        // Wrap tail with logging-aware UOWs
+        if (hasOpenAI && next instanceof OpenAIUOW openAIUOW) {
+            // not reachable via instanceof since OpenAIUOW is not a bean hierarchy here, so we construct below
+        }
+
+        UnitOfWork tail = null;
+        if (hasOpenAI) {
+            tail = new OpenAIUOW(screener.getPromptJson(), openAIScreenService, null, runLogService);
+        }
+
+        UnitOfWork chain = hasOpenAI ? tail : null;
+        UnitOfWork head = new ScreenerUOW(kotlinScriptExecutor, entity.getScript(), chain, runLogService, objectMapper);
         head.run(ctx);
     }
 
@@ -101,7 +120,7 @@ public class ScreenerService {
 
     private OpenAIUOW getOpenAIUOW(Screener screener, UnitOfWork next) {
         String effectivePrompt = screener.getEffectivePrompt();
-        return new OpenAIUOW(effectivePrompt, openAIScreenService, next) {
+        return new OpenAIUOW(effectivePrompt, openAIScreenService, next, runLogService) {
             @Override
             public void run(ScreenerContext ctx) {
                 // Domain already carries charts as aliases in screener.getCharts()

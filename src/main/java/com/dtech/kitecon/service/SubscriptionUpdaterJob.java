@@ -5,7 +5,9 @@ import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.data.Subscription;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.repository.SubscriptionRepository;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -35,6 +37,7 @@ public class SubscriptionUpdaterJob {
     private final InstrumentsResolverService resolverService;
     private final HistoricalMarketFetcher marketFetcher;
     private final com.dtech.kitecon.config.HistoricalDateLimit historicalDateLimit;
+    private final com.dtech.kitecon.repository.SubscriptionUowRepository subscriptionUowRepository;
 
     @Value("${data.update.perRunCap:10000}")
     private int perRunCap;
@@ -46,20 +49,15 @@ public class SubscriptionUpdaterJob {
     private String intervalsProperty;
 
     // Enable/disable the scheduled updater via API (true by default)
+    @Setter
+    @Getter
     private volatile boolean enabled = true;
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
 
     /**
      * Run hourly by default. Cron can be overridden using data.update.hourlyCron property.
      */
     @Scheduled(cron = "${data.update.hourlyCron:0 * * * * ?}")
+    @Transactional
     public void runUpdateJob() {
         try {
             if (!enabled) {
@@ -106,76 +104,72 @@ public class SubscriptionUpdaterJob {
             return;
         }
 
-        // Collect instruments: underlying + nearest 2 futures + top 5 options
-        for (Interval interval : intervals) {
-            updateInstrument(s, interval, underlying, Collections.singleton(underlying));
-        }
-
+        // Compute related instruments and upsert UOWs (no inactivation)
         List<Instrument> futures = resolverService.resolveNearestFutures(tradingSymbol, 2);
         Set<Instrument> instrumentsToUpdate = new LinkedHashSet<>(futures);
-
         List<Instrument> options = resolverService.resolveTopOptions(tradingSymbol, underlying, 10);
         instrumentsToUpdate.addAll(options);
 
         log.debug("Resolved {} instruments for {} (futures={}, options={})",
                 instrumentsToUpdate.size(), tradingSymbol, futures.size(), options.size());
 
-        // For each interval, compute start Instant (subscription-level latest). Then for each instrument, fetch & persist (rate limited inside HistoricalMarketFetcher)
+        // Underlying (SPOT)
         for (Interval interval : intervals) {
-            updateInstrument(s, interval, underlying, instrumentsToUpdate);
+            upsertUowActive(s, underlying.getTradingsymbol(), "SPOT", underlying.getExchange(), interval);
         }
 
-        // Update subscription timestamp (do not skip existing)
-        s.setLastUpdatedAt(LocalDateTime.now());
-        subscriptionRepository.save(s);
-        log.info("Subscription {} updated at {}", tradingSymbol, s.getLastUpdatedAt());
-    }
-
-    public void updateInstrument(Subscription s, Interval interval, Instrument underlying, Set<Instrument> instrumentsToUpdate) {
-        // determine start Instant for this subscription+interval
-        Instant startInstant;
-        if (s.getLatestTimestamp() != null) {
-            startInstant = null;
-        } else {
-            // fallback to HistoricalDateLimit (duration in days) when latest is not present
-            int days = historicalDateLimit.getTotalAvailableDuration(underlying.getExchange(), interval);
-            startInstant = Instant.now();
-            startInstant = startInstant.minus(java.time.Duration.ofDays(days));
-        }
-
-        for (Instrument inst : instrumentsToUpdate) {
-            try {
-                Optional<Instant> latestOpt = marketFetcher.fetchAndPersist(inst, interval, startInstant);
-                // update subscription.latestTimestamp to the maximum of existing and returned latest
-                if (latestOpt != null && latestOpt.isPresent()) {
-                    Instant latestInst = latestOpt.get();
-                    if (s.getLatestTimestamp() == null || latestInst.isAfter(s.getLatestTimestamp())) {
-                        s.setLatestTimestamp(latestInst);
-                    }
-                }
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                log.warn("Interrupted while fetching {} {}: {}", inst.getTradingsymbol(), interval, ie.getMessage());
-            } catch (Throwable t) {
-                log.warn("Failed to fetch/persist {} {}: {}", inst.getTradingsymbol(), interval, t.getMessage());
+        for (Instrument fut : futures) {
+            String tag = "FUT";
+            for (Interval interval : intervals) {
+                upsertUowActive(s, fut.getTradingsymbol(), tag, fut.getExchange(), interval);
             }
         }
+
+        int optIndex = 1;
+        for (Instrument opt : options) {
+            String tag = deriveOptionTag(opt.getTradingsymbol(), optIndex++);
+            for (Interval interval : intervals) {
+                upsertUowActive(s, opt.getTradingsymbol(), tag, opt.getExchange(), interval);
+            }
+        }
+
+        // Update subscription timestamp to reflect scheduling step
+        s.setLastUpdatedAt(LocalDateTime.now());
+        subscriptionRepository.save(s);
+        log.info("Subscription {} scheduled/updated UOWs at {}", tradingSymbol, s.getLastUpdatedAt());
     }
 
-    private List<Interval> parseIntervals(String prop) {
-        if (prop == null || prop.isBlank()) return Collections.singletonList(Interval.OneHour);
-        String[] parts = prop.split(",");
-        return Arrays.stream(parts)
-                .map(String::trim)
-                .filter(str -> !str.isEmpty())
-                .map(name -> {
-                    try {
-                        return Interval.valueOf(name);
-                    } catch (Exception e) {
-                        log.warn("Unknown interval {} in property, defaulting to OneHour", name);
-                        return Interval.OneHour;
-                    }
-                })
-                .collect(Collectors.toList());
+    private static String deriveOptionTag(String tradingSymbol, int index) {
+        String upper = tradingSymbol == null ? "" : tradingSymbol.toUpperCase();
+        if (upper.contains("CE")) return "CE" + index;
+        if (upper.contains("PE")) return "PE" + index;
+        return "OPT" + index;
+    }
+
+    private void upsertUowActive(Subscription parent, String symbol, String tag, String exchange, Interval interval) {
+        var existing = subscriptionUowRepository
+                .findByParentSubscriptionIdAndTradingSymbolAndInterval(parent.getId(), symbol, interval)
+                .orElse(null);
+        if (existing == null) {
+            var u = com.dtech.kitecon.data.SubscriptionUow.builder()
+                    .parentSubscription(parent)
+                    .tradingSymbol(symbol)
+                    .exchange(exchange)
+                    .instrumentTag(tag)
+                    .interval(interval)
+                    .status(com.dtech.kitecon.enums.SubscriptionUowStatus.ACTIVE)
+                    .lastUpdatedAt(null)
+                    .latestTimestamp(parent.getLatestTimestamp()) // seed from parent
+                    .nextRunAt(Instant.now())
+                    .build();
+            subscriptionUowRepository.save(u);
+        } else {
+            // Update metadata if changed; keep status as-is (no inactivation/reactivation churn)
+            boolean changed = false;
+            if (tag != null && !tag.equals(existing.getInstrumentTag())) { existing.setInstrumentTag(tag); changed = true; }
+            if (exchange != null && (existing.getExchange() == null || !exchange.equals(existing.getExchange()))) { existing.setExchange(exchange); changed = true; }
+            if (existing.getNextRunAt() == null) { existing.setNextRunAt(Instant.now()); changed = true; }
+            if (changed) subscriptionUowRepository.save(existing);
+        }
     }
 }

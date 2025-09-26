@@ -1,6 +1,8 @@
 package com.dtech.algo.screener;
 
 import com.dtech.algo.controller.dto.OpenAIAnalysisRequest;
+import com.dtech.algo.screener.enums.WorkflowStep;
+import com.dtech.algo.screener.runtime.ScreenerRunLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,6 +15,7 @@ public class OpenAIUOW implements UnitOfWork {
     private final String promptJson;
     private final com.dtech.algo.service.OpenAIScreenService openAIScreenService;
     private final UnitOfWork next;
+    private final ScreenerRunLogService runLogService;
 
     @Override
     public void run(ScreenerContext ctx) {
@@ -34,26 +37,40 @@ public class OpenAIUOW implements UnitOfWork {
 
             com.dtech.algo.controller.dto.ChartAnalysisResponse response = openAIScreenService.analyze(request);
 
+            // Log OPENAI step
+            Long runId = getRunId(ctx);
+            runLogService.logStep(runId, WorkflowStep.OPENAI, request, response, true, null);
+
             // Attach results to context params for downstream steps
             var params = new java.util.HashMap<>(ctx.getParams() == null ? java.util.Map.of() : ctx.getParams());
             params.put("openAiAnalysis", response.getAnalysis());
             params.put("openAiJsonAnalysis", response.getJsonAnalysis());
             ScreenerContext updated = ctx.toBuilder().params(params).build();
 
-            log.debug("OpenAIUOW.run screenerId={}, symbol={}, analysisLen={}",
-                    screener != null ? screener.getId() : null,
-                    symbol,
-                    response.getAnalysis() != null ? response.getAnalysis().length() : 0);
-
             if (next != null) {
                 next.run(updated);
+            } else {
+                // Tail: mark final using last ScreenerOutput (decision) if present
+                Object o = params.get("lastScreenerOutput");
+                if (o instanceof ScreenerOutput so) {
+                    runLogService.markFinal(runId, so.isPassed(), so.getFinalVerdict());
+                }
             }
         } catch (Exception e) {
             log.error("OpenAIUOW.run error: {}", e.getMessage(), e);
+            Long runId = getRunId(ctx);
+            runLogService.logStep(runId, WorkflowStep.OPENAI, Map.of("error", "execution-error"), Map.of("exception", e.toString()), false, e.getMessage());
             if (next != null) {
                 next.run(ctx);
             }
         }
+    }
+
+    private static Long getRunId(ScreenerContext ctx) {
+        Object val = ctx.getParams() != null ? ctx.getParams().get("screenerRunId") : null;
+        if (val instanceof Long l) return l;
+        if (val instanceof Number n) return n.longValue();
+        return null;
     }
 
     @Override
@@ -63,7 +80,6 @@ public class OpenAIUOW implements UnitOfWork {
 
     @Override
     public void onEntry(ScreenerContext ctx, String... tags) {
-        // TODO: enrich with LLM-based tagging or rationale
         log.debug("OpenAIUOW.onEntry tags={}", (Object) tags);
     }
 
@@ -79,7 +95,6 @@ public class OpenAIUOW implements UnitOfWork {
 
     @Override
     public void match(String type, ScreenerContext ctx, Map<String, Object> meta) {
-        // reserved for future matching logic
         log.debug("OpenAIUOW.match type={}, meta={}", type, meta);
     }
 }
