@@ -5,6 +5,7 @@ import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
+import com.google.common.util.concurrent.RateLimiter;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.InputException;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
@@ -40,10 +41,14 @@ public class DataDownloader {
     private final KiteConnectConfig kiteConnectConfig;
     private final CandleRepository candleRepository;
     private final CandleFacade candleFacade;
+    private final com.dtech.kitecon.repository.SubscriptionRepository subscriptionRepository;
+    private final com.dtech.kitecon.repository.SubscriptionUowRepository subscriptionUowRepository;
+    private static final RateLimiter ratelimit = RateLimiter.create(3.0);
 
     @Transactional
     public void processDownload(DataDownloadRequest downloadRequest)
             throws KiteException, IOException {
+        ratelimit.acquire();
         log.info("Download data for " + downloadRequest);
         Interval interval = downloadRequest.getInterval();
         DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
@@ -72,6 +77,11 @@ public class DataDownloader {
             List<Candle> databaseCandles = candleFacade.buildCandlesFromOLSHStreamFailSafe(
                     interval, dateFormat, instrument, candles, dataMap);
             candleRepository.saveAll(databaseCandles);
+//            // Ensure inserts are flushed so the native update sees latest rows
+//            candleRepository.flush();
+//            // Fire-and-forget: set LTP for subscription and UOW entries for this trading symbol and timeframe
+//            subscriptionRepository.updateLtpFromLatestCandle(instrument.getTradingsymbol(), interval.name());
+//            subscriptionUowRepository.updateUowLtpFromLatestCandle(instrument.getTradingsymbol(), interval.name());
         } catch (InputException ex) {
             log.error(ex.getMessage());
         } catch (RuntimeException ex) {

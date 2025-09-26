@@ -34,7 +34,7 @@ public class ScreenerRunnerService {
             fixedDelayString = "${screener.runner.fixed-delay:15000}"
     )
     public void tick() {
-        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant now = com.dtech.kitecon.misc.TimeUtils.nowIst();
         List<ScreenerRunEntity> scheduledRuns =
                 screenerRunRepository.findTop200BySchedulingStatusAndExecuteAtLessThanEqualOrderByExecuteAtAsc(
                         SchedulingStatus.SCHEDULED, now);
