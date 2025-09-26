@@ -113,7 +113,7 @@ public class DataFetchService {
     }
 
     public void downloadData(Instrument instrument, Interval interval) {
-        Instant endTime = com.dtech.kitecon.misc.TimeUtils.nowIst();
+        Instant endTime = Instant.now();
         int totalAvailableDuration = historicalDateLimit
                 .getTotalAvailableDuration(instrument.getExchange(), interval);
         Instant startTime = endTime.minus(totalAvailableDuration, ChronoUnit.DAYS);
@@ -122,7 +122,7 @@ public class DataFetchService {
     }
 
     public void updateInstrument(Instrument instrument, Interval interval, boolean clean) {
-        Instant endTime = com.dtech.kitecon.misc.TimeUtils.nowIst();
+        Instant endTime = Instant.now();
         Candle latestCandle = candleRepository
                 .findFirstByInstrumentAndTimeframeOrderByTimestampDesc(instrument, interval);
         if (latestCandle == null) {

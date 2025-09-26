@@ -34,7 +34,7 @@ public class ScreenerSchedulerService {
         if (screeners.isEmpty()) {
             return;
         }
-        Instant executeAt = com.dtech.kitecon.misc.TimeUtils.nowIst(); // schedule for immediate execution window
+        Instant executeAt = Instant.now(); // schedule for immediate execution window
 
         int created = 0;
         for (ScreenerEntity s : screeners) {
