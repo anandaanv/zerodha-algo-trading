@@ -34,8 +34,10 @@ public class ScreenerRunnerService {
             fixedDelayString = "${screener.runner.fixed-delay:15000}"
     )
     public void tick() {
+        java.time.Instant now = java.time.Instant.now();
         List<ScreenerRunEntity> scheduledRuns =
-                screenerRunRepository.findBySchedulingStatus(SchedulingStatus.SCHEDULED);
+                screenerRunRepository.findTop200BySchedulingStatusAndExecuteAtLessThanEqualOrderByExecuteAtAsc(
+                        SchedulingStatus.SCHEDULED, now);
 
         if (scheduledRuns.isEmpty()) {
             return;
@@ -52,10 +54,10 @@ public class ScreenerRunnerService {
                 long screenerId = run.getScreenerId();
                 String symbol = run.getSymbol();
                 int nowIndex = 0; // default meta indicator, can be adapted later
-                String timeframe = null; // use screener's configured timeframe
+                String timeframe = run.getTimeframe(); // use run's scheduled timeframe
 
                 log.info("Starting ScreenerRun id={} screenerId={} symbol={}", runId, screenerId, symbol);
-                screenerService.run(screenerId, symbol, nowIndex, timeframe, null);
+                screenerService.run(screenerId, symbol, nowIndex, timeframe, null, runId);
 
                 // Mark complete on success
                 run.setSchedulingStatus(SchedulingStatus.COMPLETE);

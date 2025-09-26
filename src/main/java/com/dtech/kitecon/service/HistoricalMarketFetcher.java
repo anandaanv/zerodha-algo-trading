@@ -57,8 +57,7 @@ public class HistoricalMarketFetcher {
 
       try {
           if (start == null) {
-              candleRepository.deleteByInstrumentAndTimeframe(instrument, interval);
-              dataFetchService.updateInstrument(instrument, interval, false);
+              dataFetchService.updateInstrument(instrument, interval, true);
           } else {
               int sliceSize = historicalDateLimit.getDuration(instrument.getExchange(), interval);
               dataFetchService.fetchDataAndUpdateDatabase(instrument, interval, Instant.now(), sliceSize, start, false);

@@ -87,7 +87,7 @@ public class ScreenerController {
                     @RequestParam String symbol,
                     @RequestParam int nowIndex,
                     @RequestParam(required = false) String timeframe) {
-        screenerService.run(id, symbol, nowIndex, timeframe, null);
+        screenerService.run(id, symbol, nowIndex, timeframe, null, 0L);
     }
 
     /**
