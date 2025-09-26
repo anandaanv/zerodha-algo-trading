@@ -64,7 +64,7 @@ public class SubscriptionUpdaterJob {
                 log.info("SubscriptionUpdaterJob is disabled; skipping execution.");
                 return;
             }
-            Instant cutoff = Instant.now().minusSeconds(3600);
+            Instant cutoff = com.dtech.kitecon.misc.TimeUtils.nowIst().minusSeconds(3600);
             List<Subscription> subscriptions = subscriptionRepository.findAllByLatestTimestampBeforeAndStatus(cutoff, activeStatus);
             subscriptions.addAll(
                     subscriptionRepository.findAllByLatestTimestampIsNullAndStatus(activeStatus));

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Service
@@ -112,7 +113,7 @@ public class DataFetchService {
     }
 
     public void downloadData(Instrument instrument, Interval interval) {
-        Instant endTime = Instant.now();
+        Instant endTime = com.dtech.kitecon.misc.TimeUtils.nowIst();
         int totalAvailableDuration = historicalDateLimit
                 .getTotalAvailableDuration(instrument.getExchange(), interval);
         Instant startTime = endTime.minus(totalAvailableDuration, ChronoUnit.DAYS);
@@ -121,7 +122,7 @@ public class DataFetchService {
     }
 
     public void updateInstrument(Instrument instrument, Interval interval, boolean clean) {
-        Instant endTime = Instant.now();
+        Instant endTime = com.dtech.kitecon.misc.TimeUtils.nowIst();
         Candle latestCandle = candleRepository
                 .findFirstByInstrumentAndTimeframeOrderByTimestampDesc(instrument, interval);
         if (latestCandle == null) {
@@ -141,21 +142,19 @@ public class DataFetchService {
                 .build()
                 .split(sliceSize);
         dateRangeList.sort(Comparator.comparing(DateRange::getStartDate));
+        AtomicInteger count = new AtomicInteger(0);
         dateRangeList.forEach(dateRange -> {
             DataDownloadRequest dataDownloadRequest = DataDownloadRequest.builder()
                     .dateRange(dateRange)
                     .instrument(instrument)
                     .interval(interval)
-                    .clean(clean)
+                    .clean(clean && count.getAndAdd(1) <= 0)
                     .build();
-            RateLimiter rateLimiter = RateLimiter.create(3.0); // rate is "2 permits per second"
             try {
                 executorService.submit(
                         () -> {
                             try {
                                 dataDownloader.processDownload(dataDownloadRequest);
-                                rateLimiter.acquire();
-
                             } catch (KiteException e) {
                                 throw new RuntimeException(e);
                             } catch (IOException e) {

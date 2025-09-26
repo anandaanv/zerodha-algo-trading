@@ -60,9 +60,9 @@ public class HistoricalMarketFetcher {
               dataFetchService.updateInstrument(instrument, interval, true);
           } else {
               int sliceSize = historicalDateLimit.getDuration(instrument.getExchange(), interval);
-              dataFetchService.fetchDataAndUpdateDatabase(instrument, interval, Instant.now(), sliceSize, start, false);
+              dataFetchService.fetchDataAndUpdateDatabase(instrument, interval, com.dtech.kitecon.misc.TimeUtils.nowIst(), sliceSize, start, false);
           }
-          return Optional.ofNullable(Instant.now());
+          return Optional.ofNullable(com.dtech.kitecon.misc.TimeUtils.nowIst());
       } catch (Throwable t) {
         log.warn("Attempt {}: failed to fetch/persist for {} {} : {}", attempt, instrument.getTradingsymbol(), interval, t.getMessage());
         if (attempt >= maxRetries) {

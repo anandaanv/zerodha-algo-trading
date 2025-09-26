@@ -13,8 +13,13 @@ import org.hibernate.annotations.PartitionKey;
 @Entity
 @Data
 @NoArgsConstructor
-@Table(uniqueConstraints = @UniqueConstraint(columnNames = {"timeframe", "timestamp", "instrument_instrument_token"}),
-        indexes = @Index(columnList = "instrument_instrument_token, timeframe"))
+@Table(
+        uniqueConstraints = @UniqueConstraint(columnNames = {"timeframe", "timestamp", "instrument_instrument_token"}),
+        indexes = {
+                @Index(columnList = "instrument_instrument_token, timeframe"),
+                @Index(name = "idx_candle_inst_tf_ts", columnList = "instrument_instrument_token, timeframe, timestamp")
+        }
+)
 public class Candle {
 
   @Column

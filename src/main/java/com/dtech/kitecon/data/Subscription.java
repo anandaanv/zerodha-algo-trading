@@ -38,6 +38,10 @@ public class Subscription {
     @Column(name = "status", nullable = false)
     private String status;
 
+    // Latest traded price derived from most recent candle close
+    @Column(name = "last_traded_price", precision = 18, scale = 6)
+    private java.math.BigDecimal lastTradedPrice;
+
     // Optional metadata (json) for caching resolved instrument tokens etc.
     @Lob
     @Column(name = "meta_json", columnDefinition = "TEXT")
