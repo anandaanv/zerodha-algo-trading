@@ -77,17 +77,4 @@ public class SubscriptionUpdaterJob {
             log.error("SubscriptionUpdaterJob encountered an unexpected error: {}", t.getMessage(), t);
         }
     }
-
-    @Transactional
-    protected void processSubscription(Subscription s, List<Interval> intervals) {
-
-        // Validate underlying exists in NSE
-
-        // Compute related instruments and upsert UOWs (no inactivation)
-
-        // Underlying (SPOT)
-
-        // Update subscription timestamp to reflect scheduling step
-        subscriptionUowGenerator.processSubscription(s, intervals);
-    }
 }

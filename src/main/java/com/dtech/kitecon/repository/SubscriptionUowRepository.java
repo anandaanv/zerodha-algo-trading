@@ -20,20 +20,18 @@ public interface SubscriptionUowRepository extends JpaRepository<SubscriptionUow
     List<SubscriptionUow> findByParentSubscriptionId(Long parentSubscriptionId);
     Optional<SubscriptionUow> findByParentSubscriptionIdAndTradingSymbolAndInterval(Long parentSubscriptionId, String tradingSymbol, Interval interval);
 
-    List<SubscriptionUow> findTop2000ByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(
+    List<SubscriptionUow> findByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(
             Collection<SubscriptionUowStatus> statuses, Instant now);
 
-    // Fire-and-forget: update LTP for UOWs matching a trading symbol and timeframe
-    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value =
-            "UPDATE subscription_uow u " +
-            "JOIN instrument i ON i.tradingsymbol = u.trading_symbol " +
-            "JOIN candle c ON c.instrument_instrument_token = i.instrument_token " +
-            "  AND c.timeframe = u.timeframe " +
-            "  AND c.timestamp = (SELECT MAX(c2.timestamp) FROM candle c2 WHERE c2.instrument_instrument_token = i.instrument_token AND c2.timeframe = u.timeframe) " +
-            "SET u.last_traded_price = c.close " +
-            "WHERE u.trading_symbol = :tradingSymbol AND u.timeframe = :timeframe",
+            "SELECT c.close FROM subscription_uow u " +
+                    "JOIN instrument i ON i.tradingsymbol = u.trading_symbol " +
+                    "JOIN candle c ON c.instrument_instrument_token = i.instrument_token " +
+                    "  AND c.timeframe = u.timeframe " +
+                    "  AND c.timestamp = (SELECT MAX(c2.timestamp) FROM candle c2 WHERE c2.instrument_instrument_token = i.instrument_token AND c2.timeframe = u.timeframe) " +
+                    "WHERE u.trading_symbol = :tradingSymbol AND u.timeframe = :timeframe " +
+                    "LIMIT 1",
             nativeQuery = true)
-    int updateUowLtpFromLatestCandle(@Param("tradingSymbol") String tradingSymbol,
-                                     @Param("timeframe") String timeframe);
+    Double getLatestCandleClose(@Param("tradingSymbol") String tradingSymbol,
+                                @Param("timeframe") String timeframe);
 }

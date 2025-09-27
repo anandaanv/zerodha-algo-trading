@@ -28,9 +28,11 @@ public class DateRange {
             startRef = endRef.plusSeconds(1);
             endRef = startRef.plus(days, ChronoUnit.DAYS);
         }
-        result.add(DateRange.builder()
-                .endDate(endDate)
-                .startDate(startRef).build());
+        if(endRef.isAfter(startRef) && endRef.isBefore(endDate)) {
+            result.add(DateRange.builder()
+                    .endDate(endRef)
+                    .startDate(startRef).build());
+        }
         return result;
     }
 }

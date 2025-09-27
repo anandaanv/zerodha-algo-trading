@@ -3,6 +3,7 @@ package com.dtech.kitecon.service;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.config.HistoricalDateLimit;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.data.Subscription;
 import com.dtech.kitecon.data.SubscriptionUow;
 import com.dtech.kitecon.enums.SubscriptionUowStatus;
 import com.dtech.kitecon.repository.InstrumentRepository;
@@ -17,6 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.PriorityQueue;
+import java.util.Queue;
+import java.util.concurrent.LinkedBlockingDeque;
 
 @Component
 @Slf4j
@@ -28,7 +32,6 @@ public class SubscriptionUowHandler {
     private final InstrumentRepository instrumentRepository;
     private final HistoricalMarketFetcher marketFetcher;
     private final HistoricalDateLimit historicalDateLimit;
-    private final SubscriptionUowRepository subscriptionUowRepository;
 
     @Value("${data.uow.retryBackoffSeconds:120}")
     private int retryBackoffSeconds;
@@ -55,17 +58,21 @@ public class SubscriptionUowHandler {
             }
 
             marketFetcher.fetchAndPersist(inst, interval, startInstant);
-            subscriptionRepository.updateLtpFromLatestCandle(inst.getTradingsymbol(), interval.name());
-            subscriptionUowRepository.updateUowLtpFromLatestCandle(inst.getTradingsymbol(), interval.name());
-
             Instant now = Instant.now();
             uow.setLastUpdatedAt(now);
             uow.setNextRunAt(now.plusSeconds(periodFor(interval)));
             uow.setStatus(SubscriptionUowStatus.ACTIVE);
+            uow.setLastTradedPrice(uowRepository.getLatestCandleClose(inst.getTradingsymbol(), interval.name()));
             uow.setErrorMessage(null);
+            Subscription parentSubscription = uow.getParentSubscription();
             uowRepository.save(uow);
+            Subscription sub = subscriptionRepository.findById(parentSubscription.getId()).get();
+            sub.setLastTradedPrice(
+                    subscriptionRepository.getLatestClosePriceFromCandle(inst.getTradingsymbol(), interval.name()));
+            subscriptionRepository.save(sub);
         } catch (Throwable t) {
             Instant now = Instant.now();
+            log.error("Error in UWO work ", t);
             log.warn("UOW processing failed for {} {}: {}", symbol, uow.getInterval(), t.getMessage());
             uow.setStatus(SubscriptionUowStatus.FAILED);
             uow.setLastUpdatedAt(now);

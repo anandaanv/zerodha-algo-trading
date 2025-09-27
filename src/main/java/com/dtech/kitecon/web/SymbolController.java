@@ -35,13 +35,17 @@ public class SymbolController {
         // repository method is case-sensitive depending on DB collation; normalize to uppercase for common symbols
         String qUpper = q.toUpperCase();
 
-        List<Instrument> found = instrumentRepository.findAllByTradingsymbolStartingWith(qUpper);
+        List<Instrument> found = instrumentRepository
+                .findAllByTradingsymbolStartingWithAndExchangeIn(qUpper,
+                        new String[]{"NSE", "NFO"});
 
         LocalDate today = LocalDate.now();
         return found.stream()
                 .filter(inst -> isActive(inst, today))
-                .sorted(Comparator.comparing(Instrument::getTradingsymbol))
-                .limit(100)
+                .sorted(Comparator.comparing(Instrument::getLotSize)
+                        .thenComparing(Instrument::getName)
+                        .thenComparing(Instrument::getInstrumentType)
+                        .thenComparing(Instrument::getExpiry))
                 .map(inst -> new SymbolInfo(
                         inst.getTradingsymbol(),
                         inst.getName(),
