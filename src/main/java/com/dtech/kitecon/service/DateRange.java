@@ -17,20 +17,20 @@ public class DateRange {
   private Instant startDate;
   private Instant endDate;
 
-  public List<DateRange> split(int days) {
-    List<DateRange> result = new ArrayList<>();
-    Instant startRef = startDate;
-    Instant endRef = startDate.plus(days, ChronoUnit.DAYS);
-    while (endRef.isBefore(endDate)) {
-      result.add(DateRange.builder()
-          .endDate(endRef)
-          .startDate(startRef).build());
-      startRef = endRef;
-      endRef = startRef.plus(days, ChronoUnit.DAYS);
+    public List<DateRange> split(int days) {
+        List<DateRange> result = new ArrayList<>();
+        Instant startRef = startDate;
+        Instant endRef = startDate.plus(days, ChronoUnit.DAYS);
+        while (endRef.isBefore(endDate)) {
+            result.add(DateRange.builder()
+                    .endDate(endRef)
+                    .startDate(startRef).build());
+            startRef = endRef.plusSeconds(1);
+            endRef = startRef.plus(days, ChronoUnit.DAYS);
+        }
+        result.add(DateRange.builder()
+                .endDate(endDate)
+                .startDate(startRef).build());
+        return result;
     }
-    result.add(DateRange.builder()
-        .endDate(endDate)
-        .startDate(startRef).build());
-    return result;
-  }
 }

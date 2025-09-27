@@ -5,6 +5,8 @@ import com.dtech.kitecon.config.HistoricalDateLimit;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.market.fetch.ZerodhaDataFetch;
+import com.dtech.kitecon.repository.SubscriptionRepository;
+import com.dtech.kitecon.repository.SubscriptionUowRepository;
 import com.google.common.util.concurrent.RateLimiter;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +26,7 @@ import java.util.Optional;
 @Slf4j
 public class HistoricalMarketFetcher {
 
-  private final ZerodhaDataFetch zerodhaDataFetch;
   private final DataFetchService dataFetchService;
-  private final CandleRepository candleRepository;
   private final HistoricalDateLimit historicalDateLimit;
 
   // rate limiter (permits per second)
@@ -42,8 +42,7 @@ public class HistoricalMarketFetcher {
    * Acquire permit and fetch candles for given instrument and interval starting from `start` (inclusive).
    * Returns the latest Instant saved (if any). Retries on transient errors with exponential backoff.
    */
-  @Transactional
-  public java.util.Optional<java.time.Instant> fetchAndPersist(Instrument instrument, Interval interval, java.time.Instant start) throws InterruptedException {
+  public Optional<Instant> fetchAndPersist(Instrument instrument, Interval interval, Instant start) throws InterruptedException {
     // Apply configured rate if changed (safe to set every call)
     if (configuredRate > 0 && configuredRate != rateLimiter.getRate()) {
       rateLimiter.setRate(configuredRate);

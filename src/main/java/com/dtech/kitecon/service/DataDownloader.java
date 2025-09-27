@@ -28,6 +28,7 @@ import lombok.extern.log4j.Log4j2;
 import org.jfree.data.time.Day;
 import org.jfree.data.time.Second;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 
 /**
@@ -41,8 +42,6 @@ public class DataDownloader {
     private final KiteConnectConfig kiteConnectConfig;
     private final CandleRepository candleRepository;
     private final CandleFacade candleFacade;
-    private final com.dtech.kitecon.repository.SubscriptionRepository subscriptionRepository;
-    private final com.dtech.kitecon.repository.SubscriptionUowRepository subscriptionUowRepository;
     private static final RateLimiter ratelimit = RateLimiter.create(3.0);
 
     @Transactional
@@ -63,6 +62,10 @@ public class DataDownloader {
                     String.valueOf(instrument.getInstrumentToken()),
                     interval.getKiteKey(), downloadRequest.isContinuous(), true);
             Map<Instant, Candle> dataMap = new HashMap<>();
+            if(candles.dataArrayList.isEmpty()) {
+                log.error("No data found - {}", downloadRequest);
+                return;
+            }
             if(downloadRequest.isClean()) {
                 candleRepository.deleteByInstrumentAndTimeframe(instrument, interval);
             } else {
