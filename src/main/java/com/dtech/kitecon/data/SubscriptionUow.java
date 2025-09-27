@@ -57,8 +57,8 @@ public class SubscriptionUow {
     @Column(name = "status", nullable = false, length = 16)
     private SubscriptionUowStatus status;
 
-    @Column(name = "last_traded_price", precision = 18, scale = 6)
-    private BigDecimal lastTradedPrice;
+    @Column(name = "last_traded_price")
+    private Double lastTradedPrice;
 
     // Progress marker for incremental updates
     @Column(name = "latest_timestamp")

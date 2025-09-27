@@ -48,13 +48,18 @@ public class DataDownloader {
     public void processDownload(DataDownloadRequest downloadRequest)
             throws KiteException, IOException {
         ratelimit.acquire();
-        log.info("Download data for " + downloadRequest);
+        log.debug("Download data for {}", downloadRequest);
         Interval interval = downloadRequest.getInterval();
         DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssZ");
         DateRange dateRange = downloadRequest.getDateRange();
         Instrument instrument = downloadRequest.getInstrument();
         Instant startDate = dateRange.getStartDate();
         Instant endDate = dateRange.getEndDate();
+        long diff = endDate.getEpochSecond() - startDate.getEpochSecond();
+        if(diff < 60) {
+            log.info("TimeDifference too low, skipping {}", downloadRequest);
+            return;
+        }
         try {
             HistoricalData candles = kiteConnectConfig.getKiteConnect().getHistoricalData(Date.from(
                             startDate),

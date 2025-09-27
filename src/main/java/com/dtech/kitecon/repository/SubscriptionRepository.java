@@ -24,17 +24,15 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
   // Find subscription by trading symbol
   Optional<Subscription> findByTradingSymbol(String tradingSymbol);
 
-  // Fire-and-forget: update LTP for a subscription's trading symbol using latest candle close for given timeframe
-  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  
   @Query(value =
-      "UPDATE subscription s " +
-      "JOIN instrument i ON i.tradingsymbol = s.trading_symbol " +
-      "JOIN candle c ON c.instrument_instrument_token = i.instrument_token " +
-      "  AND c.timeframe = :timeframe " +
-      "  AND c.timestamp = (SELECT MAX(c2.timestamp) FROM candle c2 WHERE c2.instrument_instrument_token = i.instrument_token AND c2.timeframe = :timeframe) " +
-      "SET s.last_traded_price = c.close " +
-      "WHERE s.trading_symbol = :tradingSymbol",
-      nativeQuery = true)
-  int updateLtpFromLatestCandle(@Param("tradingSymbol") String tradingSymbol,
-                                @Param("timeframe") String timeframe);
+          "SELECT c.close FROM subscription s " +
+                  "JOIN instrument i ON i.tradingsymbol = s.trading_symbol " +
+                  "JOIN candle c ON c.instrument_instrument_token = i.instrument_token " +
+                  "  AND c.timeframe = :timeframe " +
+                  "  AND c.timestamp = (SELECT MAX(c2.timestamp) FROM candle c2 WHERE c2.instrument_instrument_token = i.instrument_token AND c2.timeframe = :timeframe) " +
+                  "WHERE s.trading_symbol = :tradingSymbol",
+          nativeQuery = true)
+  Double getLatestClosePriceFromCandle(@Param("tradingSymbol") String tradingSymbol,
+                                       @Param("timeframe") String timeframe);
 }

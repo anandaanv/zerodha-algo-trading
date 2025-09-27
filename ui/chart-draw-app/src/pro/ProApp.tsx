@@ -70,7 +70,7 @@ export default function ProApp() {
                     // Accept different shapes from server: { tradingsymbol, name, lastPrice, expiry, ... } or simple strings
                     if (typeof it === "string") return { tradingsymbol: it };
                     return {
-                        tradingsymbol: (it.tradingsymbol ?? it.name ?? String(it)).toString(),
+                        tradingsymbol: (it.tradingsymbol ?? it.tradingsymbol ?? String(it)).toString(),
                         name: it.name ?? undefined,
                         lastPrice: typeof it.lastPrice === "number" ? it.lastPrice : (it.lastPrice ? Number(it.lastPrice) : undefined),
                         expiry: it.expiry ?? undefined,
@@ -865,11 +865,11 @@ export default function ProApp() {
               {!symbolLoading &&
                 symbolItems.map((s) => (
                   <button
-                    key={s.name}
+                    key={s.tradingsymbol}
                     onClick={() => {
                       setShowSymbolPicker(false);
-                      setSymbol(s.name);
-                      void changeSymbol(s.name);
+                      setSymbol(s.tradingsymbol);
+                      void changeSymbol(s.tradingsymbol);
                     }}
                     style={{
                       width: "100%",
@@ -881,7 +881,7 @@ export default function ProApp() {
                       cursor: "pointer",
                     }}
                   >
-                    {s.name}
+                    {s.tradingsymbol}
                   </button>
                 ))}
             </div>

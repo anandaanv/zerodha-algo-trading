@@ -7,6 +7,7 @@ import com.dtech.kitecon.enums.SubscriptionUowStatus;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.repository.SubscriptionRepository;
 import com.dtech.kitecon.repository.SubscriptionUowRepository;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,10 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.LinkedBlockingDeque;
 
 @Service
 @RequiredArgsConstructor
@@ -39,7 +38,7 @@ public class SubscriptionUowService {
     public void tick() {
         Instant now = Instant.now();
         Set<SubscriptionUowStatus> statuses = EnumSet.of(SubscriptionUowStatus.ACTIVE, SubscriptionUowStatus.FAILED);
-        List<SubscriptionUow> batch = uowRepository.findTop2000ByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(statuses, now);
+        List<SubscriptionUow> batch = uowRepository.findByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(statuses, now);
         if (batch.isEmpty()) {
             return;
         }
@@ -47,25 +46,11 @@ public class SubscriptionUowService {
         for (SubscriptionUow uow : batch) {
             if (processed >= batchSize) break;
             try {
-                if (!claim(uow.getId())) continue;
                 subscriptionUowHandler.processOne(uow);
                 processed++;
             } catch (Exception e) {
                 log.warn("Error processing UOW id={}: {}", uow.getId(), e.getMessage());
             }
         }
-    }
-
-    private boolean claim(Long uowId) {
-        return uowRepository.findById(uowId).map(u -> {
-            if (u.getStatus() == SubscriptionUowStatus.WIP) return false;
-            u.setStatus(SubscriptionUowStatus.WIP);
-            try {
-                uowRepository.save(u);
-                return true;
-            } catch (Exception optimistic) {
-                return false;
-            }
-        }).orElse(false);
     }
 }

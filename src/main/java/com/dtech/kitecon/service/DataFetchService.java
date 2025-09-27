@@ -150,6 +150,9 @@ public class DataFetchService {
                     .interval(interval)
                     .clean(clean && count.getAndAdd(1) <= 0)
                     .build();
+            if(dateRange.getEndDate().isBefore(dateRange.getStartDate())) {
+                throw new RuntimeException(String.format("Invalid date range {} ", dataDownloadRequest));
+            }
             try {
                 executorService.submit(
                         () -> {
