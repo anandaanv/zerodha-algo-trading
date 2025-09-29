@@ -31,36 +31,63 @@ public class SubscriptionUowGenerator {
         String tradingSymbol = s.getTradingSymbol();
         log.debug("Processing subscription: {}", tradingSymbol);
 
+        // Delegate core scheduling to shared helper
+        scheduleForSymbol(s, tradingSymbol, intervals);
+
+        // Update subscription timestamp to reflect scheduling step (even if no-op, preserves existing behavior)
+        s.setLastUpdatedAt(LocalDateTime.now());
+        subscriptionRepository.save(s);
+        log.info("Subscription {} scheduled/updated UOWs at {}", tradingSymbol, s.getLastUpdatedAt());
+    }
+
+    /**
+     * Processes a specific tradingSymbol under the provided parent subscription.
+     * Does NOT mutate the parent's tradingSymbol; optionally updates parent's lastUpdatedAt.
+     */
+    @Transactional
+    public void processSubscriptionForSymbol(Subscription parent, String tradingSymbol, List<Interval> intervals, boolean updateParentTimestamp) {
+        log.debug("Processing symbol {} under subscription id={}", tradingSymbol, parent.getId());
+
+        // Delegate core scheduling to shared helper
+        scheduleForSymbol(parent, tradingSymbol, intervals);
+
+        if (updateParentTimestamp) {
+            parent.setLastUpdatedAt(LocalDateTime.now());
+            subscriptionRepository.save(parent);
+            log.info("Parent subscription {} scheduled/updated via symbol {} at {}", parent.getId(), tradingSymbol, parent.getLastUpdatedAt());
+        }
+    }
+
+    /**
+     * Shared core logic to schedule UOWs for a given parent subscription and trading symbol.
+     * Returns true if underlying was found and scheduling proceeded, false otherwise.
+     */
+    private boolean scheduleForSymbol(Subscription parent, String tradingSymbol, List<Interval> intervals) {
         // Validate underlying exists in NSE
         Instrument underlying = instrumentRepository.findByTradingsymbolAndExchangeIn(tradingSymbol, new String[]{"NSE"});
         if (underlying == null) {
-            log.warn("Underlying {} not found in NSE instruments; skipping subscription {}", tradingSymbol, s.getId());
-            // still update lastUpdatedAt to avoid repeatedly trying malformed entry? keep as skip-logic:
-            // choose to update lastUpdatedAt so this bad entry doesn't block others
-            s.setLastUpdatedAt(LocalDateTime.now());
-            subscriptionRepository.save(s);
-            return;
+            log.warn("Underlying {} not found in NSE instruments; skipping under parent {}", tradingSymbol, parent.getId());
+            return false;
         }
 
         // Compute related instruments and upsert UOWs (no inactivation)
-
         List<Instrument> futures = resolverService.resolveNearestFutures(tradingSymbol, 2);
         Set<Instrument> instrumentsToUpdate = new LinkedHashSet<Instrument>(futures);
         List<Instrument> options = resolverService.resolveTopOptions(tradingSymbol, underlying, 10);
         instrumentsToUpdate.addAll(options);
 
-        log.debug("Resolved {} instruments for {} (futures={}, options={})",
-                instrumentsToUpdate.size(), tradingSymbol, futures.size(), options.size());
+        log.debug("Resolved {} instruments for {} (futures={}, options={}) under parent {}",
+                instrumentsToUpdate.size(), tradingSymbol, futures.size(), options.size(), parent.getId());
 
         // Underlying (SPOT)
         for (Interval interval : intervals) {
-            this.upsertUowActive(s, underlying.getTradingsymbol(), "SPOT", underlying.getExchange(), interval);
+            this.upsertUowActive(parent, underlying.getTradingsymbol(), "SPOT", underlying.getExchange(), interval);
         }
 
         for (Instrument fut : futures) {
             String tag = "FUT";
             for (Interval interval : intervals) {
-                this.upsertUowActive(s, fut.getTradingsymbol(), tag, fut.getExchange(), interval);
+                this.upsertUowActive(parent, fut.getTradingsymbol(), tag, fut.getExchange(), interval);
             }
         }
 
@@ -68,14 +95,11 @@ public class SubscriptionUowGenerator {
         for (Instrument opt : options) {
             String tag = deriveOptionTag(opt.getTradingsymbol(), optIndex++);
             for (Interval interval : intervals) {
-                this.upsertUowActive(s, opt.getTradingsymbol(), tag, opt.getExchange(), interval);
+                this.upsertUowActive(parent, opt.getTradingsymbol(), tag, opt.getExchange(), interval);
             }
         }
 
-        // Update subscription timestamp to reflect scheduling step
-        s.setLastUpdatedAt(LocalDateTime.now());
-        subscriptionRepository.save(s);
-        log.info("Subscription {} scheduled/updated UOWs at {}", tradingSymbol, s.getLastUpdatedAt());
+        return true;
     }
 
     private static String deriveOptionTag(String tradingSymbol, int index) {

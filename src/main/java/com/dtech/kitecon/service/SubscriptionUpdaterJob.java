@@ -44,6 +44,9 @@ public class SubscriptionUpdaterJob {
     @Getter
     private volatile boolean enabled = true;
 
+    // Repository for expanding INDEX-<name> subscriptions into constituent symbols
+    private final com.dtech.kitecon.repository.IndexSymbolRepository indexSymbolRepository;
+
     /**
      * Run hourly by default. Cron can be overridden using data.update.hourlyCron property.
      */
@@ -68,7 +71,26 @@ public class SubscriptionUpdaterJob {
 
             for (Subscription s : subscriptions) {
                 try {
-                    subscriptionUowGenerator.processSubscription(s, intervals);
+                    String symbol = s.getTradingSymbol();
+                    if (symbol != null && symbol.startsWith("INDEX-")) {
+                        String indexName = symbol.substring("INDEX-".length()).trim();
+                        List<String> members = indexSymbolRepository.findAllSymbolsByIndexName(indexName);
+                        if (members == null || members.isEmpty()) {
+                            log.warn("No members found for index {}; marking subscription {} as updated with no action", indexName, symbol);
+                            s.setLastUpdatedAt(java.time.LocalDateTime.now());
+                            subscriptionRepository.save(s);
+                            continue;
+                        }
+                        for (String member : members) {
+                            subscriptionUowGenerator.processSubscriptionForSymbol(s, member, intervals, false);
+                        }
+                        // Update parent once after scheduling all members
+                        s.setLastUpdatedAt(java.time.LocalDateTime.now());
+                        subscriptionRepository.save(s);
+                    } else {
+                        // Plain index names (e.g., NIFTY50) are treated as single symbols
+                        subscriptionUowGenerator.processSubscription(s, intervals);
+                    }
                 } catch (Throwable t) {
                     log.error("Failed to process subscription {}: {}", s.getTradingSymbol(), t.getMessage(), t);
                 }
