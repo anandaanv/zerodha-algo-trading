@@ -448,8 +448,35 @@ export abstract class GenericPlugin<
   // ------------------- Helpers -------------------
 
   protected finalizeDrawing() {
-    const pts = this.drawingPtsPx.map((p) => this.pxToPoint(p)).filter(Boolean) as ChartPoint[];
-    if (pts.length === this.drawingPtsPx.length && pts.length >= this.cfg.minPoints) {
+    const pts: ChartPoint[] = [];
+    for (const p of this.drawingPtsPx) {
+      const mapped = this.pxToPoint(p);
+      if (mapped) {
+        pts.push(mapped);
+        continue;
+      }
+
+      // Fallback: if time couldn't be derived (future/past whitespace), estimate it from visible range
+      const price = this.yToPrice(p.y);
+      if (price == null) {
+        // If price mapping fails, skip this point (cannot safely place it)
+        continue;
+      }
+      // Try deriving from x directly first
+      const t1 = this.xToTime(p.x);
+      if (t1 != null) {
+        pts.push({ time: t1, price } as ChartPoint);
+        continue;
+      }
+      // Use interpolation over the visible range
+      const est = (this as any).estimateTimeForX?.(p.x) as Time | null;
+      if (est != null) {
+        pts.push({ time: est, price } as ChartPoint);
+      }
+    }
+
+    // Finalize if we have the minimum required points, even if some were outside normal mapping
+    if (pts.length >= this.cfg.minPoints) {
       const id = this.uid();
       const shape = { id, points: pts, props: this.cloneProps(this.cfg.defaultProps) } as TShape;
       this.shapes.push(shape);

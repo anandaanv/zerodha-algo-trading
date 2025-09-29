@@ -85,10 +85,66 @@ export abstract class BaseOverlayPlugin {
     return (this.series?.coordinateToPrice?.(y) ?? this.priceScale()?.coordinateToPrice?.(y)) as number | null;
   }
   protected timeToX(time: Time) {
-    return this.chart.timeScale().timeToCoordinate(time) as number | null;
+    // Direct map first
+    const direct = this.chart.timeScale().timeToCoordinate(time) as number | null;
+    if (direct != null) return direct;
+
+    // Fallback: compute x using visible range interpolation
+    try {
+      const range = this.chart.timeScale().getVisibleRange();
+      if (!range) return null;
+
+      const fromSec = this.timeToSeconds(range.from);
+      const toSec = this.timeToSeconds(range.to);
+      const tSec = this.timeToSeconds(time);
+      if (fromSec == null || toSec == null || tSec == null || toSec === fromSec) return null;
+
+      const fromX = this.chart.timeScale().timeToCoordinate(range.from);
+      const toX = this.chart.timeScale().timeToCoordinate(range.to);
+      if (fromX == null || toX == null) return null;
+
+      const pxPerSec = (toX - fromX) / (toSec - fromSec);
+      return fromX + (tSec - fromSec) * pxPerSec;
+    } catch {
+      return null;
+    }
   }
   protected xToTime(x: number) {
     return this.chart.timeScale().coordinateToTime(x) as Time | null;
+  }
+
+  // Estimate a Time for any x (including future/past whitespace) using visible range interpolation
+  protected estimateTimeForX(x: number): Time | null {
+    try {
+      const range = this.chart.timeScale().getVisibleRange();
+      if (!range) return null;
+
+      const fromSec = this.timeToSeconds(range.from);
+      const toSec = this.timeToSeconds(range.to);
+      if (fromSec == null || toSec == null) return null;
+
+      const fromX = this.chart.timeScale().timeToCoordinate(range.from);
+      const toX = this.chart.timeScale().timeToCoordinate(range.to);
+      if (fromX == null || toX == null || toX === fromX) return null;
+
+      const secPerPx = (toSec - fromSec) / (toX - fromX);
+      const sec = fromSec + (x - fromX) * secPerPx;
+
+      return Math.round(sec) as unknown as Time;
+    } catch {
+      return null;
+    }
+  }
+
+  // Convert Time (UTCTimestamp or BusinessDay) to epoch seconds
+  protected timeToSeconds(time: Time): number | null {
+    if (typeof time === "number") return time;
+    if (time && typeof time === "object" && "year" in time && "month" in time && "day" in time) {
+      const t = time as unknown as { year: number; month: number; day: number };
+      const ms = Date.UTC(t.year, t.month - 1, t.day, 0, 0, 0, 0);
+      return Math.floor(ms / 1000);
+    }
+    return null;
   }
 
   protected toLocal(event: MouseEvent) {
