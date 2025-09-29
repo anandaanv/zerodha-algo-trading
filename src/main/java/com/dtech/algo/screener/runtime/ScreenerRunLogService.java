@@ -19,7 +19,7 @@ public class ScreenerRunLogService {
     private final ObjectMapper objectMapper;
 
     public void logStep(Long runId, WorkflowStep step, Object input, Object output, Boolean success, String errorMessage) {
-        if (runId == null) return;
+        if (runId == null || runId == 0) return;
         try {
             String inputJson = input == null ? null : objectMapper.writeValueAsString(input);
             String outputJson = output == null ? null : objectMapper.writeValueAsString(output);

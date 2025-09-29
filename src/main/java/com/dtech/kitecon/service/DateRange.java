@@ -20,19 +20,23 @@ public class DateRange {
     public List<DateRange> split(int days) {
         List<DateRange> result = new ArrayList<>();
         Instant startRef = startDate;
-        Instant endRef = startDate.plus(days, ChronoUnit.DAYS);
-        while (endRef.isBefore(endDate)) {
+
+        while (startRef.isBefore(endDate)) {
+            Instant endRef = startRef.plus(days, ChronoUnit.DAYS);
+
+            // If endRef goes beyond the endDate, use endDate as the final point
+            if (endRef.isAfter(endDate)) {
+                endRef = endDate;
+            }
+
             result.add(DateRange.builder()
+                    .startDate(startRef)
                     .endDate(endRef)
-                    .startDate(startRef).build());
+                    .build());
+
             startRef = endRef.plusSeconds(1);
-            endRef = startRef.plus(days, ChronoUnit.DAYS);
         }
-        if(endRef.isAfter(startRef) && endRef.isBefore(endDate)) {
-            result.add(DateRange.builder()
-                    .endDate(endRef)
-                    .startDate(startRef).build());
-        }
+    
         return result;
     }
 }
