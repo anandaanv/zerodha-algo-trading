@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -27,7 +28,7 @@ public class OpenAIUOW implements UnitOfWork {
         try {
             Verdict verdict = Verdict.WAIT;
             Object ob = ctx.getParam("lastScreenerOutput");
-            if(ob instanceof ScreenerOutput so) {
+            if (ob instanceof ScreenerOutput so) {
                 verdict = so.getFinalVerdict();
             }
             var screener = ctx.getScreener();
@@ -45,9 +46,12 @@ public class OpenAIUOW implements UnitOfWork {
                             .timeframes(ctx.getAliases().values().stream().map(
                                     IntervalBarSeries::getInterval
                             ).toList())
-                            .prompt(prompt)
-                            .build();
-
+                            .intervalsMapping(ctx.getAliases().entrySet()
+                                    .stream().collect(Collectors.toMap(
+                                            Map.Entry::getKey, e -> e.getValue().getInterval()
+                                    )))
+                                    .prompt(prompt)
+                                    .build();
             ChartAnalysisResponse response = chartAnalysisService.analyzeCharts(chartAnalysisRequest);
 
             // Log OPENAI step

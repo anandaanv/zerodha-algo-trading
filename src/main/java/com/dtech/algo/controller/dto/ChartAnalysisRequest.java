@@ -11,6 +11,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Request DTO for the chart analysis API
@@ -43,5 +44,8 @@ public class ChartAnalysisRequest {
     private Verdict verdict;
 
     private String prompt;
+
+    private Map<String, Interval> intervalsMapping;
+
 
 }
