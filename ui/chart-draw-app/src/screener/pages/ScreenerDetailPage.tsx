@@ -79,6 +79,8 @@ export default function ScreenerDetailPage() {
       timeframe: data.timeframe || "",
       mapping,
       workflow,
+      // Include promptId from API; cast to any to avoid type mismatch if client type is outdated
+      promptId: (data as any).promptId || "",
       promptJson: data.promptJson || "{}",
       charts,
     };
