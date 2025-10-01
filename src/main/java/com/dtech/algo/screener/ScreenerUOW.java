@@ -18,7 +18,7 @@ public class ScreenerUOW implements UnitOfWork {
     private final ObjectMapper objectMapper;
 
     @Override
-    public void run(ScreenerContext ctx) {
+    public ScreenerOutput run(ScreenerContext ctx) {
         SignalCallback cb = next != null ? next : NOOP;
         ScreenerOutput output = getScreenerOutput(ctx, cb);
 
@@ -49,6 +49,7 @@ public class ScreenerUOW implements UnitOfWork {
             // Last step: mark final using ScreenerOutput
             runLogService.markFinal(runId, output != null && output.isPassed(), output != null ? output.getFinalVerdict() : null);
         }
+        return output;
     }
 
     private ScreenerOutput getScreenerOutput(ScreenerContext ctx, SignalCallback cb) {

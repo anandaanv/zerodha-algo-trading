@@ -30,9 +30,7 @@ import java.util.*;
 @Slf4j
 public class ChartAnalysisService {
 
-    private final BarSeriesHelper barSeriesHelper;
     private final TradingViewChartService tradingViewChartService;
-    private final OpenAiClientService openAiService;
     private final OpenAiConversationsService openAiConversationsService;
     private final DataFetchService dataFetchService;
     private final IndexSymbolRepository indexSymbolRepository;

@@ -7,6 +7,7 @@ import com.dtech.algo.screener.dsl.averages.Averages;
 import com.dtech.algo.screener.dsl.bands.Bands;
 import com.dtech.algo.screener.dsl.oscillators.Oscillators;
 import com.dtech.algo.screener.dsl.trend.Trend;
+import com.dtech.algo.screener.enums.Verdict;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -106,6 +107,13 @@ public class KDsl {
 
     public ScreenerOutput output(boolean passed, Map<String, Object> debug) {
         return ScreenerOutput.builder().passed(passed).debug(debug).build();
+    }
+    public ScreenerOutput output(boolean passed, Map<String, Object> debug, Verdict verdict) {
+        return ScreenerOutput.builder()
+                .passed(passed)
+                .debug(debug)
+                .finalVerdict(verdict)
+                .build();
     }
 
     // --- Convenience ---

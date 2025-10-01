@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -56,6 +57,7 @@ public class DataFetchService {
         return profile.userName;
     }
 
+    @Transactional
     public void downloadAllInstruments() throws KiteException, IOException {
         Map<Long, Instrument> databaseInstruments = instrumentRepository.findAll()
                 .stream()

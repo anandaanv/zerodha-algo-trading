@@ -55,7 +55,10 @@ public class OpenAIScreenService {
             }
 
             // Choose a default single timeframe for the initial flow; can be enhanced to derive from mapping.
-            List<Interval> timeframes = List.of(Interval.OneHour);
+            List<Interval> timeframes = request.getMapping().values()
+                    .stream().map(mapping ->
+                            Interval.valueOf(mapping.interval()))
+                    .toList();
             int candleCount = defaultVisibleBars;
 
             return generateTradingViewAnalysis(request, symbol, timeframes, candleCount);

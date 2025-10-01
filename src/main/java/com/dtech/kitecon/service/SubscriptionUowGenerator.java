@@ -3,8 +3,10 @@ package com.dtech.kitecon.service;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.data.Subscription;
+import com.dtech.kitecon.data.SubscriptionUow;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.repository.SubscriptionRepository;
+import com.dtech.kitecon.enums.SubscriptionUowStatus;
 import com.dtech.kitecon.repository.SubscriptionUowRepository;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,10 +14,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 @AllArgsConstructor
@@ -135,4 +140,6 @@ public class SubscriptionUowGenerator {
             if (changed) subscriptionUowRepository.save(existing);
         }
     }
+
+
 }
