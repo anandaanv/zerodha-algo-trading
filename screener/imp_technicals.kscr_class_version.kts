@@ -33,7 +33,6 @@ object ScreenerEntry {
         val emaAlignedDown = ema5.lt(ema13) && ema13.lt(ema26)
         val emaCrossAnyDown = emaAlignedDown
                 || ema5.crossesUnder(ema13) || ema5.crossesUnder(ema26) || ema13.crossesUnder(ema26)
-
         val rsiUptick = rsi14.slopeUp()
         val rsiDowntick = rsi14.slopeDown()
         val stochUptick = stochK.slopeUp()
@@ -60,15 +59,42 @@ object ScreenerEntry {
         val finalBuy = doubleBuy && papaBuy && adxGreen
         val finalSell = doubleSell && papaSell && adxRed
 
-        entryIf(finalBuy, "imp-tech-buy")
-        exitIf(finalSell, "imp-tech-sell")
-
         val verdict = if (finalBuy) Verdict.BUY else if (finalSell) Verdict.SELL else Verdict.WAIT
 
         // Return ScreenerOutput via DSL
         output(
             finalBuy || finalSell,
             mapOf(
+                "ema5" to ema5,
+                "ema13" to ema13,
+                "ema26" to ema26,
+                "rsi14" to rsi14,
+                "stochK" to stochK,
+                "b" to b,
+                "adx14" to adx14,
+                "dPlus" to dPlus,
+                "dMinus" to dMinus,
+                "tideMacd" to tideMacd,
+                "emaAlignedUp" to emaAlignedUp,
+                "emaCrossAnyUp" to emaCrossAnyUp,
+                "emaAlignedDown" to emaAlignedDown,
+                "emaCrossAnyDown" to emaCrossAnyDown,
+                "rsiUptick" to rsiUptick,
+                "rsiDowntick" to rsiDowntick,
+                "stochUptick" to stochUptick,
+                "stochDowntick" to stochDowntick,
+                "macdUp" to macdUp,
+                "macdDown" to macdDown,
+                "bbcup" to bbcup,
+                "bbcdn" to bbcdn,
+                "doubleBuy" to doubleBuy,
+                "doubleSell" to doubleSell,
+                "papaBuy" to papaBuy,
+                "papaSell" to papaSell,
+                "adxUptick" to adxUptick,
+                "adxDowntick" to adxDowntick,
+                "adxGreen" to adxGreen,
+                "adxRed" to adxRed,
                 "finalBuy" to finalBuy,
                 "finalSell" to finalSell
             ),

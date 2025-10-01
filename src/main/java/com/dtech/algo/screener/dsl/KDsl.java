@@ -130,34 +130,59 @@ public class KDsl {
     // --- Series expression wrapper ---
     public static final class SeriesExpr {
         private final ScreenerContext ctx;
+        private final String alias;
         private final IntToDoubleFunction at;
 
-        private SeriesExpr(ScreenerContext ctx, IntToDoubleFunction at) {
+        private SeriesExpr(ScreenerContext ctx, String alias, IntToDoubleFunction at) {
             this.ctx = ctx;
+            this.alias = alias;
             this.at = at;
         }
 
+        // Preferred: alias-aware factory so we can translate KDsl bars-back to TA4J index
+        public static SeriesExpr of(ScreenerContext ctx, String alias, IntToDoubleFunction at) {
+            return new SeriesExpr(ctx, alias, at);
+        }
+
+        // Legacy factory: keeps old behavior (treats ctx.nowIndex as TA4J index directly)
         public static SeriesExpr of(ScreenerContext ctx, IntToDoubleFunction at) {
-            return new SeriesExpr(ctx, at);
+            return new SeriesExpr(ctx, null, at);
         }
 
         public static SeriesExpr nan(ScreenerContext ctx) {
-            return new SeriesExpr(ctx, i -> Double.NaN);
+            return new SeriesExpr(ctx, null, i -> Double.NaN);
+        }
+
+        // Translate KDsl bars-back (0 = latest) into TA4J index using series endIndex when alias is known.
+        private int resolveTa4jIndex(int barsBack) {
+            try {
+                if (alias != null) {
+                    org.ta4j.core.BarSeries s = ctx.getSeries(alias);
+                    if (s != null) {
+                        int end = s.getEndIndex();
+                        // Total bars-back = ctx.nowIndex (bars-back) + requested offset
+                        return end - (ctx.getNowIndex() + barsBack);
+                    }
+                }
+            } catch (Exception ignored) {}
+            // Fallback: treat ctx.nowIndex as TA4J index
+            return ctx.getNowIndex() - barsBack;
         }
 
         public double now() {
-            int i = ctx.getNowIndex();
+            int i = resolveTa4jIndex(0);
+            if (i < 0) return Double.NaN;
             return at.applyAsDouble(i);
         }
 
         public double prev() {
-            int i = ctx.getNowIndex();
-            if (i <= 0) return Double.NaN;
-            return at.applyAsDouble(i - 1);
+            int i = resolveTa4jIndex(1);
+            if (i < 0) return Double.NaN;
+            return at.applyAsDouble(i);
         }
 
         public double atOffset(int barsBack) {
-            int i = ctx.getNowIndex() - barsBack;
+            int i = resolveTa4jIndex(barsBack);
             if (i < 0) return Double.NaN;
             return at.applyAsDouble(i);
         }
@@ -184,8 +209,16 @@ public class KDsl {
         public boolean falling(int n) { return !Double.isNaN(now()) && !Double.isNaN(atOffset(n)) && now() < atOffset(n); }
 
         // Comparators
-        public boolean gt(SeriesExpr other) { return now() > other.now(); }
-        public boolean lt(SeriesExpr other) { return now() < other.now(); }
+        public boolean gt(SeriesExpr other) {
+            double ref = now();
+            double ref1 = other.now();
+            return ref > ref1;
+        }
+        public boolean lt(SeriesExpr other) {
+            double ref1 = now();
+            double ref2 = other.now();
+            return ref1 < ref2;
+        }
         public boolean gte(SeriesExpr other) { return now() >= other.now(); }
         public boolean lte(SeriesExpr other) { return now() <= other.now(); }
 

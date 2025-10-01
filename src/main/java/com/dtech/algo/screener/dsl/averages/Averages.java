@@ -15,7 +15,7 @@ public final class Averages {
         if (series == null) return KDsl.SeriesExpr.nan(ctx);
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         SMAIndicator ind = new SMAIndicator(close, period);
-        return KDsl.SeriesExpr.of(ctx, i -> ind.getValue(i).doubleValue());
+        return KDsl.SeriesExpr.of(ctx, alias, i -> ind.getValue(i).doubleValue());
     }
 
     public static KDsl.SeriesExpr ema(ScreenerContext ctx, String alias, int period) {
@@ -23,6 +23,6 @@ public final class Averages {
         if (series == null) return KDsl.SeriesExpr.nan(ctx);
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         EMAIndicator ind = new EMAIndicator(close, period);
-        return KDsl.SeriesExpr.of(ctx, i -> ind.getValue(i).doubleValue());
+        return KDsl.SeriesExpr.of(ctx, alias, i -> ind.getValue(i).doubleValue());
     }
 }
