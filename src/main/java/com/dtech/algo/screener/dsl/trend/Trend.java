@@ -22,9 +22,9 @@ public final class Trend {
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         MACDIndicator macd = new MACDIndicator(close, fast, slow);
         EMAIndicator sig = new EMAIndicator(macd, signal);
-        KDsl.SeriesExpr macdExpr = KDsl.SeriesExpr.of(ctx, i -> macd.getValue(i).doubleValue());
-        KDsl.SeriesExpr sigExpr = KDsl.SeriesExpr.of(ctx, i -> sig.getValue(i).doubleValue());
-        KDsl.SeriesExpr histExpr = KDsl.SeriesExpr.of(ctx, i -> macd.getValue(i).minus(sig.getValue(i)).doubleValue());
+        KDsl.SeriesExpr macdExpr = KDsl.SeriesExpr.of(ctx, alias, i -> macd.getValue(i).doubleValue());
+        KDsl.SeriesExpr sigExpr = KDsl.SeriesExpr.of(ctx, alias, i -> sig.getValue(i).doubleValue());
+        KDsl.SeriesExpr histExpr = KDsl.SeriesExpr.of(ctx, alias, i -> macd.getValue(i).minus(sig.getValue(i)).doubleValue());
         return new Macd(macdExpr, sigExpr, histExpr);
     }
 
@@ -32,21 +32,21 @@ public final class Trend {
         BarSeries series = ctx.getSeries(alias);
         if (series == null) return KDsl.SeriesExpr.nan(ctx);
         ADXIndicator adx = new ADXIndicator(series, period);
-        return KDsl.SeriesExpr.of(ctx, i -> adx.getValue(i).doubleValue());
+        return KDsl.SeriesExpr.of(ctx, alias, i -> adx.getValue(i).doubleValue());
     }
 
     public static KDsl.SeriesExpr diPlus(ScreenerContext ctx, String alias, int period) {
         BarSeries series = ctx.getSeries(alias);
         if (series == null) return KDsl.SeriesExpr.nan(ctx);
         PlusDIIndicator di = new PlusDIIndicator(series, period);
-        return KDsl.SeriesExpr.of(ctx, i -> di.getValue(i).doubleValue());
+        return KDsl.SeriesExpr.of(ctx, alias, i -> di.getValue(i).doubleValue());
     }
 
     public static KDsl.SeriesExpr diMinus(ScreenerContext ctx, String alias, int period) {
         BarSeries series = ctx.getSeries(alias);
         if (series == null) return KDsl.SeriesExpr.nan(ctx);
         MinusDIIndicator di = new MinusDIIndicator(series, period);
-        return KDsl.SeriesExpr.of(ctx, i -> di.getValue(i).doubleValue());
+        return KDsl.SeriesExpr.of(ctx, alias, i -> di.getValue(i).doubleValue());
     }
 
     public static final class Macd {

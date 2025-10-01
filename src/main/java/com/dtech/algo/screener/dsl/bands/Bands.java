@@ -27,9 +27,9 @@ public final class Bands {
         BollingerBandsUpperIndicator up = new BollingerBandsUpperIndicator(mid, std, DecimalNum.valueOf(mult));
         BollingerBandsLowerIndicator lo = new BollingerBandsLowerIndicator(mid, std, DecimalNum.valueOf(mult));
 
-        KDsl.SeriesExpr midE = KDsl.SeriesExpr.of(ctx, i -> mid.getValue(i).doubleValue());
-        KDsl.SeriesExpr upE = KDsl.SeriesExpr.of(ctx, i -> up.getValue(i).doubleValue());
-        KDsl.SeriesExpr loE = KDsl.SeriesExpr.of(ctx, i -> lo.getValue(i).doubleValue());
+        KDsl.SeriesExpr midE = KDsl.SeriesExpr.of(ctx, alias, i -> mid.getValue(i).doubleValue());
+        KDsl.SeriesExpr upE = KDsl.SeriesExpr.of(ctx, alias, i -> up.getValue(i).doubleValue());
+        KDsl.SeriesExpr loE = KDsl.SeriesExpr.of(ctx, alias, i -> lo.getValue(i).doubleValue());
         return new BandsTriple(midE, upE, loE);
     }
 

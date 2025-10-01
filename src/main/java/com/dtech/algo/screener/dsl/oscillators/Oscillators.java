@@ -16,7 +16,7 @@ public final class Oscillators {
         if (series == null) return KDsl.SeriesExpr.nan(ctx);
         ClosePriceIndicator close = new ClosePriceIndicator(series);
         RSIIndicator ind = new RSIIndicator(close, period);
-        return KDsl.SeriesExpr.of(ctx, i -> ind.getValue(i).doubleValue());
+        return KDsl.SeriesExpr.of(ctx, alias, i -> ind.getValue(i).doubleValue());
     }
 
     /**
@@ -27,9 +27,9 @@ public final class Oscillators {
         if (series == null) return KDsl.SeriesExpr.nan(ctx);
         StochasticOscillatorKIndicator k = new StochasticOscillatorKIndicator(series, kPeriod);
         if (smoothK <= 1) {
-            return KDsl.SeriesExpr.of(ctx, i -> k.getValue(i).doubleValue());
+            return KDsl.SeriesExpr.of(ctx, alias, i -> k.getValue(i).doubleValue());
         }
         SMAIndicator smoothed = new SMAIndicator(k, smoothK);
-        return KDsl.SeriesExpr.of(ctx, i -> smoothed.getValue(i).doubleValue());
+        return KDsl.SeriesExpr.of(ctx, alias, i -> smoothed.getValue(i).doubleValue());
     }
 }
