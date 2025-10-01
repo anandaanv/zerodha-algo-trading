@@ -1,5 +1,6 @@
 package com.dtech.algo.controller.dto;
 
+import com.dtech.algo.screener.enums.Verdict;
 import com.dtech.algo.series.Interval;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -38,4 +39,9 @@ public class ChartAnalysisRequest {
     @Positive(message = "Candle count must be positive")
     @Builder.Default
     private int candleCount = 100;
+
+    private Verdict verdict;
+
+    private String prompt;
+
 }

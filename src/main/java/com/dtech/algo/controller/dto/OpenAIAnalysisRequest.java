@@ -1,6 +1,7 @@
 package com.dtech.algo.controller.dto;
 
 import com.dtech.algo.screener.ScreenerContextLoader;
+import com.dtech.algo.screener.enums.Verdict;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -39,6 +40,7 @@ public class OpenAIAnalysisRequest {
      */
     private String promptJson;
 
+    private Verdict verdict;
     /**
      * Resolve the effective prompt to use.
      * Precedence: promptId (if non-blank) else promptJson.

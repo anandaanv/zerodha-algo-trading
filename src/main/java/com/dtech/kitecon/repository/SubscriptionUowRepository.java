@@ -23,6 +23,10 @@ public interface SubscriptionUowRepository extends JpaRepository<SubscriptionUow
     List<SubscriptionUow> findByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(
             Collection<SubscriptionUowStatus> statuses, Instant now);
 
+
+    List<SubscriptionUow> findAllByStatusIn(Collection<SubscriptionUowStatus> statuses);
+
+
     @Query(value =
             "SELECT c.close FROM subscription_uow u " +
                     "JOIN instrument i ON i.tradingsymbol = u.trading_symbol " +

@@ -1,6 +1,7 @@
 import com.dtech.algo.screener.ScreenerContext
 import com.dtech.algo.screener.SignalCallback
 import com.dtech.algo.screener.dsl.KDsl.dsl
+import com.dtech.algo.screener.enums.Verdict
 
 // Port of "imp-technicals" in compact DSL form.
 // Assumes aliases: "wave" (current), "tide" (higher TF) are provided.
@@ -61,14 +62,15 @@ fun screener(ctx: ScreenerContext, cb: SignalCallback) = dsl(ctx, cb).run {
     entryIf(finalBuy, "imp-tech-buy")
     exitIf(finalSell, "imp-tech-sell")
 
+    val verdict = if (finalBuy) Verdict.BUY else if (finalSell) Verdict.SELL else Verdict.WAIT
+
     // Return ScreenerOutput via DSL
     output(
-        finalBuy,
+        finalBuy || finalSell,
         mapOf(
             "finalBuy" to finalBuy,
-            "finalSell" to finalSell,
-            "emaAlignedUp" to emaAlignedUp,
-            "emaAlignedDown" to emaAlignedDown
-        )
+            "finalSell" to finalSell
+        ),
+        verdict
     )
 }

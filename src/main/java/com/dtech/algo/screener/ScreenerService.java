@@ -5,6 +5,8 @@ import com.dtech.algo.screener.db.ScreenerRepository;
 import com.dtech.algo.screener.domain.Screener;
 import com.dtech.algo.screener.enums.WorkflowStep;
 import com.dtech.algo.screener.kotlinrunner.KotlinScriptExecutor;
+import com.dtech.algo.service.ChartAnalysisService;
+import com.dtech.algo.service.OpenAIScreenService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
@@ -24,9 +26,10 @@ public class ScreenerService {
     private final ObjectMapper objectMapper;
     private final ScreenerRegistryService screenerRegistryService;
     private final ScreenerContextLoader loader;
-    private final com.dtech.algo.service.OpenAIScreenService openAIScreenService;
+    private final OpenAIScreenService openAIScreenService;
     private final KotlinScriptExecutor kotlinScriptExecutor;
     private final com.dtech.algo.screener.runtime.ScreenerRunLogService runLogService;
+    private final ChartAnalysisService chartAnalysisService;
 
     /**
      * Run the screener identified by ID for a given underlying symbol.
@@ -75,7 +78,7 @@ public class ScreenerService {
 
         UnitOfWork tail = null;
         if (hasOpenAI) {
-            tail = new OpenAIUOW(screener.getPromptJson(), openAIScreenService, null, runLogService);
+            tail = new OpenAIUOW(screener.getPromptJson(), null, runLogService, chartAnalysisService);
         }
 
         UnitOfWork chain = hasOpenAI ? tail : null;
@@ -83,46 +86,11 @@ public class ScreenerService {
         head.run(ctx);
     }
 
-//    public void runOld(long screenerId, String symbol, int nowIndex, @Nullable String timeframe, @Nullable SignalCallback callback) {
-//        // Load entity and convert to domain
-//        ScreenerEntity entity = screenerRepository.findById(screenerId)
-//                .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + screenerId));
-//        screenerRegistryService.registerScript(entity.getId(), entity.getScript(), entity.getDirty());
-//        entity.setDirty(false);
-//        screenerRepository.save(entity);
-//        Screener screener = Screener.fromEntity(entity, objectMapper);
-//
-//        Map<String, ScreenerContextLoader.SeriesSpec> mapping = Optional.ofNullable(screener.getMapping())
-//                .orElseThrow(() -> new IllegalArgumentException("Screener mapping is missing for id=" + screenerId));
-//
-//        // Build context via loader
-//        String tf = timeframe != null && !timeframe.isBlank() ? timeframe : screener.getTimeframe();
-//        ScreenerContext baseCtx = loader.load(symbol, mapping, nowIndex, tf);
-//
-//        // Attach domain screener to the context
-//        ScreenerContext ctx = baseCtx.toBuilder()
-//                .screener(screener)
-//                .build();
-//
-//        // Build callback chain flags via domain
-//        boolean hasOpenAI = Optional.ofNullable(screener.getWorkflow())
-//                .orElse(List.of(WorkflowStep.SCRIPT))
-//                .contains(WorkflowStep.OPENAI);
-//
-//        UnitOfWork next = null;
-//        if (hasOpenAI) {
-//            next = getOpenAIUOW(screener, next);
-//        }
-//
-//        UnitOfWork head = new ScreenerUOW(null /*screenerRegistryService*/, screenerId, next);
-//        head.run(ctx);
-//    }
-
     private OpenAIUOW getOpenAIUOW(Screener screener, UnitOfWork next) {
         String effectivePrompt = screener.getEffectivePrompt();
-        return new OpenAIUOW(effectivePrompt, openAIScreenService, next, runLogService) {
+        return new OpenAIUOW(effectivePrompt, next, runLogService, chartAnalysisService) {
             @Override
-            public void run(ScreenerContext ctx) {
+            public ScreenerOutput run(ScreenerContext ctx) {
                 // Domain already carries charts as aliases in screener.getCharts()
                 // You can enrich ctx.params with chartAliases if needed by downstream
                 ScreenerContext enriched = ctx;
@@ -132,6 +100,7 @@ public class ScreenerService {
                     enriched = ctx.toBuilder().params(params).build();
                 }
                 super.run(enriched);
+                return null;
             }
         };
     }

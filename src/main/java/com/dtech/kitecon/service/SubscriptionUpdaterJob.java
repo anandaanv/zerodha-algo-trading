@@ -30,6 +30,9 @@ public class SubscriptionUpdaterJob {
 
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionUowGenerator subscriptionUowGenerator;
+    private final DataFetchService dataFetchService;
+    private final SubscriptionUowHandler subscriptionUowHandler;
+
     @Value("${data.update.perRunCap:10000}")
     private int perRunCap;
 
@@ -50,9 +53,10 @@ public class SubscriptionUpdaterJob {
     /**
      * Run hourly by default. Cron can be overridden using data.update.hourlyCron property.
      */
-    @Scheduled(cron = "${data.update.hourlyCron:0 0 0 * * ?}")
+    @Scheduled(cron = "${data.update.hourlyCron:0 0 1 * * ?}")
     public void runUpdateJob() {
         try {
+            dataFetchService.downloadAllInstruments();
             if (!enabled) {
                 log.info("SubscriptionUpdaterJob is disabled; skipping execution.");
                 return;
@@ -99,4 +103,5 @@ public class SubscriptionUpdaterJob {
             log.error("SubscriptionUpdaterJob encountered an unexpected error: {}", t.getMessage(), t);
         }
     }
+
 }

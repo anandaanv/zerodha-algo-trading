@@ -1,8 +1,12 @@
 package com.dtech.algo.screener;
 
-import com.dtech.algo.controller.dto.OpenAIAnalysisRequest;
+import com.dtech.algo.controller.dto.ChartAnalysisRequest;
+import com.dtech.algo.controller.dto.ChartAnalysisResponse;
+import com.dtech.algo.screener.enums.Verdict;
 import com.dtech.algo.screener.enums.WorkflowStep;
 import com.dtech.algo.screener.runtime.ScreenerRunLogService;
+import com.dtech.algo.series.IntervalBarSeries;
+import com.dtech.algo.service.ChartAnalysisService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -13,33 +17,42 @@ import java.util.Map;
 public class OpenAIUOW implements UnitOfWork {
 
     private final String promptJson;
-    private final com.dtech.algo.service.OpenAIScreenService openAIScreenService;
     private final UnitOfWork next;
     private final ScreenerRunLogService runLogService;
+    private final ChartAnalysisService chartAnalysisService;
 
     @Override
-    public void run(ScreenerContext ctx) {
+    public ScreenerOutput run(ScreenerContext ctx) {
         // Invoke OpenAI using request data from context/screener (no hardcoded prompt)
         try {
+            Verdict verdict = Verdict.WAIT;
+            Object ob = ctx.getParam("lastScreenerOutput");
+            if(ob instanceof ScreenerOutput so) {
+                verdict = so.getFinalVerdict();
+            }
             var screener = ctx.getScreener();
             String symbol = ctx.getSymbol();
 
             String promptId = screener != null ? screener.getPromptId() : null;
             String promptJsonLocal = screener != null ? screener.getPromptJson() : promptJson;
 
-            OpenAIAnalysisRequest request =
-                    com.dtech.algo.controller.dto.OpenAIAnalysisRequest.builder()
+            String prompt = promptId != null && !promptId.isBlank() ? promptId : promptJsonLocal;
+
+            ChartAnalysisRequest chartAnalysisRequest =
+                    ChartAnalysisRequest.builder()
                             .symbol(symbol)
-                            .mapping(screener != null ? screener.getMapping() : null)
-                            .promptId(promptId)
-                            .promptJson(promptJsonLocal)
+                            .verdict(verdict)
+                            .timeframes(ctx.getAliases().values().stream().map(
+                                    IntervalBarSeries::getInterval
+                            ).toList())
+                            .prompt(prompt)
                             .build();
 
-            com.dtech.algo.controller.dto.ChartAnalysisResponse response = openAIScreenService.analyze(request);
+            ChartAnalysisResponse response = chartAnalysisService.analyzeCharts(chartAnalysisRequest);
 
             // Log OPENAI step
             Long runId = getRunId(ctx);
-            runLogService.logStep(runId, WorkflowStep.OPENAI, request, response, true, null);
+            runLogService.logStep(runId, WorkflowStep.OPENAI, chartAnalysisRequest, response, true, null);
 
             // Attach results to context params for downstream steps
             var params = new java.util.HashMap<>(ctx.getParams() == null ? java.util.Map.of() : ctx.getParams());
@@ -56,6 +69,9 @@ public class OpenAIUOW implements UnitOfWork {
                     runLogService.markFinal(runId, so.isPassed(), so.getFinalVerdict());
                 }
             }
+            ScreenerOutput.builder()
+                    .passed(true)
+                    .build();
         } catch (Exception e) {
             log.error("OpenAIUOW.run error: {}", e.getMessage(), e);
             Long runId = getRunId(ctx);
@@ -64,6 +80,7 @@ public class OpenAIUOW implements UnitOfWork {
                 next.run(ctx);
             }
         }
+        return null;
     }
 
     private static Long getRunId(ScreenerContext ctx) {

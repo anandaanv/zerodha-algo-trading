@@ -4,6 +4,8 @@ import com.dtech.algo.series.InstrumentType;
 import com.dtech.kitecon.data.Instrument;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -26,4 +28,6 @@ public interface InstrumentRepository extends JpaRepository<Instrument, Long> {
 
   // Simple prefix query without exchange/expiry constraints used by the symbol search API
   List<Instrument> findAllByTradingsymbolStartingWith(String symbol);
+
+    Set<Instrument> findAllByTradingsymbolInAndExpiryBefore(List<String> symbols, LocalDateTime expiryBefore);
 }

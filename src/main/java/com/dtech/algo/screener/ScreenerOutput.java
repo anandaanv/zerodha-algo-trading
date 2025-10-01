@@ -1,5 +1,6 @@
 package com.dtech.algo.screener;
 
+import com.dtech.algo.screener.enums.Verdict;
 import lombok.Builder;
 import lombok.Data;
 
@@ -24,5 +25,5 @@ public class ScreenerOutput {
     /**
      * Final verdict produced by the screener decision logic (e.g., BUY/SELL/WAIT).
      */
-    private com.dtech.algo.screener.enums.Verdict finalVerdict;
+    private Verdict finalVerdict;
 }

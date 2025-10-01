@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -46,6 +47,12 @@ public class SubscriptionUowHandler {
             Instrument inst = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, exchanges);
             if (inst == null) {
                 throw new IllegalStateException("Instrument not found for " + symbol);
+            }
+            if(inst.getExpiry()!= null && inst.getExpiry().isBefore(LocalDateTime.now())) {
+                uow.setStatus(SubscriptionUowStatus.INACTIVE);
+                uowRepository.save(uow);
+                log.info("Instrument {} expired, skipping UOW {}", symbol, uow.getId());
+                return;
             }
 
             Interval interval = uow.getInterval();
