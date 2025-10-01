@@ -315,17 +315,15 @@ export default function ScreenerForm(props: Props) {
             />
             <div className="muted">Provide a prompt identifier to fetch a stored prompt.</div>
           </div>
-          {!promptId.trim() && (
-            <div className="row">
-              <label>Prompt Text (JSON or plain)</label>
-              <textarea
-                spellCheck={false}
-                value={promptJson}
-                onChange={(e) => setPromptJson(e.target.value)}
-              />
-              <div className="muted">If Prompt ID is empty, this text will be used.</div>
-            </div>
-          )}
+          <div className="row">
+            <label>Prompt Text (JSON or plain)</label>
+            <textarea
+              spellCheck={false}
+              value={promptJson}
+              onChange={(e) => setPromptJson(e.target.value)}
+            />
+            <div className="muted">If both are provided, Prompt ID takes precedence when saving.</div>
+          </div>
         </>
       )}
 

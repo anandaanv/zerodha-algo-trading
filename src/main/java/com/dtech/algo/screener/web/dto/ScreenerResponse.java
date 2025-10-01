@@ -14,6 +14,7 @@ public record ScreenerResponse(
         String timeframe,
         String script,
         String configJson,
+        String promptId,
         String promptJson,
         String chartsJson,
         String schedulingConfigJson
@@ -37,6 +38,7 @@ public record ScreenerResponse(
                     .timeframe(s.getTimeframe())
                     .script(s.getScript())
                     .configJson(cfgJson)
+                    .promptId(s.getPromptId())
                     .promptJson(s.getPromptJson())
                     .chartsJson(chartsJson)
                     .schedulingConfigJson(schedulingJson)
