@@ -163,7 +163,7 @@ public class ChartAnalysisService {
             String enhancedPrompt = createMultiTimeframeTechnicalAnalysisPrompt(symbol, timeframes, candleCount);
 
             // Call OpenAI for analysis with the comprehensive chart
-            String analysisText = openAiConversationsService.analyzeCharts(Arrays.asList(chartFile), symbol, Interval.OneHour); //FIXME This is hardcoded.
+            String analysisText = openAiConversationsService.analyzeCharts(Arrays.asList(chartFile), request); //FIXME This is hardcoded.
 
             // Try to parse JSON response
             Object jsonAnalysis = parseJsonResponse(analysisText);

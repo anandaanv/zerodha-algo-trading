@@ -1,5 +1,6 @@
 package com.dtech.algo.service;
 
+import com.dtech.algo.controller.dto.ChartAnalysisRequest;
 import com.dtech.algo.openai.OpenAiConversation;
 import com.dtech.algo.openai.OpenAiConversationRepository;
 import com.dtech.algo.openai.OpenAiResponse;
@@ -48,7 +49,7 @@ public class OpenAiConversationsService {
     // ---------- Public API (functional parity with legacy client) ----------
 
 
-    public String analyzeCharts(List<File> chartFiles, String symbol, Interval timeframe) {
+    public String analyzeCharts(List<File> chartFiles, ChartAnalysisRequest request) {
         List<FileObject> uploadedFiles = chartFiles.stream()
                 .map(file -> {
                     try {
@@ -64,7 +65,7 @@ public class OpenAiConversationsService {
                 })
                 .toList();
         try {
-            return processUploadedFiles(uploadedFiles, symbol, timeframe);
+            return processUploadedFiles(uploadedFiles, request);
         } finally {
             uploadedFiles.forEach(file -> {
                 openAIClient.files().delete(file.id());
@@ -73,14 +74,15 @@ public class OpenAiConversationsService {
     }
 
 
-    String processUploadedFiles(List<FileObject> chartFiles, String symbol, Interval timeframe) {
+    String processUploadedFiles(List<FileObject> chartFiles, ChartAnalysisRequest request) {
         ConversationService conversations = openAIClient.conversations();
-        ConversationMapping conversationMapping = retrieveConversation(symbol, timeframe, conversations);
+        ConversationMapping conversationMapping = retrieveConversation(request.getSymbol(),
+                Interval.valueOf(request.getPrimaryInterval()), conversations);
         Conversation conversation = conversationMapping.conversation();
         ItemCreateParams.Builder itemBuilder = ItemCreateParams.builder();
         itemBuilder.conversationId(conversation.id());
         itemBuilder.addItem(ResponseInputItem.Message.builder()
-                .addInputTextContent("Predict " + symbol)
+                .addInputTextContent("Predict " + request.getSymbol())
                 .role(ResponseInputItem.Message.Role.USER)
                 .build());
         conversations.items().create(itemBuilder.build());
@@ -101,7 +103,7 @@ public class OpenAiConversationsService {
                         .input(
                                 ResponseCreateParams.Input.ofResponse(images)
                         ).prompt(ResponsePrompt.builder()
-                                .id("pmpt_68b9b389e030819686b559b7ed501b87012cff9ff78b8159")
+                                .id(request.getPrompt())
                                 .build())
                         .build()
         );

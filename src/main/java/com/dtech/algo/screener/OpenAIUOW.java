@@ -50,8 +50,9 @@ public class OpenAIUOW implements UnitOfWork {
                                     .stream().collect(Collectors.toMap(
                                             Map.Entry::getKey, e -> e.getValue().getInterval()
                                     )))
-                                    .prompt(prompt)
-                                    .build();
+                            .primaryInterval(ctx.getTimeframe())
+                            .prompt(prompt)
+                            .build();
             ChartAnalysisResponse response = chartAnalysisService.analyzeCharts(chartAnalysisRequest);
 
             // Log OPENAI step
