@@ -47,5 +47,5 @@ public class ChartAnalysisRequest {
 
     private Map<String, Interval> intervalsMapping;
 
-
+    private String primaryInterval;
 }
