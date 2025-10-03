@@ -55,6 +55,8 @@ export default function ProApp() {
   const [symbolItems, setSymbolItems] = useState<SymbolItem[]>([]);
   const [symbolLoading, setSymbolLoading] = useState(false);
   const applySelectionRef = useRef<((s: string, p: string) => Promise<void>) | null>(null);
+  // Holds earliest bar timestamp (ms) for each local day in selected timezone
+  const firstBarOfDayMsRef = useRef<Set<number>>(new Set());
 
     // Symbol search for picker - normalize response to { tradingsymbol, name?, lastPrice?, expiry?, ... }
     const fetchSymbols = useCallback(async (query: string): Promise<SymbolItem[]> => {
@@ -411,7 +413,88 @@ export default function ProApp() {
         },
         timeScale: {
             timeVisible: true,
-            secondsVisible: true
+            secondsVisible: true,
+            // Keep epochs in UTC internally; render labels in IST with <= 8 chars
+            tickMarkFormatter: (time: number /* UTCTimestamp seconds or ms */) => {
+              const TZ = "Asia/Kolkata";
+              const ms = time > 1e12 ? time : time * 1000; // normalize to ms
+              const d = new Date(ms);
+
+              const per = String(currentPeriodRef.current || "");
+              const isIntraday = /m|h|min|hour/i.test(per);
+
+              // Date parts helper in IST
+              const dateParts = new Intl.DateTimeFormat("en-IN", {
+                timeZone: TZ,
+                day: "2-digit",
+                month: "2-digit",
+              }).formatToParts(d);
+              const dd = dateParts.find(p => p.type === "day")?.value ?? "";
+              const mon = dateParts.find(p => p.type === "month")?.value ?? "";
+
+              if (isIntraday) {
+                // If this tick is the first bar of the local day, show date (dd/MM)
+                if (firstBarOfDayMsRef.current.has(ms)) {
+                  return `${dd}/${mon}`; // <= 5 chars
+                }
+                // Otherwise show time (HH:mm)
+                const timeParts = new Intl.DateTimeFormat("en-IN", {
+                  timeZone: TZ,
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                }).formatToParts(d);
+                const hh = timeParts.find(p => p.type === "hour")?.value ?? "00";
+                const mm = timeParts.find(p => p.type === "minute")?.value ?? "00";
+                return `${hh}:${mm}`; // <= 5 chars
+              } else {
+                // Higher TFs: show date
+                return `${dd}/${mon}`; // <= 5 chars
+              }
+            }
+        },
+        // Crosshair/tooltip: show full IST date-time
+        localization: {
+          dateFormat: "dd MMM 'yy",
+          timeFormatter: (time: any): string => {
+            const TZ = "Asia/Kolkata";
+
+            // Normalize input to milliseconds
+            let ms: number;
+            if (typeof time === "number") {
+              ms = time > 1e12 ? time : time * 1000;
+            } else if (time && typeof time === "object" && "year" in time) {
+              ms = Date.UTC(time.year, (time.month ?? 1) - 1, time.day ?? 1, 0, 0, 0);
+            } else {
+              ms = 0;
+            }
+            const d = new Date(ms);
+
+            // Build full date in IST: dd MMM yyyy
+            const dateParts = new Intl.DateTimeFormat("en-IN", {
+              timeZone: TZ,
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }).formatToParts(d);
+            const dd = dateParts.find(p => p.type === "day")?.value ?? "";
+            const mon = dateParts.find(p => p.type === "month")?.value ?? "";
+            const yyyy = dateParts.find(p => p.type === "year")?.value ?? "";
+
+            // Build time in IST: HH:mm:ss
+            const timeParts = new Intl.DateTimeFormat("en-IN", {
+              timeZone: TZ,
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+              hour12: false,
+            }).formatToParts(d);
+            const hh = timeParts.find(p => p.type === "hour")?.value ?? "00";
+            const mm = timeParts.find(p => p.type === "minute")?.value ?? "00";
+            const ss = timeParts.find(p => p.type === "second")?.value ?? "00";
+
+            return `${dd} ${mon} ${yyyy} ${hh}:${mm}:${ss}`;
+          },
         },
         handleScroll: {
           mouseWheel: true,
@@ -443,6 +526,8 @@ export default function ProApp() {
             if (!r.ok) throw new Error(`ohlc fetch failed ${r.status}`);
             return r.json();
           });
+
+        // Map to chart data without changing epochs
         const data: CandlestickData[] = rows.map(b => ({
           time: (b.time ?? b.timestamp ?? 0) as number,
           open: b.open,
@@ -450,6 +535,35 @@ export default function ProApp() {
           low: b.low,
           close: b.close,
         }));
+
+        // Build a set of the first bar timestamp (ms) for each local day in IST
+        try {
+          const TZ = "Asia/Kolkata";
+          const fmt = new Intl.DateTimeFormat(undefined, {
+            timeZone: TZ,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          });
+          const earliestPerDay: Record<string, number> = {};
+          for (const d of data) {
+            const raw = d.time as number;
+            const ms = raw > 1e12 ? raw : raw * 1000; // normalize to ms
+            const parts = fmt.formatToParts(new Date(ms));
+            const yyyy = parts.find(p => p.type === "year")?.value ?? "0000";
+            const mm = parts.find(p => p.type === "month")?.value ?? "00";
+            const dd = parts.find(p => p.type === "day")?.value ?? "00";
+            const key = `${yyyy}-${mm}-${dd}`;
+            if (!(key in earliestPerDay) || ms < earliestPerDay[key]) {
+              earliestPerDay[key] = ms;
+            }
+          }
+          firstBarOfDayMsRef.current = new Set(Object.values(earliestPerDay));
+        } catch {
+          // ignore formatting errors; fall back to empty set
+          firstBarOfDayMsRef.current = new Set();
+        }
+
         series.setData(data);
       };
 
