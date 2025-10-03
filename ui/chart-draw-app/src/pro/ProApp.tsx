@@ -768,51 +768,7 @@ export default function ProApp() {
         </button>
       </div>
 
-      {/* Save button */}
-      <button
-        onClick={handleSave}
-        onMouseEnter={() => setSaveHover(true)}
-        onMouseLeave={() => {
-          setSaveHover(false);
-          setSaveActive(false);
-        }}
-        onMouseDown={() => setSaveActive(true)}
-        onMouseUp={() => setSaveActive(false)}
-        style={{
-          position: "absolute",
-          top: 12,
-          right: 12,
-          zIndex: 1000,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "10px 14px",
-          borderRadius: 10,
-          border: "1px solid transparent",
-          background: saveHover
-            ? "linear-gradient(135deg, #1e88e5, #42a5f5)"
-            : "linear-gradient(135deg, #1976d2, #2196f3)",
-          color: "#fff",
-          cursor: "pointer",
-          boxShadow: saveActive
-            ? "inset 0 2px 6px rgba(0,0,0,0.28)"
-            : saveHover
-            ? "0 8px 20px rgba(25,118,210,0.28)"
-            : "0 4px 12px rgba(25,118,210,0.2)",
-          transform: saveActive ? "translateY(1px) scale(0.99)" : "translateY(0) scale(1)",
-          transition: "box-shadow 140ms ease, transform 90ms ease, background 220ms ease",
-          userSelect: "none",
-        }}
-        title="Save current chart setup to local history"
-        aria-label="Save current chart setup to local history"
-      >
-        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <path d="M4 4 L16 4 L16 16 L4 16 Z" stroke="#fff" strokeWidth="2" fill="none" />
-          <path d="M6 8 L14 8" stroke="#fff" strokeWidth="2" />
-          <path d="M6 12 L12 12" stroke="#fff" strokeWidth="2" />
-        </svg>
-        Save
-      </button>
+      {/* Auto-save enabled: explicit Save button removed */}
 
       {/* Properties dialog */}
       <SimplePropertiesDialog
