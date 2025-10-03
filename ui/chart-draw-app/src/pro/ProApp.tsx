@@ -325,6 +325,37 @@ export default function ProApp() {
     }
   }, []);
 
+  // Auto-save overlays when plugins report changes (debounced)
+  const autoSaveTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    const handler = () => {
+      if (autoSaveTimerRef.current != null) {
+        window.clearTimeout(autoSaveTimerRef.current);
+      }
+      autoSaveTimerRef.current = window.setTimeout(async () => {
+        const sym = currentSymbolRef.current;
+        const per = currentPeriodRef.current;
+        if (!sym || !per) return;
+        try {
+          // Persist to local storage
+          saveOverlaysToLocal(String(sym), String(per));
+          // Persist to server
+          void saveOverlaysToServer(String(sym), String(per));
+        } catch {
+          // ignore persistence errors for auto-save
+        }
+      }, 500);
+    };
+    window.addEventListener("lwc:overlay-change", handler as EventListener);
+    return () => {
+      if (autoSaveTimerRef.current != null) {
+        window.clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      window.removeEventListener("lwc:overlay-change", handler as EventListener);
+    };
+  }, []);
+
   useEffect(() => {
     if (!containerRef.current) return;
 

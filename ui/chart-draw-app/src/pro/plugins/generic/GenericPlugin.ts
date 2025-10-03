@@ -22,6 +22,12 @@ export interface GenericPluginConfig<TProps = any> {
   showAnchorsWhenSelected?: boolean; // default true
   // Default visual props the tool will use when none provided
   defaultProps?: TProps;
+  // Optional: notify host on changes to overlays (add/update/delete/import/destroy)
+  onChange?: (payload: {
+    reason: "add" | "update" | "delete" | "import" | "destroy";
+    toolKey?: string;
+    shapes: Array<{ points: ChartPoint[]; props: TProps }>;
+  }) => void;
 }
 
 // Optional catalog metadata that tools can provide for UI flyouts
@@ -152,6 +158,7 @@ export abstract class GenericPlugin<
     nextProps.style = s.style;
     (shape as any).props = nextProps;
     this.render();
+    this.emitChange("update");
     return true;
   }
 
@@ -187,6 +194,7 @@ export abstract class GenericPlugin<
       this.shapes.splice(idx, 1);
       this.clearSelection();
       this.render();
+      this.emitChange("delete");
       return true;
     }
     return false;
@@ -217,13 +225,32 @@ export abstract class GenericPlugin<
     }
     this.updateInteractivity();
     this.render();
+    this.emitChange("import");
   }
 
   destroy() {
     try {
       this.detachEvents();
     } catch {}
+    try {
+      this.emitChange("destroy");
+    } catch {}
     super.destroy();
+  }
+
+  // Notify host and broadcast a window event for auto-persist
+  protected emitChange(reason: "add" | "update" | "delete" | "import" | "destroy") {
+    const toolKey = this.getToolKey();
+    const shapes = this.exportAll();
+    // Callback hook (if provided via config)
+    try {
+      this.cfg.onChange?.({ reason, toolKey, shapes } as any);
+    } catch {}
+    // Global event for host app
+    try {
+      const ev = new CustomEvent("lwc:overlay-change", { detail: { reason, toolKey, shapes } });
+      window.dispatchEvent(ev);
+    } catch {}
   }
 
   // ------------- Catalog metadata -------------
@@ -431,6 +458,7 @@ export abstract class GenericPlugin<
       this.originalShapePx = null;
       (this as any)._tempAnchorIndex = undefined;
       this.render();
+      this.emitChange("update");
     }
   };
 
@@ -482,6 +510,7 @@ export abstract class GenericPlugin<
       this.shapes.push(shape);
       this.selectedId = id;
       this.updateInteractivity();
+      this.emitChange("add");
     }
     this.cancelDrawing();
   }
