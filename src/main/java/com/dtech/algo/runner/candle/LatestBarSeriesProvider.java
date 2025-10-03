@@ -71,7 +71,7 @@ public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
             ZonedDateTime tickTime = tick.getTickTimestamp() != null ? 
                 ZonedDateTime.ofInstant(tick.getTickTimestamp().toInstant(), ZonedDateTime.now().getZone()) : 
                 ZonedDateTime.now();
-            Instant barEndTime = barTimeCalculator.calculateBarEndTime(tickTime, barSeries.getInterval()).toInstant();
+            ZonedDateTime barEndTimeZdt = barTimeCalculator.calculateBarEndTime(tickTime, barSeries.getInterval());
 
             // Check if we're still in the current bar or need a new one
             int lastBarIndex = barSeries.getEndIndex();
@@ -81,7 +81,7 @@ public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
             if (lastBarIndex >= 0) {
                 Bar lastBar = barSeries.getBar(lastBarIndex);
                 Instant lastBarTime = lastBar.getEndTime();
-                isNewBar = barEndTime.isAfter(lastBarTime);
+                isNewBar = barEndTimeZdt.toInstant().isAfter(lastBarTime);
 
                 // Cache the completed bar before creating a new one
                 if (isNewBar) {
@@ -91,19 +91,19 @@ public class LatestBarSeriesProvider implements UpdatableBarSeriesLoader {
 
             if (isNewBar) {
                 // If this is a new bar, add it to the series
-                log.debug("Creating new bar for interval {}, time: {}", barSeries.getInterval(), barEndTime);
+                log.debug("Creating new bar for interval {}, time: {}", barSeries.getInterval(), barEndTimeZdt);
 
                 // We need to create a new bar
                 Number price = tick.getLastTradedPrice();
                 Number volume = tick.getVolumeTradedToday();
 
                 barSeries.addBarWithTimeValidation(
-                    barEndTime,   // endTime
-                    price,         // openPrice
-                    price,         // highPrice
-                    price,         // lowPrice
-                    price,         // closePrice
-                    volume         // volume
+                    barEndTimeZdt,   // endTime (ZonedDateTime)
+                    price,           // openPrice
+                    price,           // highPrice
+                    price,           // lowPrice
+                    price,           // closePrice
+                    volume           // volume
                 );
 
                 // Return the completed (previous) bar

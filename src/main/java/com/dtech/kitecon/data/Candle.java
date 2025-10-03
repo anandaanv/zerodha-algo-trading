@@ -38,8 +38,8 @@ public class Candle {
 
   @EqualsAndHashCode.Include
   protected Instant timestamp;
-  @ManyToOne(targetEntity = Instrument.class)
 
+  @ManyToOne(targetEntity = Instrument.class)
   @EqualsAndHashCode.Include
   @PartitionKey
   protected Instrument instrument;

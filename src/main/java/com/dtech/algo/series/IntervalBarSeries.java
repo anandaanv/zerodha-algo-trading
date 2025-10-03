@@ -12,6 +12,13 @@ public interface IntervalBarSeries extends BarSeries {
   String getInstrument();
   void addBarWithTimeValidation(Instant endTime, Number openPrice, Number highPrice, Number lowPrice,
                                 Number closePrice, Number volume);
+
+  // Convenience overload for business logic using ZonedDateTime
+  default void addBarWithTimeValidation(ZonedDateTime endTime, Number openPrice, Number highPrice, Number lowPrice,
+                                        Number closePrice, Number volume) {
+    addBarWithTimeValidation(endTime.toInstant(), openPrice, highPrice, lowPrice, closePrice, volume);
+  }
+
   default DecimalNum numOf(Number num) {
         return DecimalNum.valueOf(num.doubleValue());
   }

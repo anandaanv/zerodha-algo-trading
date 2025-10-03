@@ -409,7 +409,10 @@ export default function ProApp() {
           vertLines: { color: "#f0f0f0" },
           horzLines: { color: "#f0f0f0" },
         },
-        timeScale: { timeVisible: true, secondsVisible: true },
+        timeScale: {
+            timeVisible: true,
+            secondsVisible: true
+        },
         handleScroll: {
           mouseWheel: true,
           pressedMouseMove: true,
