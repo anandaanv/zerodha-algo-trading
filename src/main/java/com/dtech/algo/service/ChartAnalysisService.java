@@ -97,7 +97,7 @@ public class ChartAnalysisService {
                 : defaultVisibleBars;
 
         // Download candle data for all timeframes
-        timeframes.forEach(interval -> dataFetchService.downloadCandleData(symbol, interval, new String[]{"NSE"}));
+//        timeframes.forEach(interval -> dataFetchService.downloadCandleData(symbol, interval, new String[]{"NSE"}));
 
         List<File> chartFiles = new ArrayList<>();
 
