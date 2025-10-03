@@ -13,6 +13,16 @@ import "./plugins/generic/patterns/ChannelPlugin";
 import "./plugins/generic/patterns/TrianglePlugin";
 import "./plugins/generic/elliott/WXYXZPlugin";
 import SimplePropertiesDialog, {type SimpleStyle} from "./SimplePropertiesDialog";
+import { buildFirstOfDaySet, formatTickMarkIST, formatCrosshairISTFull } from "./timeUtils";
+import {
+  fetchSymbols as fetchSymbolsApi,
+  fetchIntervalMapping,
+  fetchPeriodItems,
+  fetchOHLC,
+  saveOverlaysToServer as saveOverlaysToServerApi,
+  loadOverlaysFromServer as loadOverlaysFromServerApi,
+  type SymbolItem,
+} from "./proApi";
 
 type BarRow = {
   time?: number;
@@ -58,40 +68,9 @@ export default function ProApp() {
   // Holds earliest bar timestamp (ms) for each local day in selected timezone
   const firstBarOfDayMsRef = useRef<Set<number>>(new Set());
 
-    // Symbol search for picker - normalize response to { tradingsymbol, name?, lastPrice?, expiry?, ... }
+    // Symbol search for picker - normalized in proApi
     const fetchSymbols = useCallback(async (query: string): Promise<SymbolItem[]> => {
-        const q = (query || "").trim();
-        try {
-            const url = new URL("/api/symbols", window.location.origin);
-            if (q) url.searchParams.set("query", q);
-            const res = await fetch(url.toString());
-            if (res.ok) {
-                const arr = await res.json();
-                return (Array.isArray(arr) ? arr : []).map((it: any) => {
-                    if (!it) return { tradingsymbol: String(it) };
-                    // Accept different shapes from server: { tradingsymbol, name, lastPrice, expiry, ... } or simple strings
-                    if (typeof it === "string") return { tradingsymbol: it };
-                    return {
-                        tradingsymbol: (it.tradingsymbol ?? it.tradingsymbol ?? String(it)).toString(),
-                        name: it.name ?? undefined,
-                        lastPrice: typeof it.lastPrice === "number" ? it.lastPrice : (it.lastPrice ? Number(it.lastPrice) : undefined),
-                        expiry: it.expiry ?? undefined,
-                        strike: it.strike ?? undefined,
-                        instrumentType: it.instrumentType ?? undefined,
-                        segment: it.segment ?? undefined,
-                        exchange: it.exchange ?? undefined,
-                        lotSize: typeof it.lotSize === "number" ? it.lotSize : (it.lotSize ? Number(it.lotSize) : undefined),
-                        tickSize: typeof it.tickSize === "number" ? it.tickSize : (it.tickSize ? Number(it.tickSize) : undefined),
-                    } as SymbolItem;
-                });
-            }
-        } catch {
-            /* ignore */
-        }
-        // fallback list
-        const base = ["TCS", "INFY", "RELIANCE", "HDFCBANK", "SBIN", "TATASTEEL", "ITC"];
-        const filtered = base.filter(s => s.toLowerCase().includes(q.toLowerCase()));
-        return filtered.map(s => ({ tradingsymbol: s }));
+        return await fetchSymbolsApi(query);
     }, []);
 
   // Load initial items when picker opens
@@ -297,11 +276,7 @@ export default function ProApp() {
         const data = (instances[def.key] as any)?.exportAll?.() ?? [];
         payload[def.key] = data;
       }
-      await fetch("/api/chart-state", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol, period, overlays: payload }),
-      });
+      await saveOverlaysToServerApi(symbol, period, payload);
     } catch (e) {
       console.warn("Save overlays to server failed", e);
     }
@@ -310,12 +285,8 @@ export default function ProApp() {
   // Load overlays from backend server and import into plugin instances
   async function loadOverlaysFromServer(symbol: string, period: string) {
     try {
-      const url = new URL("/api/chart-state", window.location.origin);
-      url.searchParams.set("symbol", symbol);
-      url.searchParams.set("period", String(period));
-      const res = await fetch(url.toString());
-      if (!res.ok) return false;
-      const dto = await res.json();
+      const dto = await loadOverlaysFromServerApi(symbol, period);
+      if (!dto) return false;
       const overlays = dto?.overlays ?? {};
       const instances = pluginMapRef.current;
       for (const def of getAllPlugins()) {
@@ -358,27 +329,10 @@ export default function ProApp() {
     if (!containerRef.current) return;
 
     const init = async () => {
-      // Load UI->enum mapping from backend
-      let mapping: Record<string, string> = {};
-      try {
-        const res = await fetch("/api/intervals/mapping");
-        if (res.ok) {
-          mapping = await res.json();
-        }
-      } catch {
-        mapping = {};
-      }
-
-      // Fetch KLine Pro style periods [{ multiplier, timespan, text }]
-      let periodItems: Array<{ multiplier: number; timespan: string; text: string }> = [];
-      try {
-        const res = await fetch("/api/intervals/periods");
-        if (res.ok) {
-          periodItems = await res.json();
-        }
-      } catch {
-        periodItems = [];
-      }
+      // Load UI->enum mapping and KLine-style periods from backend
+      const mapping: Record<string, string> = await fetchIntervalMapping().catch(() => ({}));
+      const periodItems: Array<{ multiplier: number; timespan: string; text: string }> =
+        await fetchPeriodItems().catch(() => []);
 
       // Build UI keys from periods (fallback to mapping keys)
       const uiKeys = periodItems.length > 0 ? periodItems.map(p => p.text) : Object.keys(mapping);
@@ -414,87 +368,17 @@ export default function ProApp() {
         timeScale: {
             timeVisible: true,
             secondsVisible: true,
-            // Keep epochs in UTC internally; render labels in IST with <= 8 chars
-            tickMarkFormatter: (time: number /* UTCTimestamp seconds or ms */) => {
-              const TZ = "Asia/Kolkata";
-              const ms = time > 1e12 ? time : time * 1000; // normalize to ms
-              const d = new Date(ms);
-
-              const per = String(currentPeriodRef.current || "");
-              const isIntraday = /m|h|min|hour/i.test(per);
-
-              // Date parts helper in IST
-              const dateParts = new Intl.DateTimeFormat("en-IN", {
-                timeZone: TZ,
-                day: "2-digit",
-                month: "2-digit",
-              }).formatToParts(d);
-              const dd = dateParts.find(p => p.type === "day")?.value ?? "";
-              const mon = dateParts.find(p => p.type === "month")?.value ?? "";
-
-              if (isIntraday) {
-                // If this tick is the first bar of the local day, show date (dd/MM)
-                if (firstBarOfDayMsRef.current.has(ms)) {
-                  return `${dd}/${mon}`; // <= 5 chars
-                }
-                // Otherwise show time (HH:mm)
-                const timeParts = new Intl.DateTimeFormat("en-IN", {
-                  timeZone: TZ,
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  hour12: false,
-                }).formatToParts(d);
-                const hh = timeParts.find(p => p.type === "hour")?.value ?? "00";
-                const mm = timeParts.find(p => p.type === "minute")?.value ?? "00";
-                return `${hh}:${mm}`; // <= 5 chars
-              } else {
-                // Higher TFs: show date
-                return `${dd}/${mon}`; // <= 5 chars
-              }
+            tickMarkFormatter: (time: number) => {
+              return formatTickMarkIST(
+                time as number,
+                String(currentPeriodRef.current || ""),
+                firstBarOfDayMsRef.current
+              );
             }
         },
-        // Crosshair/tooltip: show full IST date-time
         localization: {
           dateFormat: "dd MMM 'yy",
-          timeFormatter: (time: any): string => {
-            const TZ = "Asia/Kolkata";
-
-            // Normalize input to milliseconds
-            let ms: number;
-            if (typeof time === "number") {
-              ms = time > 1e12 ? time : time * 1000;
-            } else if (time && typeof time === "object" && "year" in time) {
-              ms = Date.UTC(time.year, (time.month ?? 1) - 1, time.day ?? 1, 0, 0, 0);
-            } else {
-              ms = 0;
-            }
-            const d = new Date(ms);
-
-            // Build full date in IST: dd MMM yyyy
-            const dateParts = new Intl.DateTimeFormat("en-IN", {
-              timeZone: TZ,
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            }).formatToParts(d);
-            const dd = dateParts.find(p => p.type === "day")?.value ?? "";
-            const mon = dateParts.find(p => p.type === "month")?.value ?? "";
-            const yyyy = dateParts.find(p => p.type === "year")?.value ?? "";
-
-            // Build time in IST: HH:mm:ss
-            const timeParts = new Intl.DateTimeFormat("en-IN", {
-              timeZone: TZ,
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-              hour12: false,
-            }).formatToParts(d);
-            const hh = timeParts.find(p => p.type === "hour")?.value ?? "00";
-            const mm = timeParts.find(p => p.type === "minute")?.value ?? "00";
-            const ss = timeParts.find(p => p.type === "second")?.value ?? "00";
-
-            return `${dd} ${mon} ${yyyy} ${hh}:${mm}:${ss}`;
-          },
+          timeFormatter: (time: any) => formatCrosshairISTFull(time),
         },
         handleScroll: {
           mouseWheel: true,
@@ -518,16 +402,8 @@ export default function ProApp() {
 
       // Load historical candles and set to series
       const loadCandles = async (sym: string, per: string) => {
-        const url = new URL("/api/ohlc", window.location.origin);
-        url.searchParams.set("symbol", sym);
-        url.searchParams.set("interval", toEnum(per));
-        const rows: BarRow[] = await fetch(url)
-          .then(r => {
-            if (!r.ok) throw new Error(`ohlc fetch failed ${r.status}`);
-            return r.json();
-          });
+        const rows: BarRow[] = await fetchOHLC(sym, toEnum(per));
 
-        // Map to chart data without changing epochs
         const data: CandlestickData[] = rows.map(b => ({
           time: (b.time ?? b.timestamp ?? 0) as number,
           open: b.open,
@@ -536,33 +412,8 @@ export default function ProApp() {
           close: b.close,
         }));
 
-        // Build a set of the first bar timestamp (ms) for each local day in IST
-        try {
-          const TZ = "Asia/Kolkata";
-          const fmt = new Intl.DateTimeFormat(undefined, {
-            timeZone: TZ,
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-          });
-          const earliestPerDay: Record<string, number> = {};
-          for (const d of data) {
-            const raw = d.time as number;
-            const ms = raw > 1e12 ? raw : raw * 1000; // normalize to ms
-            const parts = fmt.formatToParts(new Date(ms));
-            const yyyy = parts.find(p => p.type === "year")?.value ?? "0000";
-            const mm = parts.find(p => p.type === "month")?.value ?? "00";
-            const dd = parts.find(p => p.type === "day")?.value ?? "00";
-            const key = `${yyyy}-${mm}-${dd}`;
-            if (!(key in earliestPerDay) || ms < earliestPerDay[key]) {
-              earliestPerDay[key] = ms;
-            }
-          }
-          firstBarOfDayMsRef.current = new Set(Object.values(earliestPerDay));
-        } catch {
-          // ignore formatting errors; fall back to empty set
-          firstBarOfDayMsRef.current = new Set();
-        }
+        // Compute first-of-day set (IST)
+        firstBarOfDayMsRef.current = buildFirstOfDaySet(data.map(d => d.time as number));
 
         series.setData(data);
       };
