@@ -10,8 +10,8 @@ import org.springframework.util.ClassUtils;
 
 import java.util.concurrent.ThreadFactory;
 
-@Configuration
-@EnableScheduling
+//@Configuration
+//@EnableScheduling
 public class SchedulingConfig implements SchedulingConfigurer {
 
     /** Expose the “app” ClassLoader (usually TomcatEmbeddedWebappClassLoader in requests,

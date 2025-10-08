@@ -38,7 +38,7 @@ public class ScreenerUOW implements UnitOfWork {
 
         if (next != null) {
             if (output != null && output.isPassed()) {
-                next().run(updated);
+                return next().run(updated);
             } else {
                 // If not passed and this is the last step, mark final as FAIL
                 if (next == null) {

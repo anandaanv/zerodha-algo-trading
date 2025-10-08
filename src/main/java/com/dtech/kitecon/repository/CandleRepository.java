@@ -26,6 +26,7 @@ public interface CandleRepository extends JpaRepository<Candle, Long> {
 
   void deleteByInstrumentAndTimeframeAndTimestampBetween(Instrument instrument, Interval interval,
                                                          Instant startDate, Instant endDate);
+
 }
 
 

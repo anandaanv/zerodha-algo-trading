@@ -6,6 +6,7 @@ import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.data.Subscription;
 import com.dtech.kitecon.data.SubscriptionUow;
 import com.dtech.kitecon.enums.SubscriptionUowStatus;
+import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.repository.SubscriptionRepository;
 import com.dtech.kitecon.repository.SubscriptionUowRepository;
@@ -18,10 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.PriorityQueue;
-import java.util.Queue;
-import java.util.concurrent.LinkedBlockingDeque;
 
 @Component
 @Slf4j
@@ -33,6 +30,7 @@ public class SubscriptionUowHandler {
     private final InstrumentRepository instrumentRepository;
     private final HistoricalMarketFetcher marketFetcher;
     private final HistoricalDateLimit historicalDateLimit;
+    private final CandleRepository candleRepository;
 
     @Value("${data.uow.retryBackoffSeconds:120}")
     private int retryBackoffSeconds;
@@ -69,13 +67,13 @@ public class SubscriptionUowHandler {
             uow.setLastUpdatedAt(now);
             uow.setNextRunAt(now.plusSeconds(periodFor(interval)));
             uow.setStatus(SubscriptionUowStatus.ACTIVE);
-            uow.setLastTradedPrice(uowRepository.getLatestCandleClose(inst.getTradingsymbol(), interval.name()));
+//            Double LTP = candleRepository.findFirstByInstrumentAndTimeframeOrderByTimestampDesc(inst, interval).getClose();
+//            uow.setLastTradedPrice(LTP);
             uow.setErrorMessage(null);
             Subscription parentSubscription = uow.getParentSubscription();
             uowRepository.save(uow);
             Subscription sub = subscriptionRepository.findById(parentSubscription.getId()).get();
-            sub.setLastTradedPrice(
-                    subscriptionRepository.getLatestClosePriceFromCandle(inst.getTradingsymbol(), interval.name()));
+//            sub.setLastTradedPrice(LTP);
             subscriptionRepository.save(sub);
         } catch (Throwable t) {
             Instant now = Instant.now();
