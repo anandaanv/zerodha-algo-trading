@@ -74,10 +74,6 @@ public class SubscriptionUow {
     @Column(name = "next_run_at")
     private Instant nextRunAt;
 
-    // Optimistic locking
-    @Version
-    private Long version;
-
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;

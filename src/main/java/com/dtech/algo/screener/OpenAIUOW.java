@@ -2,11 +2,14 @@ package com.dtech.algo.screener;
 
 import com.dtech.algo.controller.dto.ChartAnalysisRequest;
 import com.dtech.algo.controller.dto.ChartAnalysisResponse;
+import com.dtech.algo.screener.dto.OpenAiTradeOutput;
 import com.dtech.algo.screener.enums.Verdict;
 import com.dtech.algo.screener.enums.WorkflowStep;
 import com.dtech.algo.screener.runtime.ScreenerRunLogService;
 import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.algo.service.ChartAnalysisService;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -59,31 +62,53 @@ public class OpenAIUOW implements UnitOfWork {
             Long runId = getRunId(ctx);
             runLogService.logStep(runId, WorkflowStep.OPENAI, chartAnalysisRequest, response, true, null);
 
-            // Attach results to context params for downstream steps
+            // Attach results to context params for downstream steps (keep it minimal)
+            Verdict updatedVerdict = verdict;
             var params = new java.util.HashMap<>(ctx.getParams() == null ? java.util.Map.of() : ctx.getParams());
             params.put("openAiAnalysis", response.getAnalysis());
             params.put("openAiJsonAnalysis", response.getJsonAnalysis());
+
+            OpenAiTradeOutput ai;
+            try {
+                var om = new ObjectMapper();
+                ai = om.convertValue(response.getJsonAnalysis(), OpenAiTradeOutput.class);
+            } catch (Exception e) {
+                ai = OpenAiTradeOutput.builder().symbol(symbol).build();
+            }
+            if (ai.getSymbol() == null || ai.getSymbol().isBlank()) ai.setSymbol(symbol);
+
+            String translatedSummary = ai.getTranslatedSummary();
+
+            if (ai.isHighConviction()) {
+                Verdict aiVerdict = ai.getFinalVerdict();
+                if (aiVerdict != null) {
+                    updatedVerdict = aiVerdict;
+                }
+            }
+            params.put("openAiPojo", ai);
+            params.put("openAiTranslatedSummary", translatedSummary);
+            params.put("openAiFinalVerdict", updatedVerdict);
+            runLogService.logStep(runId, WorkflowStep.OPENAI, Map.of("stage", "openai-summary"),
+                    Map.of("translatedSummary", translatedSummary, "finalVerdict", updatedVerdict != null ? updatedVerdict.name() : null), true, null);
+
             ScreenerContext updated = ctx.toBuilder().params(params).build();
 
             if (next != null) {
                 next.run(updated);
             } else {
                 // Tail: mark final using last ScreenerOutput (decision) if present
-                Object o = params.get("lastScreenerOutput");
-                if (o instanceof ScreenerOutput so) {
-                    runLogService.markFinal(runId, so.isPassed(), so.getFinalVerdict());
-                }
+                runLogService.markFinal(runId, WorkflowStep.OPENAI, ai.isHighConviction(), ai.getFinalVerdict());
             }
-            ScreenerOutput.builder()
+            return ScreenerOutput.builder()
                     .passed(true)
+                    .finalVerdict(updatedVerdict)
+                    .debug(Map.of("openAiAnalysis", response.getAnalysis(), "openAiJsonAnalysis", response.getJsonAnalysis(),
+                            "openAiTranslatedSummary", translatedSummary, "openAiFinalVerdict", updatedVerdict))
                     .build();
         } catch (Exception e) {
             log.error("OpenAIUOW.run error: {}", e.getMessage(), e);
             Long runId = getRunId(ctx);
             runLogService.logStep(runId, WorkflowStep.OPENAI, Map.of("error", "execution-error"), Map.of("exception", e.toString()), false, e.getMessage());
-            if (next != null) {
-                next.run(ctx);
-            }
         }
         return null;
     }

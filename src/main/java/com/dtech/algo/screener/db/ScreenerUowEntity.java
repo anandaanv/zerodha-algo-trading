@@ -36,17 +36,17 @@ public class ScreenerUowEntity {
 
     // Raw JSON payloads for now
     @Lob
-    @Column(name = "input_json")
+    @Column(name = "input_json", columnDefinition = "LONGTEXT")
     private String inputJson;
 
     @Lob
-    @Column(name = "output_json")
+    @Column(name = "output_json", columnDefinition = "LONGTEXT")
     private String outputJson;
 
     @Column(name = "success")
     private Boolean success;
 
-    @Column(name = "error_message", length = 2000)
+    @Column(name = "error_message", length = 8192)
     private String errorMessage;
 
     @CreationTimestamp
