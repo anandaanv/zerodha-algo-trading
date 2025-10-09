@@ -89,7 +89,7 @@ public class OpenAIUOW implements UnitOfWork {
             params.put("openAiTranslatedSummary", translatedSummary);
             params.put("openAiFinalVerdict", updatedVerdict);
             runLogService.logStep(runId, WorkflowStep.OPENAI, Map.of("stage", "openai-summary"),
-                    Map.of("translatedSummary", translatedSummary, "finalVerdict", updatedVerdict != null ? updatedVerdict.name() : null), true, null);
+                    ai, true, null);
 
             ScreenerContext updated = ctx.toBuilder().params(params).build();
 

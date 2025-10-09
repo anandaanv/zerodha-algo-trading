@@ -15,7 +15,7 @@ public class ScreenerUOW implements UnitOfWork {
     private final String code;
     private final UnitOfWork next;
     private final com.dtech.algo.screener.runtime.ScreenerRunLogService runLogService;
-    private final ObjectMapper objectMapper;
+    private final Object entry;
 
     @Override
     public ScreenerOutput run(ScreenerContext ctx) {
@@ -54,7 +54,6 @@ public class ScreenerUOW implements UnitOfWork {
 
     private ScreenerOutput getScreenerOutput(ScreenerContext ctx, SignalCallback cb) {
         try {
-            Object entry = registry.evalReturnObject(code, null);
             return registry.invokeMethod(entry, "screener", ctx, cb);
         } catch (Exception e) {
             // Log failure as a step with error

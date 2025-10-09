@@ -59,13 +59,12 @@ public class ScreenerRunLogService {
                 String entry = null, target = null, stoploss = null;
                 if (step != null) {
                     Optional<ScreenerUowEntity> uow = uowRepository.findTopByScreenerRunIdAndStepTypeOrderByCreatedAtDesc(runId, step);
-                    if(uow.isPresent()) {
+                    if (uow.isPresent()) {
                         String output = uow.get().getOutputJson();
-                        Map<String, String> dataMap = null;
+
+                        OpenAiTradeOutput ai = null;
                         try {
-                            dataMap = objectMapper.readValue(output, new TypeReference<Map<String, String>>() {});
-                            ChartAnalysisResponse response = objectMapper.convertValue(dataMap.get("translatedSummary"), ChartAnalysisResponse.class);
-                            OpenAiTradeOutput ai = objectMapper.convertValue(response.getJsonAnalysis(), OpenAiTradeOutput.class);
+                            ai = objectMapper.readValue(output, OpenAiTradeOutput.class);
                             identifiedTradeService.upsertOnMarkFinal(
                                     run.getSymbol(),
                                     Interval.valueOf(run.getTimeframe()),
