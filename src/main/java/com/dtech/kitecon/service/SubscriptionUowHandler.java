@@ -48,7 +48,7 @@ public class SubscriptionUowHandler {
             uow.setNextRunAt(nextOpen);
             uow.setStatus(SubscriptionUowStatus.ACTIVE);
             uowRepository.save(uow);
-            log.info("After market hours; scheduling UOW {} for next open at {}", uow.getId(), nextOpen);
+            log.debug("After market hours; scheduling UOW {} for next open at {}", uow.getId(), nextOpen);
             return;
         }
 

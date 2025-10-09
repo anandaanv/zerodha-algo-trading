@@ -1,1 +1,1 @@
-java -jar /code/build/libs/kitecon-0.0.1-SNAPSHOT.jar
+java -XX:ReservedCodeCacheSize=256m -XX:InitialCodeCacheSize=64m -Xms4g -Xmx4g -XX:+ExitOnOutOfMemoryError -jar /code/build/libs/kitecon-0.0.1-SNAPSHOT.jar
