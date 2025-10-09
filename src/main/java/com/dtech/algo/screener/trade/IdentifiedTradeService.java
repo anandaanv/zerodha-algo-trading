@@ -27,32 +27,31 @@ public class IdentifiedTradeService {
             Instant now = Instant.now();
 
             var existing = repository.findTopByScriptAndTimeframeAndSideAndOpenIsTrue(script, interval, side);
+            IdentifiedTrade trade;
             if (existing.isPresent()) {
-                IdentifiedTrade t = existing.get();
+                trade = existing.get();
                 String logLine = "trade confirmed at " + now + " (runId=" + runId + ")";
-                t.setLogs((t.getLogs() == null || t.getLogs().isBlank()) ? logLine : t.getLogs() + "\n" + logLine);
-                t.setUpdatedAt(now);
-                repository.save(t);
+                trade.setLogs((trade.getLogs() == null || trade.getLogs().isBlank()) ? logLine : trade.getLogs() + "\n" + logLine);
             } else {
-                IdentifiedTrade t = new IdentifiedTrade();
-                t.setScript(script);
-                t.setTimeframe(interval);
-                t.setSide(side);
-                t.setEntry(ai != null ? ai.getEntry() : null);
-                t.setTarget(ai != null ? ai.getTarget() : null);
-                t.setStoploss(ai != null ? ai.getStoploss() : null);
-                t.setTimeTriggered(now);
-                t.setRunId(runId);
-                t.setOpen(true);
+                trade = new IdentifiedTrade();
+                trade.setScript(script);
+                trade.setTimeframe(interval);
+                trade.setSide(side);
+                trade.setEntry(ai != null ? ai.getEntry() : null);
+                trade.setTarget(ai != null ? ai.getTarget() : null);
+                trade.setStoploss(ai != null ? ai.getStoploss() : null);
+                trade.setTimeTriggered(now);
+                trade.setRunId(runId);
+                trade.setOpen(true);
                 String logLine = "trade opened at " + now + " (runId=" + runId + ")";
-                if (t.getEntry() == null) {
+                if (trade.getEntry() == null) {
                     logLine += " | entry not provided; use LTP";
                 }
-                t.setLogs(logLine);
-                t.setCreatedAt(now);
-                t.setUpdatedAt(now);
-                repository.save(t);
+                trade.setLogs(logLine);
+                trade.setCreatedAt(now);
             }
+            trade.setUpdatedAt(now);
+            repository.save(trade);
         } catch (Exception e) {
             log.warn("IdentifiedTrade upsert failed (runId={}): {}", runId, e.toString());
         }

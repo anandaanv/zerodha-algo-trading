@@ -49,7 +49,7 @@ public class ScreenerRunLogService {
             run.setFinalVerdict(finalVerdict);
             runRepository.save(run);
 
-            if (Boolean.TRUE.equals(finalPassed) && finalVerdict != null && finalVerdict != Verdict.WAIT) {
+            if (finalPassed && finalVerdict != null && finalVerdict != Verdict.WAIT) {
                 String entry = null, target = null, stoploss = null;
                 if (step != null) {
                     Optional<ScreenerUowEntity> uow = uowRepository.findTopByScreenerRunIdAndStepTypeOrderByCreatedAtDesc(runId, step);

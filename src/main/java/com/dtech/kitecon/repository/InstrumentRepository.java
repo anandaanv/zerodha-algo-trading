@@ -28,6 +28,7 @@ public interface InstrumentRepository extends JpaRepository<Instrument, Long> {
 
   // Simple prefix query without exchange/expiry constraints used by the symbol search API
   List<Instrument> findAllByTradingsymbolStartingWith(String symbol);
+  List<Instrument> findAllByTradingsymbol(String symbol);
 
     Set<Instrument> findAllByTradingsymbolInAndExpiryBefore(List<String> symbols, LocalDateTime expiryBefore);
 }

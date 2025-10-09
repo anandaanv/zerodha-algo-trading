@@ -14,6 +14,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableJpaRepositories(basePackages = {"com.dtech"})
 @EntityScan(basePackages = {"com.dtech"})
 @EnableScheduling
+@EnableAsync
 public class KiteconApplication {
 
   public static void main(String[] args) {

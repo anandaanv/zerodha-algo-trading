@@ -13,6 +13,7 @@ import com.dtech.kitecon.repository.SubscriptionUowRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,13 +32,25 @@ public class SubscriptionUowHandler {
     private final HistoricalMarketFetcher marketFetcher;
     private final HistoricalDateLimit historicalDateLimit;
     private final CandleRepository candleRepository;
+    private final MarketHoursService marketHoursService;
 
     @Value("${data.uow.retryBackoffSeconds:120}")
     private int retryBackoffSeconds;
 
     @Transactional
+    @Async
     public void processOne(SubscriptionUow uow) {
         if (uow == null) return;
+
+        // Simple after-hours guard: if after close and no override, schedule next run at next market open and exit
+        if (marketHoursService.isAfterMarketNow() && !marketHoursService.isOverrideEnabled()) {
+            Instant nextOpen = marketHoursService.nextMarketOpenAfterNow();
+            uow.setNextRunAt(nextOpen);
+            uow.setStatus(SubscriptionUowStatus.ACTIVE);
+            uowRepository.save(uow);
+            log.info("After market hours; scheduling UOW {} for next open at {}", uow.getId(), nextOpen);
+            return;
+        }
 
         String symbol = uow.getTradingSymbol();
         String[] exchanges = uow.getExchange() != null ? new String[]{uow.getExchange()} : new String[]{"NSE", "NFO"};
