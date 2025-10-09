@@ -1,6 +1,8 @@
 package com.dtech.algo.screener.dto;
 
 import com.dtech.algo.screener.enums.Verdict;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,15 +20,34 @@ import java.util.Locale;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class OpenAiTradeOutput {
+
+    @JsonAlias({"Symbol", "SYMBOL"})
     private String symbol;     // Symbol under scan
+
+    @JsonAlias({"Wave", "WAVE"})
     private String wave;       // Interval of wave
+
+    @JsonAlias({"Direction", "DIRECTION"})
     private String direction;  // Trade Direction - Short/Long/Sideways
+
+    @JsonAlias({"Confidence", "CONFIDENCE"})
     private String confidence; // Low, Medium, Moderate, High
+
+    @JsonAlias({"Risks", "RISKS"})
     private Object risks;      // Indicators against trade
+
+    @JsonAlias({"Advice", "ADVICE"})
     private String advice;     // Short advice (up to ~10 words)
+
+    @JsonAlias({"Entry", "ENTRY"})
     private String entry;      // Entry zone
+
+    @JsonAlias({"Target", "TARGET"})
     private String target;     // Target
+
+    @JsonAlias({"Stoploss", "STOPLOSS", "stopLoss", "StopLoss"})
     private String stoploss;   // Stoploss
 
     public boolean isHighConviction() {

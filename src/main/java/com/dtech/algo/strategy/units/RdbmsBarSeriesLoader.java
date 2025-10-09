@@ -1,5 +1,6 @@
 package com.dtech.algo.strategy.units;
 
+import com.dtech.algo.series.Exchange;
 import com.dtech.algo.series.ExtendedBarSeries;
 import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
@@ -71,10 +72,15 @@ public class RdbmsBarSeriesLoader implements BarSeriesLoader {
     }
 
     public Instrument resolveInstrument(BarSeriesConfig barSeriesConfig) {
-        return instrumentRepository.findAllByExchangeAndInstrumentTypeAndTradingsymbolStartingWith(
+        List<Instrument> instruments = instrumentRepository.findAllByExchangeAndInstrumentTypeAndTradingsymbolStartingWith(
                 barSeriesConfig.getExchange().name(),
                 barSeriesConfig.getInstrumentType().name(),
                 barSeriesConfig.getInstrument()
-        ).get(0);
+        );
+        if(instruments.isEmpty()) {
+            instruments = instrumentRepository
+                    .findAllByTradingsymbol(barSeriesConfig.getInstrument());
+        }
+        return instruments.getFirst();
     }
 }

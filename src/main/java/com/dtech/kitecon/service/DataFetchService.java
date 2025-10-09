@@ -89,12 +89,14 @@ public class DataFetchService {
                 ZoneId.systemDefault());
     }
 
+    @Transactional
     public void downloadCandleData(String instrumentName, Interval interval, String[] exchanges) {
         LocalDateTime startDate = LocalDateTime.now().minus(4, ChronoUnit.MONTHS);
         List<Instrument> primaryInstruments = getInstrumentList(instrumentName, exchanges, startDate);
         primaryInstruments.forEach(instrument -> this.downloadData(instrument, interval));
     }
 
+    @Transactional
     public void updateInstrumentToLatest(String instrumentName, Interval interval, String[] exchanges) {
         LocalDateTime startDate = LocalDateTime.now().minus(4, ChronoUnit.MONTHS);
         List<Instrument> primaryInstruments = getInstrumentList(instrumentName, exchanges, startDate);
@@ -114,6 +116,7 @@ public class DataFetchService {
         return primaryInstruments;
     }
 
+    @Transactional
     public void downloadData(Instrument instrument, Interval interval) {
         Instant endTime = Instant.now();
         int totalAvailableDuration = historicalDateLimit
@@ -123,6 +126,7 @@ public class DataFetchService {
         fetchDataAndUpdateDatabase(instrument, interval, endTime, sliceSize, startTime, false);
     }
 
+    @Transactional
     public void updateInstrument(Instrument instrument, Interval interval, boolean clean) {
         Instant endTime = Instant.now();
         Candle latestCandle = candleRepository
@@ -136,6 +140,7 @@ public class DataFetchService {
         }
     }
 
+    @Transactional
     public void fetchDataAndUpdateDatabase(Instrument instrument, Interval interval,
                                            Instant endTime, int sliceSize, Instant startDate, boolean clean) {
         List<DateRange> dateRangeList = DateRange.builder()
@@ -146,30 +151,35 @@ public class DataFetchService {
         dateRangeList.sort(Comparator.comparing(DateRange::getStartDate));
         AtomicInteger count = new AtomicInteger(0);
         dateRangeList.forEach(dateRange -> {
-            DataDownloadRequest dataDownloadRequest = DataDownloadRequest.builder()
-                    .dateRange(dateRange)
-                    .instrument(instrument)
-                    .interval(interval)
-                    .clean(clean && count.getAndAdd(1) <= 0)
-                    .build();
-            if(dateRange.getEndDate().isBefore(dateRange.getStartDate())) {
-                throw new RuntimeException(String.format("Invalid date range {} ", dataDownloadRequest));
-            }
-            try {
-                executorService.submit(
-                        () -> {
-                            try {
-                                dataDownloader.processDownload(dataDownloadRequest);
-                            } catch (KiteException e) {
-                                throw new RuntimeException(e);
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }
-                );
-            } catch (Throwable e) {
-                log.catching(e);
-            }
+            executeSlice(instrument, interval, clean, dateRange, count);
         });
+    }
+
+    @Transactional
+    public void executeSlice(Instrument instrument, Interval interval, boolean clean, DateRange dateRange, AtomicInteger count) {
+        DataDownloadRequest dataDownloadRequest = DataDownloadRequest.builder()
+                .dateRange(dateRange)
+                .instrument(instrument)
+                .interval(interval)
+                .clean(clean && count.getAndAdd(1) <= 0)
+                .build();
+        if(dateRange.getEndDate().isBefore(dateRange.getStartDate())) {
+            throw new RuntimeException(String.format("Invalid date range {} ", dataDownloadRequest));
+        }
+        try {
+            executorService.submit(
+                    () -> {
+                        try {
+                            dataDownloader.processDownload(dataDownloadRequest);
+                        } catch (KiteException e) {
+                            throw new RuntimeException(e);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+            );
+        } catch (Throwable e) {
+            log.catching(e);
+        }
     }
 }

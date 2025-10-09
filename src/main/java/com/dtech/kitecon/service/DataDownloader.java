@@ -57,7 +57,7 @@ public class DataDownloader {
         Instant endDate = dateRange.getEndDate();
         long diff = endDate.getEpochSecond() - startDate.getEpochSecond();
         if(diff < 60) {
-            log.info("TimeDifference too low, skipping {}", downloadRequest);
+            log.debug("TimeDifference too low, skipping {}", downloadRequest);
             return;
         }
         try {
