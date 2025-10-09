@@ -12,4 +12,7 @@ COPY . /code
 #ADD ./gradle-6.6.1-bin /root/.gradle/wrapper/dists/gradle-6.6.1-bin
 RUN cd /code && ./gradlew bootjar
 
+# Ensure JVM receives larger code cache by default and ~4g heap
+ENV JAVA_TOOL_OPTIONS="-XX:ReservedCodeCacheSize=256m -XX:InitialCodeCacheSize=64m -Xms4g -Xmx4g"
+
 CMD /code/start.sh

@@ -1,17 +1,23 @@
 package com.dtech.algo.screener.runtime;
 
+import com.dtech.algo.controller.dto.ChartAnalysisResponse;
 import com.dtech.algo.screener.db.ScreenerRunEntity;
 import com.dtech.algo.screener.db.ScreenerRunRepository;
 import com.dtech.algo.screener.db.ScreenerUowEntity;
 import com.dtech.algo.screener.db.ScreenerUowRepository;
+import com.dtech.algo.screener.dto.OpenAiTradeOutput;
 import com.dtech.algo.screener.enums.WorkflowStep;
 import com.dtech.algo.screener.enums.Verdict;
 import com.dtech.algo.screener.trade.IdentifiedTradeService;
 import com.dtech.algo.series.Interval;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -54,25 +60,25 @@ public class ScreenerRunLogService {
                 if (step != null) {
                     Optional<ScreenerUowEntity> uow = uowRepository.findTopByScreenerRunIdAndStepTypeOrderByCreatedAtDesc(runId, step);
                     if(uow.isPresent()) {
-                        entry = uow.get().getInputJson();
-                        target = uow.get().getOutputJson();
-                        stoploss = uow.get().getOutputJson();
+                        String output = uow.get().getOutputJson();
+                        Map<String, String> dataMap = null;
+                        try {
+                            dataMap = objectMapper.readValue(output, new TypeReference<Map<String, String>>() {});
+                            ChartAnalysisResponse response = objectMapper.convertValue(dataMap.get("translatedSummary"), ChartAnalysisResponse.class);
+                            OpenAiTradeOutput ai = objectMapper.convertValue(response.getJsonAnalysis(), OpenAiTradeOutput.class);
+                            identifiedTradeService.upsertOnMarkFinal(
+                                    run.getSymbol(),
+                                    Interval.valueOf(run.getTimeframe()),
+                                    finalVerdict,
+                                    true,
+                                    runId,
+                                    ai
+                            );
+                        } catch (JsonProcessingException e) {
+                            throw new RuntimeException(e);
+                        }
                     }
                 }
-                com.dtech.algo.screener.dto.OpenAiTradeOutput ai = com.dtech.algo.screener.dto.OpenAiTradeOutput.builder()
-                        .entry(entry)
-                        .target(target)
-                        .stoploss(stoploss)
-                        .build();
-
-                identifiedTradeService.upsertOnMarkFinal(
-                        run.getSymbol(),
-                        Interval.valueOf(run.getTimeframe()),
-                        finalVerdict,
-                        true,
-                        runId,
-                        ai
-                );
             }
         });
     }
