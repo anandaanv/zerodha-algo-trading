@@ -86,7 +86,7 @@ public class ScreenerController {
     public void run(@PathVariable long id,
                     @RequestParam String symbol,
                     @RequestParam int nowIndex,
-                    @RequestParam(required = false) String timeframe) {
+                    @RequestParam(required = false) String timeframe) throws Exception {
         screenerService.run(id, symbol, nowIndex, timeframe, null, 0L);
     }
 

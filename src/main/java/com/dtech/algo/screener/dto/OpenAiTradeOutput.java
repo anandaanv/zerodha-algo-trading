@@ -2,6 +2,7 @@ package com.dtech.algo.screener.dto;
 
 import com.dtech.algo.screener.enums.Verdict;
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -50,11 +51,13 @@ public class OpenAiTradeOutput {
     @JsonAlias({"Stoploss", "STOPLOSS", "stopLoss", "StopLoss"})
     private String stoploss;   // Stoploss
 
+    @JsonIgnore
     public boolean isHighConviction() {
         String c = confidence == null ? "" : confidence.toLowerCase(Locale.ROOT);
         return c.contains("moderate") || c.contains("high");
     }
 
+    @JsonIgnore
     public Verdict getFinalVerdict() {
         String d = direction == null ? "" : direction.toLowerCase(Locale.ROOT);
         if (d.contains("long") || d.contains("buy") || d.contains("bull")) return Verdict.BUY;
@@ -63,6 +66,7 @@ public class OpenAiTradeOutput {
         return null;
     }
 
+    @JsonIgnore
     public String getTranslatedSummary() {
         return String.format(
                 "Symbol=%s; Wave=%s; Direction=%s; Confidence=%s; Advice=%s; Entry=%s; Target=%s; StopLoss=%s",

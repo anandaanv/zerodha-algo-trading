@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -30,18 +31,24 @@ public class ScreenerService {
     private final KotlinScriptExecutor kotlinScriptExecutor;
     private final com.dtech.algo.screener.runtime.ScreenerRunLogService runLogService;
     private final ChartAnalysisService chartAnalysisService;
-
+    private final KotlinScriptExecutor registry;
+    private final Map<Long, Object> codeMap = new HashMap<>();
     /**
      * Run the screener identified by ID for a given underlying symbol.
      */
-    public void run(long screenerId, String symbol, int nowIndex, @Nullable String timeframe, @Nullable SignalCallback callback, @Nullable Long screenerRunId) {
+    public void run(long screenerId, String symbol, int nowIndex, @Nullable String timeframe, @Nullable SignalCallback callback, @Nullable Long screenerRunId) throws Exception {
         // Load entity and convert to domain
+        Object script = codeMap.get(screenerId);
         ScreenerEntity entity = screenerRepository.findById(screenerId)
                 .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + screenerId));
-        entity.setDirty(false);
-        screenerRepository.save(entity);
-        Screener screener = Screener.fromEntity(entity, objectMapper);
+        if(entity.getDirty() || script == null) {
+            script = registry.evalReturnObject(entity.getScript(),  null);
+            codeMap.put(screenerId, script);
+            entity.setDirty(false);
+            screenerRepository.save(entity);
+        }
 
+        Screener screener = Screener.fromEntity(entity, objectMapper);
         Map<String, ScreenerContextLoader.SeriesSpec> mapping = Optional.ofNullable(screener.getMapping())
                 .orElseThrow(() -> new IllegalArgumentException("Screener mapping is missing for id=" + screenerId));
 
@@ -71,6 +78,7 @@ public class ScreenerService {
             next = getOpenAIUOW(screener, next);
         }
 
+
         // Wrap tail with logging-aware UOWs
         if (hasOpenAI && next instanceof OpenAIUOW openAIUOW) {
             // not reachable via instanceof since OpenAIUOW is not a bean hierarchy here, so we construct below
@@ -82,7 +90,7 @@ public class ScreenerService {
         }
 
         UnitOfWork chain = hasOpenAI ? tail : null;
-        UnitOfWork head = new ScreenerUOW(kotlinScriptExecutor, entity.getScript(), chain, runLogService, objectMapper);
+        UnitOfWork head = new ScreenerUOW(kotlinScriptExecutor, entity.getScript(), chain, runLogService, script);
         head.run(ctx);
     }
 

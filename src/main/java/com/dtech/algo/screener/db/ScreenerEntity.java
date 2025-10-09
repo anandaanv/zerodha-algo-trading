@@ -60,13 +60,16 @@ public class ScreenerEntity {
     private com.dtech.algo.screener.model.SchedulingConfig schedulingConfig;
 
     // If true, (re)compile and register script before execution
-    @Builder.Default
+    @Column
     private Boolean dirty = false;
 
-    @Builder.Default
+    @Column
     private Boolean deleted = false;
 
+    @Column(nullable = false)
     private Instant createdAt;
+
+    @Column(nullable = false)
     private Instant updatedAt;
 
     @PrePersist
