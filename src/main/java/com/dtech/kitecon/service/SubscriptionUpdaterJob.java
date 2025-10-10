@@ -1,6 +1,5 @@
 package com.dtech.kitecon.service;
 
-import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.data.Subscription;
 import com.dtech.kitecon.repository.SubscriptionRepository;
 import lombok.Getter;
@@ -10,10 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -70,8 +67,7 @@ public class SubscriptionUpdaterJob {
                 return;
             }
 
-            List<Interval> intervals = Arrays.stream(Interval.values()).toList();
-            log.info("SubscriptionUpdaterJob: processing {} subscriptions with intervals {}", subscriptions.size(), intervals);
+            log.info("SubscriptionUpdaterJob: processing {} subscriptions", subscriptions.size());
 
             for (Subscription s : subscriptions) {
                 try {
@@ -86,14 +82,14 @@ public class SubscriptionUpdaterJob {
                             continue;
                         }
                         for (String member : members) {
-                            subscriptionUowGenerator.processSubscriptionForSymbol(s, member, intervals, false);
+                            subscriptionUowGenerator.processSubscriptionForSymbol(s, member, false);
                         }
                         // Update parent once after scheduling all members
                         s.setLastUpdatedAt(java.time.LocalDateTime.now());
                         subscriptionRepository.save(s);
                     } else {
                         // Plain index names (e.g., NIFTY50) are treated as single symbols
-                        subscriptionUowGenerator.processSubscription(s, intervals);
+                        subscriptionUowGenerator.processSubscription(s);
                     }
                 } catch (Throwable t) {
                     log.error("Failed to process subscription {}: {}", s.getTradingSymbol(), t.getMessage(), t);

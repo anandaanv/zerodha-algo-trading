@@ -1,7 +1,7 @@
 package com.dtech.algo.screener.domain;
 
 import com.dtech.algo.screener.ScreenerConfig;
-import com.dtech.algo.screener.ScreenerContextLoader;
+import com.dtech.algo.screener.SeriesSpec;
 import com.dtech.algo.screener.db.ScreenerEntity;
 import com.dtech.algo.screener.enums.WorkflowStep;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,7 +25,7 @@ public class Screener {
     String promptId;
     String promptJson;
 
-    Map<String, ScreenerContextLoader.SeriesSpec> mapping;
+    Map<String, SeriesSpec> mapping;
     List<WorkflowStep> workflow;
     List<String> charts;   // alias names to send to AI
     List<String> symbols;  // optional subscribed symbols
@@ -39,7 +39,7 @@ public class Screener {
         Objects.requireNonNull(e, "entity must not be null");
         Objects.requireNonNull(objectMapper, "objectMapper must not be null");
 
-        Map<String, ScreenerContextLoader.SeriesSpec> mapping = Map.of();
+        Map<String, SeriesSpec> mapping = Map.of();
         List<WorkflowStep> workflow = List.of();
         try {
             ScreenerConfig cfg = objectMapper.readValue(

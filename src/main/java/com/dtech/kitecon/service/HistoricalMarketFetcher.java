@@ -54,7 +54,7 @@ public class HistoricalMarketFetcher {
               dataFetchService.updateInstrument(instrument, interval, true);
           } else {
               int sliceSize = historicalDateLimit.getDuration(instrument.getExchange(), interval);
-              dataFetchService.fetchDataAndUpdateDatabase(instrument, interval, Instant.now(), sliceSize, start, false);
+              dataFetchService.fetchDataAndUpdateDatabase(instrument, interval, null, sliceSize, start, false);
           }
           return Optional.ofNullable(Instant.now());
       } catch (Throwable t) {

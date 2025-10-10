@@ -17,7 +17,7 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ScreenerConfig {
     // alias -> SeriesSpec mapping for screener execution
-    private Map<String, ScreenerContextLoader.SeriesSpec> mapping;
+    private Map<String, SeriesSpec> mapping;
 
     // Ordered workflow steps for this screener
     private List<WorkflowStep> workflow;

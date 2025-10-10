@@ -66,7 +66,7 @@ public class SubscriptionUowHandler {
                 return;
             }
 
-            Interval interval = uow.getInterval();
+            Interval interval = uow.getTimeframe();
             Instant startInstant;
             if (uow.getLatestTimestamp() != null) {
                 startInstant = null; // incremental mode inside fetcher
@@ -83,15 +83,11 @@ public class SubscriptionUowHandler {
 //            Double LTP = candleRepository.findFirstByInstrumentAndTimeframeOrderByTimestampDesc(inst, interval).getClose();
 //            uow.setLastTradedPrice(LTP);
             uow.setErrorMessage(null);
-            Subscription parentSubscription = uow.getParentSubscription();
             uowRepository.save(uow);
-            Subscription sub = subscriptionRepository.findById(parentSubscription.getId()).get();
-//            sub.setLastTradedPrice(LTP);
-            subscriptionRepository.save(sub);
         } catch (Throwable t) {
             Instant now = Instant.now();
             log.error("Error in UWO work ", t);
-            log.warn("UOW processing failed for {} {}: {}", symbol, uow.getInterval(), t.getMessage());
+            log.warn("UOW processing failed for {} {}: {}", symbol, uow.getTimeframe(), t.getMessage());
             uow.setStatus(SubscriptionUowStatus.FAILED);
             uow.setLastUpdatedAt(now);
             uow.setNextRunAt(now.plusSeconds(retryBackoffSeconds));

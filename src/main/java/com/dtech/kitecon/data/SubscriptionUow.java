@@ -13,10 +13,9 @@ import java.time.Instant;
 @Entity
 @Table(name = "subscription_uow",
         uniqueConstraints = {
-                @UniqueConstraint(name = "uk_sub_uow_parent_symbol_timeframe", columnNames = {"parent_subscription_id", "trading_symbol", "timeframe"})
+                @UniqueConstraint(name = "uk_sub_uow_symbol_timeframe", columnNames = {"trading_symbol", "timeframe"})
         },
         indexes = {
-                @Index(name = "idx_sub_uow_parent", columnList = "parent_subscription_id"),
                 @Index(name = "idx_sub_uow_status", columnList = "status"),
                 @Index(name = "idx_sub_uow_status_updated", columnList = "status, last_updated_at"),
                 @Index(name = "idx_sub_uow_due", columnList = "status, next_run_at")
@@ -32,12 +31,6 @@ public class SubscriptionUow {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Parent subscription
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "parent_subscription_id", nullable = false,
-            foreignKey = @ForeignKey(name = "fk_sub_uow_parent"))
-    private Subscription parentSubscription;
-
     @Column(name = "trading_symbol", nullable = false, length = 128)
     private String tradingSymbol;
 
@@ -51,7 +44,7 @@ public class SubscriptionUow {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "timeframe", nullable = false, length = 32)
-    private Interval interval;
+    private Interval timeframe;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 16)

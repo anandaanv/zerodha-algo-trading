@@ -31,4 +31,7 @@ public interface InstrumentRepository extends JpaRepository<Instrument, Long> {
   List<Instrument> findAllByTradingsymbol(String symbol);
 
     Set<Instrument> findAllByTradingsymbolInAndExpiryBefore(List<String> symbols, LocalDateTime expiryBefore);
+
+  List<Instrument> findAllByNameAndInstrumentTypeAndExpiryBetween(String name, String instrumentType,
+                                                                   LocalDateTime expiryStart, LocalDateTime expiryEnd);
 }

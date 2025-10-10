@@ -1,26 +1,32 @@
 package com.dtech.kitecon.service;
 
+import com.dtech.algo.screener.InstrumentResolver;
+import com.dtech.algo.screener.SeriesSpec;
+import com.dtech.algo.screener.enums.SeriesEnum;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.data.InstrumentLtp;
 import com.dtech.kitecon.data.Subscription;
 import com.dtech.kitecon.data.SubscriptionUow;
+import com.dtech.kitecon.data.SubscriptionUowMapping;
+import com.dtech.kitecon.market.fetch.DataFetchException;
+import com.dtech.kitecon.market.fetch.MarketDataFetch;
+import com.dtech.kitecon.repository.InstrumentLtpRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.repository.SubscriptionRepository;
 import com.dtech.kitecon.enums.SubscriptionUowStatus;
 import com.dtech.kitecon.repository.SubscriptionUowRepository;
+import com.dtech.kitecon.repository.SubscriptionUowMappingRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.*;
 
 @Component
 @AllArgsConstructor
@@ -28,33 +34,32 @@ import java.util.stream.Collectors;
 public class SubscriptionUowGenerator {
     private final SubscriptionRepository subscriptionRepository;
     private final InstrumentRepository instrumentRepository;
-    private final InstrumentsResolverService resolverService;
     private final SubscriptionUowRepository subscriptionUowRepository;
+    private final SubscriptionUowMappingRepository subscriptionUowMappingRepository;
+    private final ObjectMapper objectMapper;
+    private final InstrumentResolver instrumentResolver;
+    private final InstrumentLtpRepository instrumentLtpRepository;
+    private final MarketDataFetch marketDataFetch;
 
     @Transactional
-    protected void processSubscription(Subscription s, List<Interval> intervals) {
+    public void processSubscription(Subscription s) {
         String tradingSymbol = s.getTradingSymbol();
         log.debug("Processing subscription: {}", tradingSymbol);
 
-        // Delegate core scheduling to shared helper
-        scheduleForSymbol(s, tradingSymbol, intervals);
+        List<SeriesSpec> aliasList = parseAliasList(s.getAliasList());
+        scheduleForSymbol(s, tradingSymbol, aliasList);
 
-        // Update subscription timestamp to reflect scheduling step (even if no-op, preserves existing behavior)
         s.setLastUpdatedAt(LocalDateTime.now());
         subscriptionRepository.save(s);
         log.info("Subscription {} scheduled/updated UOWs at {}", tradingSymbol, s.getLastUpdatedAt());
     }
 
-    /**
-     * Processes a specific tradingSymbol under the provided parent subscription.
-     * Does NOT mutate the parent's tradingSymbol; optionally updates parent's lastUpdatedAt.
-     */
     @Transactional
-    public void processSubscriptionForSymbol(Subscription parent, String tradingSymbol, List<Interval> intervals, boolean updateParentTimestamp) {
+    public void processSubscriptionForSymbol(Subscription parent, String tradingSymbol, boolean updateParentTimestamp) {
         log.debug("Processing symbol {} under subscription id={}", tradingSymbol, parent.getId());
 
-        // Delegate core scheduling to shared helper
-        scheduleForSymbol(parent, tradingSymbol, intervals);
+        List<SeriesSpec> aliasList = parseAliasList(parent.getAliasList());
+        scheduleForSymbol(parent, tradingSymbol, aliasList);
 
         if (updateParentTimestamp) {
             parent.setLastUpdatedAt(LocalDateTime.now());
@@ -63,83 +68,116 @@ public class SubscriptionUowGenerator {
         }
     }
 
-    /**
-     * Shared core logic to schedule UOWs for a given parent subscription and trading symbol.
-     * Returns true if underlying was found and scheduling proceeded, false otherwise.
-     */
-    private boolean scheduleForSymbol(Subscription parent, String tradingSymbol, List<Interval> intervals) {
-        // Validate underlying exists in NSE
+    private List<SeriesSpec> parseAliasList(String aliasListJson) {
+        if (aliasListJson == null || aliasListJson.isBlank()) {
+            return Collections.emptyList();
+        }
+        try {
+            return objectMapper.readValue(aliasListJson, new TypeReference<List<SeriesSpec>>() {});
+        } catch (Exception e) {
+            log.error("Failed to parse aliasList: {}", aliasListJson, e);
+            return Collections.emptyList();
+        }
+    }
+
+    private boolean scheduleForSymbol(Subscription parent, String tradingSymbol, List<SeriesSpec> aliasList) {
         Instrument underlying = instrumentRepository.findByTradingsymbolAndExchangeIn(tradingSymbol, new String[]{"NSE"});
         if (underlying == null) {
             log.warn("Underlying {} not found in NSE instruments; skipping under parent {}", tradingSymbol, parent.getId());
             return false;
         }
 
-        // Compute related instruments and upsert UOWs (no inactivation)
-        List<Instrument> futures = resolverService.resolveNearestFutures(tradingSymbol, 2);
-        Set<Instrument> instrumentsToUpdate = new LinkedHashSet<Instrument>(futures);
-        List<Instrument> options = resolverService.resolveTopOptions(tradingSymbol, underlying, 10);
-        instrumentsToUpdate.addAll(options);
-
-        log.debug("Resolved {} instruments for {} (futures={}, options={}) under parent {}",
-                instrumentsToUpdate.size(), tradingSymbol, futures.size(), options.size(), parent.getId());
-
-        // Underlying (SPOT)
-        for (Interval interval : intervals) {
-            this.upsertUowActive(parent, underlying.getTradingsymbol(), "SPOT", underlying.getExchange(), interval);
+        // If aliasList is empty, do nothing (no UOWs to create)
+        if (aliasList.isEmpty()) {
+            log.debug("No aliasList provided for subscription {}, skipping UOW creation", tradingSymbol);
+            return true;
         }
 
-        for (Instrument fut : futures) {
-            String tag = "FUT";
-            for (Interval interval : intervals) {
-                this.upsertUowActive(parent, fut.getTradingsymbol(), tag, fut.getExchange(), interval);
+        // Fetch LTP once for all option resolutions
+        // Try LTP table first, fallback to MarketDataFetch if not available
+        Double ltp = instrumentLtpRepository.findByTradingSymbol(underlying.getTradingsymbol())
+                .map(InstrumentLtp::getLtp)
+                .orElse(null);
+
+        if (ltp == null) {
+            log.debug("No LTP found in table for {} (token: {}), fetching from market data", tradingSymbol, underlying.getInstrumentToken());
+            try {
+                ltp = marketDataFetch.getLastPrice(underlying);
+                log.debug("Fetched LTP {} from market data for {}", ltp, tradingSymbol);
+            } catch (DataFetchException e) {
+                log.warn("Failed to fetch LTP for {}, will use fallback resolver: {}", tradingSymbol, e.getMessage());
             }
+        } else {
+            log.debug("Using LTP {} from table for {}", ltp, tradingSymbol);
         }
 
-        int optIndex = 1;
-        for (Instrument opt : options) {
-            String tag = deriveOptionTag(opt.getTradingsymbol(), optIndex++);
-            for (Interval interval : intervals) {
-                this.upsertUowActive(parent, opt.getTradingsymbol(), tag, opt.getExchange(), interval);
+        // Process each alias from aliasList - reusing ScreenerContextLoader logic
+        for (SeriesSpec spec : aliasList) {
+            SeriesEnum reference = spec.reference();
+            Interval timeframe = Interval.valueOf(spec.interval());
+
+            // Use InstrumentResolver - same logic as ScreenerContextLoader
+            String instrumentToLoad = instrumentResolver.resolveInstrument(tradingSymbol, reference, ltp);
+
+            // Find the actual instrument from database
+            Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(
+                    instrumentToLoad, new String[]{"NSE", "NFO"});
+
+            if (instrument != null) {
+                String tag = reference.toJson();
+                upsertUowActive(parent, instrument, tag, timeframe);
+            } else {
+                log.warn("Could not find instrument {} for alias {} (reference={}, interval={})",
+                        instrumentToLoad, spec, reference, spec.interval());
             }
         }
 
         return true;
     }
 
-    private static String deriveOptionTag(String tradingSymbol, int index) {
-        String upper = tradingSymbol == null ? "" : tradingSymbol.toUpperCase();
-        if (upper.contains("CE")) return "CE" + index;
-        if (upper.contains("PE")) return "PE" + index;
-        return "OPT" + index;
-    }
+    private void upsertUowActive(Subscription parent, Instrument instrument, String tag, Interval timeframe) {
+        String tradingSymbol = instrument.getTradingsymbol();
 
-    private void upsertUowActive(Subscription parent, String symbol, String tag, String exchange, Interval interval) {
         var existing = subscriptionUowRepository
-                .findByParentSubscriptionIdAndTradingSymbolAndInterval(parent.getId(), symbol, interval)
+                .findByTradingSymbolAndTimeframe(tradingSymbol, timeframe)
                 .orElse(null);
+
+        SubscriptionUow uow;
         if (existing == null) {
-            var u = com.dtech.kitecon.data.SubscriptionUow.builder()
-                    .parentSubscription(parent)
-                    .tradingSymbol(symbol)
-                    .exchange(exchange)
+            uow = SubscriptionUow.builder()
+                    .tradingSymbol(tradingSymbol)
+                    .exchange(instrument.getExchange())
                     .instrumentTag(tag)
-                    .interval(interval)
-                    .status(com.dtech.kitecon.enums.SubscriptionUowStatus.ACTIVE)
+                    .timeframe(timeframe)
+                    .status(SubscriptionUowStatus.ACTIVE)
                     .lastUpdatedAt(null)
-                    .latestTimestamp(parent.getLatestTimestamp()) // seed from parent
+                    .latestTimestamp(parent.getLatestTimestamp())
                     .nextRunAt(Instant.now())
                     .build();
-            subscriptionUowRepository.save(u);
+            uow = subscriptionUowRepository.save(uow);
         } else {
-            // Update metadata if changed; keep status as-is (no inactivation/reactivation churn)
+            uow = existing;
             boolean changed = false;
-            if (tag != null && !tag.equals(existing.getInstrumentTag())) { existing.setInstrumentTag(tag); changed = true; }
-            if (exchange != null && (existing.getExchange() == null || !exchange.equals(existing.getExchange()))) { existing.setExchange(exchange); changed = true; }
-            if (existing.getNextRunAt() == null) { existing.setNextRunAt(Instant.now()); changed = true; }
-            if (changed) subscriptionUowRepository.save(existing);
+            if (tag != null && !tag.equals(existing.getInstrumentTag())) {
+                existing.setInstrumentTag(tag);
+                changed = true;
+            }
+            if (existing.getNextRunAt() == null) {
+                existing.setNextRunAt(Instant.now());
+                changed = true;
+            }
+            if (changed) {
+                subscriptionUowRepository.save(existing);
+            }
+        }
+
+        // Create mapping if it doesn't exist
+        if (!subscriptionUowMappingRepository.existsBySubscriptionIdAndSubscriptionUowId(parent.getId(), uow.getId())) {
+            SubscriptionUowMapping mapping = SubscriptionUowMapping.builder()
+                    .subscription(parent)
+                    .subscriptionUow(uow)
+                    .build();
+            subscriptionUowMappingRepository.save(mapping);
         }
     }
-
-
 }

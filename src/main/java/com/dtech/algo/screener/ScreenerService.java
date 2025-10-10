@@ -49,7 +49,7 @@ public class ScreenerService {
         }
 
         Screener screener = Screener.fromEntity(entity, objectMapper);
-        Map<String, ScreenerContextLoader.SeriesSpec> mapping = Optional.ofNullable(screener.getMapping())
+        Map<String, SeriesSpec> mapping = Optional.ofNullable(screener.getMapping())
                 .orElseThrow(() -> new IllegalArgumentException("Screener mapping is missing for id=" + screenerId));
 
         // Build context via loader

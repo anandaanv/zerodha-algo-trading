@@ -4,7 +4,9 @@ import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.data.InstrumentLtp;
 import com.dtech.kitecon.repository.CandleRepository;
+import com.dtech.kitecon.repository.InstrumentLtpRepository;
 import com.google.common.util.concurrent.RateLimiter;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.InputException;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
@@ -42,6 +44,7 @@ public class DataDownloader {
     private final KiteConnectConfig kiteConnectConfig;
     private final CandleRepository candleRepository;
     private final CandleFacade candleFacade;
+    private final InstrumentLtpRepository instrumentLtpRepository;
     private static final RateLimiter ratelimit = RateLimiter.create(3.0);
 
     @Transactional
@@ -85,17 +88,28 @@ public class DataDownloader {
             List<Candle> databaseCandles = candleFacade.buildCandlesFromOLSHStreamFailSafe(
                     interval, dateFormat, instrument, candles, dataMap);
             candleRepository.saveAll(databaseCandles);
-//            // Ensure inserts are flushed so the native update sees latest rows
-//            candleRepository.flush();
-//            // Fire-and-forget: set LTP for subscription and UOW entries for this trading symbol and timeframe
-//            subscriptionRepository.updateLtpFromLatestCandle(instrument.getTradingsymbol(), interval.name());
-//            subscriptionUowRepository.updateUowLtpFromLatestCandle(instrument.getTradingsymbol(), interval.name());
+
+            // Update LTP if requested and we have candles
+            if (downloadRequest.isUpdateLTP() && !databaseCandles.isEmpty()) {
+                Candle latestCandle = databaseCandles.get(databaseCandles.size() - 1);
+                upsertLtp(instrument.getTradingsymbol(), latestCandle.getClose());
+            }
         } catch (InputException ex) {
             log.error(ex.getMessage());
         } catch (RuntimeException ex) {
             log.catching(ex);
         }
 
+    }
+
+    private void upsertLtp(String instrumentToken, Double ltp) {
+        InstrumentLtp instrumentLtp = instrumentLtpRepository.findById(instrumentToken)
+                .orElse(InstrumentLtp.builder()
+                        .tradingSymbol(instrumentToken)
+                        .build());
+        instrumentLtp.setLtp(ltp);
+        instrumentLtpRepository.save(instrumentLtp);
+        log.debug("Updated LTP for {}: {}", instrumentToken, ltp);
     }
 
 }

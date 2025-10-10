@@ -1,6 +1,6 @@
 package com.dtech.algo.screener.web;
 
-import com.dtech.algo.screener.ScreenerContextLoader;
+import com.dtech.algo.screener.SeriesSpec;
 import com.dtech.algo.screener.ScreenerService;
 import com.dtech.algo.screener.db.ScreenerEntity;
 import com.dtech.algo.screener.db.ScreenerRepository;
@@ -26,6 +26,7 @@ public class ScreenerController {
     private final ObjectMapper objectMapper;
     private final ScreenerService screenerService;
     private final com.dtech.algo.screener.ScreenerRegistryService screenerRegistryService;
+    private final com.dtech.algo.screener.service.ScreenerManagerService screenerManagerService;
 
     @GetMapping
     public List<ScreenerResponse> list() {
@@ -91,6 +92,14 @@ public class ScreenerController {
     }
 
     /**
+     * Creates subscriptions for a screener based on its scheduling configuration.
+     */
+    @PostMapping("/{id}/subscribe")
+    public void createSubscriptions(@PathVariable long id) {
+        screenerManagerService.createSubscriptionsForScreener(id);
+    }
+
+    /**
      * Validate a screener Kotlin script without persisting anything.
      * Returns { "ok": true } on success or { "ok": false, "error": "..." } on failure.
      */
@@ -111,11 +120,11 @@ public class ScreenerController {
     }
 
     private Screener buildDomainFromRequest(ScreenerUpsertRequest req, Long id) {
-        Map<String, ScreenerContextLoader.SeriesSpec> typedMapping = Map.of();
+        Map<String, SeriesSpec> typedMapping = Map.of();
         if (req.getMapping() != null) {
             typedMapping = req.getMapping().entrySet().stream().collect(Collectors.toMap(
                     Map.Entry::getKey,
-                    e -> objectMapper.convertValue(e.getValue(), ScreenerContextLoader.SeriesSpec.class)
+                    e -> objectMapper.convertValue(e.getValue(), SeriesSpec.class)
             ));
         }
         List<com.dtech.algo.screener.enums.WorkflowStep> steps = Optional.ofNullable(req.getWorkflow())
