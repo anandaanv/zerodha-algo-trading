@@ -1,6 +1,6 @@
 package com.dtech.algo.controller.dto;
 
-import com.dtech.algo.screener.ScreenerContextLoader;
+import com.dtech.algo.screener.SeriesSpec;
 import com.dtech.algo.screener.enums.Verdict;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,7 +28,7 @@ public class OpenAIAnalysisRequest {
      * Screener context mapping that describes the series/indicators to prepare.
      * This can be used by downstream services to decide chart composition.
      */
-    private Map<String, ScreenerContextLoader.SeriesSpec> mapping;
+    private Map<String, SeriesSpec> mapping;
 
     /**
      * Optional prompt identifier (e.g., a stored/template prompt reference).

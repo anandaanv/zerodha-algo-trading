@@ -16,4 +16,5 @@ public class DataDownloadRequest {
   private Interval interval;
   private boolean clean;
   private boolean continuous;
+  private boolean updateLTP;
 }

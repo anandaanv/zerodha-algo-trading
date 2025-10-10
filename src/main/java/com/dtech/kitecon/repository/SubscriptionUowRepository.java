@@ -17,8 +17,8 @@ import org.springframework.data.repository.query.Param;
 
 @Repository
 public interface SubscriptionUowRepository extends JpaRepository<SubscriptionUow, Long> {
-    List<SubscriptionUow> findByParentSubscriptionId(Long parentSubscriptionId);
-    Optional<SubscriptionUow> findByParentSubscriptionIdAndTradingSymbolAndInterval(Long parentSubscriptionId, String tradingSymbol, Interval interval);
+
+    Optional<SubscriptionUow> findByTradingSymbolAndTimeframe(String tradingSymbol, Interval timeframe);
 
     List<SubscriptionUow> findByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(
             Collection<SubscriptionUowStatus> statuses, Instant now);

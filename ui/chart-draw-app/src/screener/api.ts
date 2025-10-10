@@ -116,3 +116,11 @@ export async function validateScreenerScript(script: string): Promise<{ ok: bool
   }
   return res.json();
 }
+
+export async function updateSubscriptions(id: number): Promise<void> {
+  const res = await fetch(`/api/screeners/${id}/subscribe`, { method: "POST" });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Update subscriptions failed: ${res.status}`);
+  }
+}

@@ -7,7 +7,6 @@ import com.dtech.kitecon.data.Candle;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
-import com.google.common.util.concurrent.RateLimiter;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.Profile;
 import jakarta.annotation.PostConstruct;
@@ -143,6 +142,10 @@ public class DataFetchService {
     @Transactional
     public void fetchDataAndUpdateDatabase(Instrument instrument, Interval interval,
                                            Instant endTime, int sliceSize, Instant startDate, boolean clean) {
+        boolean updateToLatest = endTime == null;
+        if(updateToLatest) {
+            endTime = Instant.now();
+        }
         List<DateRange> dateRangeList = DateRange.builder()
                 .endDate(endTime)
                 .startDate(startDate)
@@ -151,17 +154,18 @@ public class DataFetchService {
         dateRangeList.sort(Comparator.comparing(DateRange::getStartDate));
         AtomicInteger count = new AtomicInteger(0);
         dateRangeList.forEach(dateRange -> {
-            executeSlice(instrument, interval, clean, dateRange, count);
+            executeSlice(instrument, interval, clean, dateRange, count, updateToLatest);
         });
     }
 
     @Transactional
-    public void executeSlice(Instrument instrument, Interval interval, boolean clean, DateRange dateRange, AtomicInteger count) {
+    public void executeSlice(Instrument instrument, Interval interval, boolean clean, DateRange dateRange, AtomicInteger count, boolean updateToLatest) {
         DataDownloadRequest dataDownloadRequest = DataDownloadRequest.builder()
                 .dateRange(dateRange)
                 .instrument(instrument)
                 .interval(interval)
                 .clean(clean && count.getAndAdd(1) <= 0)
+                .updateLTP(updateToLatest)
                 .build();
         if(dateRange.getEndDate().isBefore(dateRange.getStartDate())) {
             throw new RuntimeException(String.format("Invalid date range {} ", dataDownloadRequest));

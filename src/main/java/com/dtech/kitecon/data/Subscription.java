@@ -46,4 +46,10 @@ public class Subscription {
     @Lob
     @Column(name = "meta_json", columnDefinition = "TEXT")
     private String metaJson;
+
+    // List of SeriesSpec (aliases) required for screeners
+    // Stored as JSON array: [{"reference":"PE_1","interval":"5MINUTE"}, {"reference":"SPOT","interval":"DAY"}]
+    @Lob
+    @Column(name = "alias_list", columnDefinition = "TEXT")
+    private String aliasList;
 }

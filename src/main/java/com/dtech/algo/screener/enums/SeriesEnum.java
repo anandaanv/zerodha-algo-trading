@@ -8,7 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Canonical series nominations used in ScreenerContextLoader.SeriesSpec.
+ * Canonical series nominations used in SeriesSpec.
  *
  * Naming:
  * - CE1..CE5 and PE1..PE5 denote OTM offsets (positive).

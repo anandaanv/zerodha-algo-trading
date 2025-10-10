@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { UpsertPayload, createScreener, getIntervalUiMapping, getSeriesEnums, IntervalUiMapping, validateScreenerScript, runScreener } from "../api";
+import { UpsertPayload, createScreener, getIntervalUiMapping, getSeriesEnums, IntervalUiMapping, validateScreenerScript, runScreener, updateSubscriptions } from "../api";
 
 type AliasRow = {
   alias: string;
@@ -50,6 +50,11 @@ export default function ScreenerForm(props: Props) {
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(null);
   const [testError, setTestError] = useState<boolean>(false);
+
+  // Subscription update fields
+  const [updatingSubscriptions, setUpdatingSubscriptions] = useState(false);
+  const [subscriptionMsg, setSubscriptionMsg] = useState<string | null>(null);
+  const [subscriptionError, setSubscriptionError] = useState<boolean>(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -410,6 +415,53 @@ export default function ScreenerForm(props: Props) {
         {testMsg && (
           <div className={`row ${testError ? "error" : "success"}`} style={{ marginTop: 8 }}>
             {testMsg}
+          </div>
+        )}
+      </div>
+
+      {/* Update Subscriptions */}
+      <div className="row" style={{ borderTop: "1px solid var(--border-color, #eee)", marginTop: 16, paddingTop: 16 }}>
+        <label>Update Subscriptions</label>
+        <div className="muted">
+          Create or update subscriptions based on this screener's configuration. This will register all instruments needed for the aliases defined above.
+        </div>
+        <div className="toolbar" style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className="btn"
+            disabled={!screenerId || updatingSubscriptions}
+            onClick={async () => {
+              setSubscriptionMsg(null);
+              setSubscriptionError(false);
+              if (!screenerId) {
+                setSubscriptionMsg("Save the screener first to update subscriptions.");
+                setSubscriptionError(true);
+                return;
+              }
+              try {
+                setUpdatingSubscriptions(true);
+                await updateSubscriptions(screenerId);
+                setSubscriptionMsg("Subscriptions updated successfully.");
+                setSubscriptionError(false);
+              } catch (e: any) {
+                setSubscriptionMsg(e?.message || "Failed to update subscriptions.");
+                setSubscriptionError(true);
+              } finally {
+                setUpdatingSubscriptions(false);
+              }
+            }}
+          >
+            {updatingSubscriptions ? "Updating…" : "Update Subscriptions"}
+          </button>
+        </div>
+        {!screenerId && (
+          <div className="muted" style={{ marginTop: 8 }}>
+            Save the screener to enable subscription updates.
+          </div>
+        )}
+        {subscriptionMsg && (
+          <div className={`row ${subscriptionError ? "error" : "success"}`} style={{ marginTop: 8 }}>
+            {subscriptionMsg}
           </div>
         )}
       </div>
