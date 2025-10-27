@@ -23,6 +23,8 @@ public interface SubscriptionUowRepository extends JpaRepository<SubscriptionUow
     List<SubscriptionUow> findByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(
             Collection<SubscriptionUowStatus> statuses, Instant now);
 
+    List<SubscriptionUow> findAllByNextRunAtIsNull();
+
 
     List<SubscriptionUow> findAllByStatusIn(Collection<SubscriptionUowStatus> statuses);
 

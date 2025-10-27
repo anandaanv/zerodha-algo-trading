@@ -5,6 +5,7 @@ plugins {
     id "com.github.johnrengelman.processes" version "0.5.0"
     id("org.springdoc.openapi-gradle-plugin") version "1.9.0"
     id 'org.jetbrains.kotlin.jvm' version '2.1.0'
+    id 'war'
 }
 
 ext {
@@ -43,6 +44,7 @@ configurations {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-tomcat'
     implementation 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
     implementation 'javax.cache:cache-api'
@@ -132,14 +134,13 @@ bootRun.dependsOn createDirectories
 
 // Default JVM heap for local bootRun
 tasks.named("bootRun") {
-    jvmArgs("-Xms4g", "-Xmx12g")
+    jvmArgs("-Xms1g", "-Xmx2g")
 }
 
 // Ensure external scripts under projectRoot/screener are NOT packaged into the boot jar
 bootJar {
     exclude('screener/**')
 }
-
 //build.dependsOn installTa4j
 
 // --------------------------------------------------------
