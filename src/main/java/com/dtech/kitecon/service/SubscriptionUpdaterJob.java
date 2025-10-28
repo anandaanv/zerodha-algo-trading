@@ -50,7 +50,7 @@ public class SubscriptionUpdaterJob {
     /**
      * Run hourly by default. Cron can be overridden using data.update.hourlyCron property.
      */
-    @Scheduled(cron = "${data.update.hourlyCron:0 0 1 * * ?}")
+    @Scheduled(cron = "${data.update.hourlyCron:0 */15 * * * ?}")
     public void runUpdateJob() {
         try {
             dataFetchService.downloadAllInstruments();

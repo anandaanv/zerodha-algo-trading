@@ -20,9 +20,10 @@ function fromInputDate(s?: string | null) {
 export const TradesSummaryPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Defaults
-  const defaultTo = new Date();
-  const defaultFrom = new Date(defaultTo.getTime() - 30 * 24 * 60 * 60 * 1000);
+  // Defaults - show only today's trades
+  const today = new Date();
+  const defaultFrom = today;
+  const defaultTo = today;
 
   const [from, setFrom] = useState<string>(searchParams.get("from") || toInputDate(defaultFrom));
   const [to, setTo] = useState<string>(searchParams.get("to") || toInputDate(defaultTo));

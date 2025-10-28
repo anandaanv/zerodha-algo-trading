@@ -6,6 +6,8 @@ export type Trade = {
   entry?: number | null;
   target?: number | null;
   stoploss?: number | null;
+  confidence?: string | null;
+  status?: string | null;
   timeTriggered?: string; // ISO
   open: boolean;
   logs?: string | null;

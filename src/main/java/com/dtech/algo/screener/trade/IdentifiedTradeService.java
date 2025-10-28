@@ -40,6 +40,8 @@ public class IdentifiedTradeService {
                 trade.setEntry(ai != null ? ai.getEntry() : null);
                 trade.setTarget(ai != null ? ai.getTarget() : null);
                 trade.setStoploss(ai != null ? ai.getStoploss() : null);
+                trade.setConfidence(ai != null ? ai.getConfidence() : null);
+                trade.setStatus(TradeStatus.ACTIVE.name());
                 trade.setTimeTriggered(now);
                 trade.setRunId(runId);
                 trade.setOpen(true);
