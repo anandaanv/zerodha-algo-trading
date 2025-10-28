@@ -74,16 +74,15 @@ public class TradeAnalyzerService {
 
     private boolean checkPriceBasedExit(IdentifiedTrade trade, Double currentPrice) {
         String side = trade.getSide();
+        boolean isBuy = "BUY".equalsIgnoreCase(side);
         
-        // Parse target and stoploss
-        Double target = parsePrice(trade.getTarget());
-        Double stoploss = parsePrice(trade.getStoploss());
+        // Parse target and stoploss using conservative values
+        Double target = parseTargetPrice(trade.getTarget(), isBuy);
+        Double stoploss = parseStoplossPrice(trade.getStoploss(), isBuy);
 
         if (target == null && stoploss == null) {
             return false; // No price levels to check
         }
-
-        boolean isBuy = "BUY".equalsIgnoreCase(side);
 
         // Check target hit
         if (target != null) {
@@ -146,7 +145,7 @@ public class TradeAnalyzerService {
         String side = trade.getSide();
         boolean isBuy = "BUY".equalsIgnoreCase(side);
         
-        Double entryPrice = parsePrice(trade.getEntry());
+        Double entryPrice = parseEntryPrice(trade.getEntry(), isBuy);
         if (entryPrice == null) {
             // Use first candle close as entry
             entryPrice = candles.isEmpty() ? currentPrice : candles.get(0).getClose();
@@ -175,17 +174,66 @@ public class TradeAnalyzerService {
         log.info("Trade {} closed with status {}: {}", trade.getId(), status, reason);
     }
 
-    private Double parsePrice(String priceStr) {
+    /**
+     * Parse price string which can be a single value or a range (e.g., "100-105")
+     * @param priceStr Price string to parse
+     * @param takeHigher If true, returns the higher value from range; if false, returns lower value
+     * @return Parsed price value
+     */
+    private Double parsePrice(String priceStr, boolean takeHigher) {
         if (priceStr == null || priceStr.trim().isEmpty()) {
             return null;
         }
         try {
-            // Remove any non-numeric characters except dot and minus
-            String cleaned = priceStr.replaceAll("[^0-9.-]", "");
+            // Check if it's a range (contains hyphen between numbers)
+            if (priceStr.matches(".*\\d+\\s*-\\s*\\d+.*")) {
+                // Extract numbers from the range
+                String[] parts = priceStr.split("-");
+                if (parts.length == 2) {
+                    String cleaned1 = parts[0].trim().replaceAll("[^0-9.]", "");
+                    String cleaned2 = parts[1].trim().replaceAll("[^0-9.]", "");
+                    
+                    double price1 = Double.parseDouble(cleaned1);
+                    double price2 = Double.parseDouble(cleaned2);
+                    
+                    // Return based on preference
+                    return takeHigher ? Math.max(price1, price2) : Math.min(price1, price2);
+                }
+            }
+            
+            // Single value - remove any non-numeric characters except dot
+            String cleaned = priceStr.replaceAll("[^0-9.]", "");
             return Double.parseDouble(cleaned);
         } catch (NumberFormatException e) {
             log.warn("Failed to parse price: {}", priceStr);
             return null;
         }
+    }
+    
+    /**
+     * Parse price for entry - uses worst case scenario
+     * For BUY: takes higher price (more expensive entry)
+     * For SELL: takes lower price (worse entry)
+     */
+    private Double parseEntryPrice(String priceStr, boolean isBuy) {
+        return parsePrice(priceStr, isBuy); // BUY=true (take higher), SELL=false (take lower)
+    }
+    
+    /**
+     * Parse price for target - uses conservative target
+     * For BUY: takes lower target (closer, more conservative)
+     * For SELL: takes higher target (closer, more conservative)
+     */
+    private Double parseTargetPrice(String priceStr, boolean isBuy) {
+        return parsePrice(priceStr, !isBuy); // BUY=false (take lower), SELL=true (take higher)
+    }
+    
+    /**
+     * Parse price for stoploss - uses conservative stoploss
+     * For BUY: takes higher stoploss (closer, hits earlier)
+     * For SELL: takes lower stoploss (closer, hits earlier)
+     */
+    private Double parseStoplossPrice(String priceStr, boolean isBuy) {
+        return parsePrice(priceStr, isBuy); // BUY=true (take higher), SELL=false (take lower)
     }
 }

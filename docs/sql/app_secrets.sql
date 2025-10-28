@@ -32,6 +32,7 @@ INSERT INTO app_secrets (env, prop_key, prop_value) VALUES
 ('dev', 'charts.browser.pool.size', '3'),
 ('dev', 'charts.browser.timeout', '30'),
 ('dev', 'patterns.trendlines.enabled', 'true'),
-('dev', 'charts.visibleBars.default', '1000');
+('dev', 'charts.visibleBars.default', '1000'),
+('dev', 'frontend.chart.url', 'http://localhost:5173');
 
 -- To use a different scope, insert the same keys with env='prod' (or set SECRETS_ENV to match)

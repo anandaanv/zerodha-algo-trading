@@ -134,7 +134,7 @@ bootRun.dependsOn createDirectories
 
 // Default JVM heap for local bootRun
 tasks.named("bootRun") {
-    jvmArgs("-Xms1g", "-Xmx2g")
+    jvmArgs("-Xms1g", "-Xmx6g")
 }
 
 // Ensure external scripts under projectRoot/screener are NOT packaged into the boot jar
