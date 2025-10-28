@@ -1,6 +1,8 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {type CandlestickData, createChart, type IChartApi} from "lightweight-charts";
+import {useSearchParams} from "react-router-dom";
 import {getAllPlugins, getPluginsByGroup} from "./plugins/PluginRegistry";
+import MultiPanelChart from "./MultiPanelChart";
 // Ensure plugin modules are imported so they self-register
 import "./plugins/generic/lines/MultiPointLinePlugin";
 import "./plugins/generic/lines/TrendLinePlugin";
@@ -35,6 +37,17 @@ type BarRow = {
 };
 
 export default function ProApp() {
+  const [searchParams] = useSearchParams();
+  
+  // Early parsing to determine mode
+  const urlSymbol = searchParams.get("script") || searchParams.get("symbol");
+  const urlTimeframe = searchParams.get("timeframe") || searchParams.get("period");
+  
+  const [isMultiPanelMode, setIsMultiPanelMode] = useState<boolean>(false);
+  const [multiPanelTimeframes, setMultiPanelTimeframes] = useState<string[]>([]);
+  const [multiPanelSymbol, setMultiPanelSymbol] = useState<string>("");
+  const [multiPanelMapping, setMultiPanelMapping] = useState<Record<string, string>>({});
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const currentSymbolRef = useRef<string | undefined>(undefined);
@@ -370,10 +383,54 @@ export default function ProApp() {
       const DEFAULT_SYMBOL = "TCS";
       const DEFAULT_PERIOD = uiKeys.includes("1h") ? "1h" : (uiKeys[0] || "1h");
 
-      // Restore last selection if present
+      // Priority: URL params > last selection > defaults
+      const urlSymbol = searchParams.get("script") || searchParams.get("symbol");
+      const urlTimeframe = searchParams.get("timeframe") || searchParams.get("period");
+      
+      // Helper to convert enum name to UI key (e.g., "Day" -> "1d", "OneHour" -> "1h")
+      const normalizeTimeframe = (tf: string): string | null => {
+        if (!tf) return null;
+        
+        // If it's already a valid UI key, return it
+        if (uiKeys.includes(tf)) return tf;
+        
+        // Try to find matching enum name in mapping (value = enum name, key = UI key)
+        const matchingKey = Object.entries(mapping).find(([key, enumName]) => 
+          enumName.toLowerCase() === tf.toLowerCase()
+        );
+        
+        return matchingKey ? matchingKey[0] : null;
+      };
+      
+      // Parse comma-separated timeframes
+      const parseTimeframes = (tfParam: string | null): string[] => {
+        if (!tfParam) return [];
+        
+        const timeframes = tfParam.split(',').map(tf => tf.trim());
+        const normalized = timeframes
+          .map(tf => normalizeTimeframe(tf))
+          .filter((tf): tf is string => tf !== null);
+        
+        return normalized;
+      };
+      
       const last = loadLastSelection();
-      const startSymbol = last.symbol || DEFAULT_SYMBOL;
-      const startPeriod = last.period && uiKeys.includes(last.period) ? last.period : DEFAULT_PERIOD;
+      const startSymbol = urlSymbol || last.symbol || DEFAULT_SYMBOL;
+      const requestedTimeframes = parseTimeframes(urlTimeframe);
+      
+      // If multiple timeframes requested, switch to multi-panel mode
+      if (requestedTimeframes.length > 1) {
+        setIsMultiPanelMode(true);
+        setMultiPanelTimeframes(requestedTimeframes);
+        setMultiPanelSymbol(startSymbol);
+        setMultiPanelMapping(mapping);
+        return;
+      }
+      
+      // Single timeframe mode - continue with normal initialization
+      setIsMultiPanelMode(false);
+      const startPeriod = requestedTimeframes.length === 1 ? requestedTimeframes[0] :
+                          (last.period && uiKeys.includes(last.period) ? last.period : DEFAULT_PERIOD);
 
       currentSymbolRef.current = startSymbol;
       currentPeriodRef.current = startPeriod;
@@ -575,6 +632,17 @@ export default function ProApp() {
     if (!next || next === currentPeriodRef.current) return;
     await applySelectionRef.current?.(currentSymbolRef.current || symbol, next);
   }, [symbol]);
+
+  // Render multi-panel chart if multiple timeframes requested
+  if (isMultiPanelMode && multiPanelTimeframes.length > 1) {
+    return (
+      <MultiPanelChart
+        symbol={multiPanelSymbol}
+        timeframes={multiPanelTimeframes}
+        mapping={multiPanelMapping}
+      />
+    );
+  }
 
   return (
     <div

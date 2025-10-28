@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.FileCopyUtils;
+import java.net.URLEncoder;
 import org.ta4j.core.Bar;
 
 import java.awt.image.BufferedImage;
@@ -74,6 +75,9 @@ public class TradingViewChartService {
 
     @Value("${charts.browser.timeout:30}")
     private int browserTimeoutSeconds;
+
+    @Value("${frontend.chart.url:http://localhost:5173}")
+    private String frontendChartUrl;
 
     /**
      * Get the charts temp directory path
@@ -1089,6 +1093,61 @@ public class TradingViewChartService {
             }
         } catch (IOException e) {
             log.warn("Error deleting temporary directory: {}", directory, e);
+        }
+    }
+
+    /**
+     * Generate chart URL using the React frontend instead of screenshot
+     * This uses the frontend URL from properties (loaded from app_secrets table)
+     * 
+     * @param symbol Trading symbol
+     * @param timeframe Timeframe interval
+     * @return URL to the chart in the frontend
+     */
+    public String generateChartUrl(String symbol, String timeframe) {
+        try {
+            // Build URL with parameters
+            String encodedSymbol = URLEncoder.encode(symbol, "UTF-8");
+            String encodedTimeframe = URLEncoder.encode(timeframe, "UTF-8");
+            
+            return String.format("%s/?script=%s&timeframe=%s", 
+                    frontendChartUrl, encodedSymbol, encodedTimeframe);
+        } catch (Exception e) {
+            log.error("Error generating chart URL for symbol {} timeframe {}", symbol, timeframe, e);
+            return null;
+        }
+    }
+
+    /**
+     * Generate chart URL using the React frontend for a TradingViewChartRequest
+     * Returns URL instead of byte array screenshot
+     * Supports multiple timeframes as comma-separated values
+     * 
+     * @param request The chart generation request
+     * @return Chart URL string
+     */
+    public String generateChartUrlFromRequest(TradingViewChartRequest request) {
+        try {
+            String symbol = request.getSymbol();
+            
+            if (request.getTimeframes().isEmpty()) {
+                return generateChartUrl(symbol, "1h");
+            }
+            
+            // If multiple timeframes, join them with commas
+            if (request.getTimeframes().size() > 1) {
+                String timeframesStr = request.getTimeframes().stream()
+                        .map(Interval::name)
+                        .collect(java.util.stream.Collectors.joining(","));
+                return generateChartUrl(symbol, timeframesStr);
+            }
+            
+            // Single timeframe
+            String timeframe = request.getTimeframes().get(0).name();
+            return generateChartUrl(symbol, timeframe);
+        } catch (Exception e) {
+            log.error("Error generating chart URL from request", e);
+            return null;
         }
     }
 }
