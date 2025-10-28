@@ -31,6 +31,8 @@ export const TradesTable: React.FC<Props> = ({ trades, loading, error }) => {
             <th style={{ textAlign: "right", padding: "8px" }}>Entry</th>
             <th style={{ textAlign: "right", padding: "8px" }}>Target</th>
             <th style={{ textAlign: "right", padding: "8px" }}>Stoploss</th>
+            <th style={{ textAlign: "left", padding: "8px" }}>Confidence</th>
+            <th style={{ textAlign: "left", padding: "8px" }}>Status</th>
             <th style={{ textAlign: "left", padding: "8px" }}>Open</th>
             <th style={{ textAlign: "left", padding: "8px" }}>Run ID</th>
             <th style={{ textAlign: "left", padding: "8px" }}>Actions</th>
@@ -50,6 +52,8 @@ export const TradesTable: React.FC<Props> = ({ trades, loading, error }) => {
                 <td style={{ padding: "8px", textAlign: "right" }}>{t.entry ?? "-"}</td>
                 <td style={{ padding: "8px", textAlign: "right" }}>{t.target ?? "-"}</td>
                 <td style={{ padding: "8px", textAlign: "right" }}>{t.stoploss ?? "-"}</td>
+                <td style={{ padding: "8px" }}>{t.confidence ?? "-"}</td>
+                <td style={{ padding: "8px" }}>{t.status ?? "-"}</td>
                 <td style={{ padding: "8px" }}>{t.open ? "Yes" : "No"}</td>
                 <td style={{ padding: "8px" }}>{t.runId ?? "-"}</td>
                 <td style={{ padding: "8px", display: "flex", gap: 8 }}>

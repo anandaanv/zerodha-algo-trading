@@ -26,7 +26,9 @@ public class TradeController {
             @RequestParam(required = false) String script,
             @RequestParam(required = false) String timeframe,
             @RequestParam(required = false) String side,
-            @RequestParam(required = false) String status
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "DESC") String sortDir
     ) {
         // If open not specified and status=ACTIVE, default open=true
         Boolean openEffective = open;
@@ -63,7 +65,12 @@ public class TradeController {
             }
         }
 
-        return repository.findAll(spec, Sort.by(Sort.Direction.DESC, "timeTriggered"));
+        // Sorting
+        String sortField = (sortBy != null && !sortBy.isBlank()) ? sortBy : "timeTriggered";
+        Sort.Direction direction = "ASC".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Sort sort = Sort.by(direction, sortField);
+
+        return repository.findAll(spec, sort);
     }
 
     @GetMapping("/{id}")

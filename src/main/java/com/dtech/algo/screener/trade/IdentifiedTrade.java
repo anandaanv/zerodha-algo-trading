@@ -39,6 +39,12 @@ public class IdentifiedTrade {
     @Column
     private String stoploss;
 
+    @Column
+    private String confidence;
+
+    @Column
+    private String status;
+
     @Column(name = "time_triggered", nullable = false)
     private Instant timeTriggered;
 
