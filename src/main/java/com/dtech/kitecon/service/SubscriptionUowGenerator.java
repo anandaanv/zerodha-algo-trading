@@ -51,7 +51,7 @@ public class SubscriptionUowGenerator {
 
         s.setLastUpdatedAt(LocalDateTime.now());
         subscriptionRepository.save(s);
-        log.info("Subscription {} scheduled/updated UOWs at {}", tradingSymbol, s.getLastUpdatedAt());
+        log.debug("Subscription {} scheduled/updated UOWs at {}", tradingSymbol, s.getLastUpdatedAt());
     }
 
     @Transactional

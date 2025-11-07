@@ -350,8 +350,98 @@ public class TradingViewChartService {
      * @param request The chart generation request
      * @return Response with chart information
      */
+    /**
+     * Generate TradingView charts using the new URL-based approach with frontend rendering
+     * This is the preferred method that uses the React frontend
+     */
+    public TradingViewChartResponse generateTradingViewChartsFromUrl(TradingViewChartRequest request) {
+        log.info("Generating TradingView charts from URL for symbol: {} with {} timeframes", 
+                request.getSymbol(), request.getTimeframes().size());
+
+        String symbol = request.getSymbol();
+        List<Interval> timeframes = request.getTimeframes();
+
+        // Ensure directories exist
+        createDirectories();
+
+        // Get or create a semaphore for this symbol
+        Semaphore symbolSemaphore = symbolSemaphores.computeIfAbsent(
+                symbol, k -> new Semaphore(MAX_CONCURRENT_RENDERS_PER_SYMBOL));
+
+        try {
+            // Try to acquire a permit, with timeout
+            if (!symbolSemaphore.tryAcquire(30, java.util.concurrent.TimeUnit.SECONDS)) {
+                log.warn("Timeout waiting for chart rendering permit for symbol: {}", symbol);
+                return TradingViewChartResponse.builder()
+                        .symbol(symbol)
+                        .errorMessage("Timed out waiting for chart rendering resources")
+                        .build();
+            }
+
+            try {
+                // Generate frontend URL for the chart
+                String chartUrl = generateChartUrlFromRequest(request);
+                
+                if (chartUrl == null) {
+                    return TradingViewChartResponse.builder()
+                            .symbol(symbol)
+                            .errorMessage("Failed to generate chart URL")
+                            .build();
+                }
+
+                log.info("Generated chart URL: {}", chartUrl);
+
+                // Generate a unique filename for this chart screenshot
+                String timestamp = java.time.LocalDateTime.now().format(
+                        DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+                String filename = symbol + "_" + timestamp + ".png";
+                String filePath = Paths.get(chartsTempDirectory, filename).toString();
+
+                // Capture screenshot from URL in 4K resolution
+                byte[] chartImageData = captureScreenshotFromUrl(chartUrl, filePath);
+                
+                if (chartImageData == null || chartImageData.length == 0) {
+                    return TradingViewChartResponse.builder()
+                            .symbol(symbol)
+                            .errorMessage("Failed to capture chart screenshot")
+                            .build();
+                }
+
+                // Create panel info list
+                List<TradingViewChartResponse.ChartPanelInfo> panels = timeframes.stream()
+                        .map(tf -> TradingViewChartResponse.ChartPanelInfo.builder()
+                                .timeframe(tf.name())
+                                .build())
+                        .collect(java.util.stream.Collectors.toList());
+
+                return TradingViewChartResponse.builder()
+                        .symbol(symbol)
+                        .chartUrl(filePath)
+                        .panels(panels)
+                        .build();
+
+            } finally {
+                // Always release the semaphore
+                symbolSemaphore.release();
+            }
+        } catch (Exception e) {
+            log.error("Error generating TradingView charts for symbol: {}", symbol, e);
+            return TradingViewChartResponse.builder()
+                    .symbol(symbol)
+                    .errorMessage("Error generating charts: " + e.getMessage())
+                    .build();
+        }
+    }
+
+    /**
+     * Generate TradingView charts using the old file-based HTML generation approach
+     * This method is kept for backward compatibility but is not actively used
+     * 
+     * @deprecated Use {@link #generateTradingViewChartsFromUrl(TradingViewChartRequest)} instead
+     */
+    @Deprecated
     public TradingViewChartResponse generateTradingViewCharts(TradingViewChartRequest request) {
-        log.info("Generating TradingView charts for symbol: {} with {} timeframes", 
+        log.info("Generating TradingView charts (legacy method) for symbol: {} with {} timeframes", 
                 request.getSymbol(), request.getTimeframes().size());
 
         String symbol = request.getSymbol();
@@ -1148,6 +1238,82 @@ public class TradingViewChartService {
         } catch (Exception e) {
             log.error("Error generating chart URL from request", e);
             return null;
+        }
+    }
+
+    /**
+     * Capture a screenshot from a URL using Chrome in 4K resolution
+     * 
+     * @param url The URL to capture
+     * @param outputPath The file path to save the screenshot
+     * @return Byte array of the screenshot image
+     */
+    private byte[] captureScreenshotFromUrl(String url, String outputPath) throws IOException {
+        log.info("Capturing 4K screenshot from URL: {}", url);
+        
+        try {
+            Path screenshotPath = Paths.get(outputPath);
+            
+            // Ensure parent directory exists
+            Files.createDirectories(screenshotPath.getParent());
+            
+            // Use Chrome to capture screenshot in 4K (3840x2160)
+            ProcessBuilder processBuilder = new ProcessBuilder(
+                    "google-chrome",
+                    "--headless",
+                    "--disable-gpu",
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-software-rasterizer",
+                    "--disable-extensions",
+                    "--disable-default-apps",
+                    "--screenshot=" + screenshotPath.toAbsolutePath(),
+                    "--window-size=3840,2160",
+                    "--default-background-color=00000000",
+                    "--virtual-time-budget=15000", // Allow 15 seconds for rendering
+                    "--hide-scrollbars",
+                    url
+            );
+
+            processBuilder.redirectErrorStream(true);
+            Process screenshotProcess = processBuilder.start();
+
+            // Wait for the screenshot process to complete
+            boolean completed = screenshotProcess.waitFor(browserTimeoutSeconds + 10, TimeUnit.SECONDS);
+            if (!completed) {
+                screenshotProcess.destroyForcibly();
+                throw new IOException("Screenshot process timed out after " + (browserTimeoutSeconds + 10) + " seconds");
+            }
+
+            int exitCode = screenshotProcess.exitValue();
+            if (exitCode != 0) {
+                // Read the output to log the error
+                java.io.BufferedReader reader = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(screenshotProcess.getInputStream()));
+                String line;
+                StringBuilder output = new StringBuilder();
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+                log.error("Chrome screenshot process failed with exit code {}: {}", exitCode, output.toString());
+                throw new IOException("Screenshot process failed with exit code " + exitCode);
+            }
+
+            // Read the screenshot file
+            if (Files.exists(screenshotPath)) {
+                byte[] imageData = Files.readAllBytes(screenshotPath);
+                log.info("Successfully captured 4K screenshot: {} bytes", imageData.length);
+                return imageData;
+            } else {
+                throw new IOException("Screenshot file was not created");
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Screenshot capture was interrupted", e);
+        } catch (Exception e) {
+            log.error("Error capturing screenshot from URL: {}", url, e);
+            throw new IOException("Failed to capture screenshot: " + e.getMessage(), e);
         }
     }
 }
