@@ -89,7 +89,7 @@ public class OpenAIScreenService {
                     .showVolume(true)
                     .build();
 
-            TradingViewChartResponse chartResponse = tradingViewChartService.generateTradingViewCharts(chartRequest);
+            TradingViewChartResponse chartResponse = tradingViewChartService.generateTradingViewChartsFromUrl(chartRequest);
             if (chartResponse.getErrorMessage() != null) {
                 return ChartAnalysisResponse.builder()
                         .analysis("Error generating TradingView chart: " + chartResponse.getErrorMessage())

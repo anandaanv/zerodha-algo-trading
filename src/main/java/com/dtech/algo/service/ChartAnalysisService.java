@@ -132,7 +132,7 @@ public class ChartAnalysisService {
                     .build();
 
             // Generate the comprehensive TradingView chart
-            TradingViewChartResponse chartResponse = tradingViewChartService.generateTradingViewCharts(chartRequest);
+            TradingViewChartResponse chartResponse = tradingViewChartService.generateTradingViewChartsFromUrl(chartRequest);
 
             if (chartResponse.getErrorMessage() != null) {
                 return ChartAnalysisResponse.builder()
