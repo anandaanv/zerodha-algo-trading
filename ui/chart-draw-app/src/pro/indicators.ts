@@ -248,8 +248,8 @@ export function drawIndicators(
         time: times[i] as number,
         position: 'belowBar',
         color: '#26a69a',
-        shape: 'arrowUp',
-        text: '10×50↑',
+        shape: 'circle',
+        text: '',
       });
     } else if (ema10[i - 1] > ema50[i - 1] && ema10[i] < ema50[i]) {
       // Bearish crossover (10 crosses below 50)
@@ -257,8 +257,8 @@ export function drawIndicators(
         time: times[i] as number,
         position: 'aboveBar',
         color: '#ef5350',
-        shape: 'arrowDown',
-        text: '10×50↓',
+        shape: 'circle',
+        text: '',
       });
     }
 
@@ -268,16 +268,16 @@ export function drawIndicators(
         time: times[i] as number,
         position: 'belowBar',
         color: '#1976d2',
-        shape: 'arrowUp',
-        text: '10×200↑',
+        shape: 'circle',
+        text: '',
       });
     } else if (ema10[i - 1] > ema200[i - 1] && ema10[i] < ema200[i]) {
       crossoverMarkers.push({
         time: times[i] as number,
         position: 'aboveBar',
         color: '#d32f2f',
-        shape: 'arrowDown',
-        text: '10×200↓',
+        shape: 'circle',
+        text: '',
       });
     }
 
@@ -289,7 +289,7 @@ export function drawIndicators(
         position: 'belowBar',
         color: '#FFD700',
         shape: 'circle',
-        text: 'Golden Cross',
+        text: '',
       });
     } else if (ema50[i - 1] > ema200[i - 1] && ema50[i] < ema200[i]) {
       // Death Cross
@@ -298,7 +298,7 @@ export function drawIndicators(
         position: 'aboveBar',
         color: '#8B0000',
         shape: 'circle',
-        text: 'Death Cross',
+        text: '',
       });
     }
   }

@@ -200,7 +200,7 @@ public class TradingViewChartService {
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
                     "--remote-debugging-port=" + debuggingPort,
-                    "--window-size=4000,2800",
+                    "--window-size=3840,2160",
                     "--default-background-color=00000000"
             );
 
@@ -397,7 +397,7 @@ public class TradingViewChartService {
                 String filename = symbol + "_" + timestamp + ".png";
                 String filePath = Paths.get(chartsTempDirectory, filename).toString();
 
-                // Capture screenshot from URL in 4K resolution
+                // Capture screenshot from URL in 9:16 ratio (2160x3840)
                 byte[] chartImageData = captureScreenshotFromUrl(chartUrl, filePath);
                 
                 if (chartImageData == null || chartImageData.length == 0) {
@@ -1064,7 +1064,7 @@ public class TradingViewChartService {
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
                     "--screenshot=" + screenshotPath,
-                    "--window-size=4000,2800",
+                    "--window-size=3840,2160",
                     "--default-background-color=00000000",
                     "--virtual-time-budget=10000", // Allow 10 seconds for rendering
                     fileUrl
@@ -1196,11 +1196,11 @@ public class TradingViewChartService {
      */
     public String generateChartUrl(String symbol, String timeframe) {
         try {
-            // Build URL with parameters
+            // Build URL with parameters including indicators
             String encodedSymbol = URLEncoder.encode(symbol, "UTF-8");
             String encodedTimeframe = URLEncoder.encode(timeframe, "UTF-8");
-            
-            return String.format("%s/?script=%s&timeframe=%s", 
+
+            return String.format("%s/?script=%s&timeframe=%s&indicators=true&indicatorMode=compact",
                     frontendChartUrl, encodedSymbol, encodedTimeframe);
         } catch (Exception e) {
             log.error("Error generating chart URL for symbol {} timeframe {}", symbol, timeframe, e);
@@ -1249,7 +1249,7 @@ public class TradingViewChartService {
      * @return Byte array of the screenshot image
      */
     private byte[] captureScreenshotFromUrl(String url, String outputPath) throws IOException {
-        log.info("Capturing 4K screenshot from URL: {}", url);
+        log.info("Capturing 9:16 ratio screenshot (2160x3840) from URL: {}", url);
         
         try {
             Path screenshotPath = Paths.get(outputPath);
@@ -1257,7 +1257,7 @@ public class TradingViewChartService {
             // Ensure parent directory exists
             Files.createDirectories(screenshotPath.getParent());
             
-            // Use Chrome to capture screenshot in 4K (3840x2160)
+            // Use Chrome to capture screenshot in 9:16 ratio (2160x3840 - vertical rectangle)
             ProcessBuilder processBuilder = new ProcessBuilder(
                     "google-chrome",
                     "--headless",
@@ -1268,7 +1268,7 @@ public class TradingViewChartService {
                     "--disable-extensions",
                     "--disable-default-apps",
                     "--screenshot=" + screenshotPath.toAbsolutePath(),
-                    "--window-size=3840,2160",
+                    "--window-size=2160,3840",
                     "--default-background-color=00000000",
                     "--virtual-time-budget=15000", // Allow 15 seconds for rendering
                     "--hide-scrollbars",
@@ -1302,7 +1302,7 @@ public class TradingViewChartService {
             // Read the screenshot file
             if (Files.exists(screenshotPath)) {
                 byte[] imageData = Files.readAllBytes(screenshotPath);
-                log.info("Successfully captured 4K screenshot: {} bytes", imageData.length);
+                log.info("Successfully captured 9:16 ratio screenshot: {} bytes", imageData.length);
                 return imageData;
             } else {
                 throw new IOException("Screenshot file was not created");
