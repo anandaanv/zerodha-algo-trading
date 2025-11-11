@@ -200,7 +200,7 @@ public class TradingViewChartService {
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
                     "--remote-debugging-port=" + debuggingPort,
-                    "--window-size=3840,2160",
+                    "--window-size=3840,2880",
                     "--default-background-color=00000000"
             );
 
@@ -1064,7 +1064,7 @@ public class TradingViewChartService {
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
                     "--screenshot=" + screenshotPath,
-                    "--window-size=3840,2160",
+                    "--window-size=3840,2880",
                     "--default-background-color=00000000",
                     "--virtual-time-budget=10000", // Allow 10 seconds for rendering
                     fileUrl
@@ -1257,7 +1257,7 @@ public class TradingViewChartService {
             // Ensure parent directory exists
             Files.createDirectories(screenshotPath.getParent());
             
-            // Use Chrome to capture screenshot in 9:16 ratio (2160x3840 - vertical rectangle)
+            // Use Chrome to capture screenshot in 16:9 ratio (3840x2160 - 4K landscape)
             ProcessBuilder processBuilder = new ProcessBuilder(
                     "google-chrome",
                     "--headless",
@@ -1268,7 +1268,7 @@ public class TradingViewChartService {
                     "--disable-extensions",
                     "--disable-default-apps",
                     "--screenshot=" + screenshotPath.toAbsolutePath(),
-                    "--window-size=2160,3840",
+                    "--window-size=3840,2880",
                     "--default-background-color=00000000",
                     "--virtual-time-budget=15000", // Allow 15 seconds for rendering
                     "--hide-scrollbars",
