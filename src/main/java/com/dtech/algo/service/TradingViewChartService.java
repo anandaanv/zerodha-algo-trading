@@ -63,6 +63,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class TradingViewChartService {
 
     private final BarSeriesHelper barSeriesHelper;
+    private final com.dtech.kitecon.auth.ServiceTokenHolder serviceTokenHolder;
 
     @Value("${charts.output.directory:/tmp/charts}")
     private String chartsOutputDirectory;
@@ -1196,12 +1197,17 @@ public class TradingViewChartService {
      */
     public String generateChartUrl(String symbol, String timeframe) {
         try {
-            // Build URL with parameters including indicators
+            // Build URL with parameters including indicators and service token
             String encodedSymbol = URLEncoder.encode(symbol, "UTF-8");
             String encodedTimeframe = URLEncoder.encode(timeframe, "UTF-8");
 
-            return String.format("%s/?script=%s&timeframe=%s&indicators=true&indicatorMode=compact",
+            String url = String.format("%s/chart?script=%s&timeframe=%s&indicators=true&indicatorMode=compact",
                     frontendChartUrl, encodedSymbol, encodedTimeframe);
+
+            // Add service token for authentication
+            url += serviceTokenHolder.asQueryParam();
+
+            return url;
         } catch (Exception e) {
             log.error("Error generating chart URL for symbol {} timeframe {}", symbol, timeframe, e);
             return null;

@@ -1,8 +1,10 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user, logout, hasRole } = useAuth();
 
   return (
     <div
@@ -14,8 +16,39 @@ export default function Dashboard() {
         minHeight: "100vh",
         background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         padding: "20px",
+        position: "relative",
       }}
     >
+      {/* Logout button */}
+      <div
+        style={{
+          position: "absolute",
+          top: "20px",
+          right: "20px",
+          display: "flex",
+          alignItems: "center",
+          gap: "1rem",
+        }}
+      >
+        <span style={{ color: "#fff", fontWeight: 500 }}>
+          {user?.username} ({user?.role})
+        </span>
+        <button
+          onClick={logout}
+          style={{
+            padding: "0.5rem 1rem",
+            borderRadius: "8px",
+            border: "1px solid #fff",
+            background: "rgba(255, 255, 255, 0.2)",
+            color: "#fff",
+            cursor: "pointer",
+            fontWeight: 500,
+          }}
+        >
+          Logout
+        </button>
+      </div>
+
       <h1
         style={{
           color: "#fff",
@@ -37,10 +70,50 @@ export default function Dashboard() {
           width: "100%",
         }}
       >
-        {/* Screeners Card */}
-        <div
-          onClick={() => navigate("/screener")}
-          style={{
+        {/* Trades Card - USER, MODERATOR, ADMIN */}
+        {hasRole("USER") && (
+          <div
+            onClick={() => navigate("/trades")}
+            style={{
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2.5rem",
+              cursor: "pointer",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-8px)";
+              e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+            }}
+          >
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>💼</div>
+            <h2
+              style={{
+                fontSize: "1.5rem",
+                marginBottom: "0.5rem",
+                color: "#333",
+                fontWeight: 600,
+              }}
+            >
+              Trades
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.95rem" }}>
+              View and manage your trading positions
+            </p>
+          </div>
+        )}
+
+        {/* Screeners Card - MODERATOR, ADMIN */}
+        {hasRole("MODERATOR") && (
+          <div
+            onClick={() => navigate("/screener")}
+            style={{
             background: "#fff",
             borderRadius: "16px",
             padding: "2.5rem",
@@ -80,94 +153,46 @@ export default function Dashboard() {
             Scan and filter stocks based on technical indicators
           </p>
         </div>
+        )}
 
-        {/* Charts Card */}
-        <div
-          onClick={() => navigate("/chart?indicators=true")}
-          style={{
-            background: "#fff",
-            borderRadius: "16px",
-            padding: "2.5rem",
-            cursor: "pointer",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-            transition: "transform 0.2s, box-shadow 0.2s",
-            textAlign: "center",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "translateY(-8px)";
-            e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
-          }}
-        >
+        {/* Charts Card - MODERATOR, ADMIN */}
+        {hasRole("MODERATOR") && (
           <div
+            onClick={() => navigate("/chart?indicators=true")}
             style={{
-              fontSize: "3rem",
-              marginBottom: "1rem",
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2.5rem",
+              cursor: "pointer",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-8px)";
+              e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
             }}
           >
-            📈
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📈</div>
+            <h2
+              style={{
+                fontSize: "1.5rem",
+                marginBottom: "0.5rem",
+                color: "#333",
+                fontWeight: 600,
+              }}
+            >
+              Charts
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.95rem" }}>
+              Advanced charting with technical analysis tools
+            </p>
           </div>
-          <h2
-            style={{
-              fontSize: "1.5rem",
-              marginBottom: "0.5rem",
-              color: "#333",
-              fontWeight: 600,
-            }}
-          >
-            Charts
-          </h2>
-          <p style={{ color: "#666", fontSize: "0.95rem" }}>
-            Advanced charting with technical analysis tools
-          </p>
-        </div>
-
-        {/* Trades Card */}
-        <div
-          onClick={() => navigate("/trades")}
-          style={{
-            background: "#fff",
-            borderRadius: "16px",
-            padding: "2.5rem",
-            cursor: "pointer",
-            boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-            transition: "transform 0.2s, box-shadow 0.2s",
-            textAlign: "center",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = "translateY(-8px)";
-            e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
-          }}
-        >
-          <div
-            style={{
-              fontSize: "3rem",
-              marginBottom: "1rem",
-            }}
-          >
-            💼
-          </div>
-          <h2
-            style={{
-              fontSize: "1.5rem",
-              marginBottom: "0.5rem",
-              color: "#333",
-              fontWeight: 600,
-            }}
-          >
-            Trades
-          </h2>
-          <p style={{ color: "#666", fontSize: "0.95rem" }}>
-            View and manage your trading positions
-          </p>
-        </div>
+        )}
       </div>
     </div>
   );

@@ -3,7 +3,10 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./styles.css";
 import "./screener/screener.css";
+import { AuthProvider } from "./context/AuthContext";
+import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
+import ProtectedRoute from "./components/ProtectedRoute";
 import ProApp from "./pro/ProApp";
 
 // Screener pages
@@ -17,19 +20,74 @@ import { tradesRoutes } from "./trades";
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <BrowserRouter>
-    <Routes>
-      <Route path="/" element={<Dashboard />} />
-      <Route path="/chart" element={<ProApp />} />
-      <Route path="/screener" element={<ScreenerListPage />} />
-      <Route path="/screener/new" element={<ScreenerCreatePage />} />
-      <Route path="/screener/:id" element={<ScreenerDetailPage />} />
+    <AuthProvider>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/login" element={<Login />} />
 
-      {/* Trades */}
-      {tradesRoutes.map((r) => (
-        <Route key={r.path} path={r.path} element={r.element} />
-      ))}
+        {/* Protected routes */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/chart"
+          element={
+            <ProtectedRoute requiredRole="MODERATOR">
+              <ProApp />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/screener"
+          element={
+            <ProtectedRoute requiredRole="MODERATOR">
+              <ScreenerListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/screener/new"
+          element={
+            <ProtectedRoute requiredRole="MODERATOR">
+              <ScreenerCreatePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/screener/:id"
+          element={
+            <ProtectedRoute requiredRole="MODERATOR">
+              <ScreenerDetailPage />
+            </ProtectedRoute>
+          }
+        />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* Trades - accessible by all authenticated users */}
+        {tradesRoutes.map((r) => (
+          <Route
+            key={r.path}
+            path={r.path}
+            element={
+              <ProtectedRoute requiredRole="USER">{r.element}</ProtectedRoute>
+            }
+          />
+        ))}
+
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
   </BrowserRouter>
 );
