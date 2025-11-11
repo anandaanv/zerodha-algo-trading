@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {type CandlestickData, createChart, type IChartApi} from "lightweight-charts";
+import {type CandlestickData, createChart, type IChartApi, type ISeriesApi} from "lightweight-charts";
 import {useSearchParams} from "react-router-dom";
 import {getAllPlugins, getPluginsByGroup} from "./plugins/PluginRegistry";
 import MultiPanelChart from "./MultiPanelChart";
@@ -25,6 +25,8 @@ import {
   loadOverlaysFromServer as loadOverlaysFromServerApi,
   type SymbolItem,
 } from "./proApi";
+import { drawIndicators } from "./indicators";
+import OscillatorCharts from "./OscillatorCharts";
 
 type BarRow = {
   time?: number;
@@ -54,6 +56,8 @@ export default function ProApp() {
   const currentPeriodRef = useRef<string | undefined>(undefined);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const indicatorSeriesRef = useRef<Record<string, ISeriesApi<any>>>({});
+  const [oscillatorData, setOscillatorData] = useState<{ data: any[]; rows: BarRow[] } | null>(null);
 
   // map key -> instance
   const pluginMapRef = useRef<Record<string, any>>({});
@@ -372,6 +376,9 @@ export default function ProApp() {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    let resizeObserver: ResizeObserver | null = null;
+    let resizeHandler: (() => void) | null = null;
+
     const init = async () => {
       // Load UI->enum mapping and KLine-style periods from backend
       const mapping: Record<string, string> = await fetchIntervalMapping().catch(() => ({}));
@@ -488,6 +495,9 @@ export default function ProApp() {
       // Helper to map UI key to server enum
       const toEnum = (p: string) => mapping[p] ?? p;
 
+      // Check if indicators should be enabled
+      const showIndicators = searchParams.get("indicators") === "true" || searchParams.get("indicators") === "1";
+
       // Load historical candles and set to series
       const loadCandles = async (sym: string, per: string) => {
         const rows: BarRow[] = await fetchOHLC(sym, toEnum(per));
@@ -504,6 +514,15 @@ export default function ProApp() {
         firstBarOfDayMsRef.current = buildFirstOfDaySet(data.map(d => d.time as number));
 
         series.setData(data);
+
+        // Draw indicators if enabled
+        if (showIndicators) {
+          drawIndicators(chart, data, rows, indicatorSeriesRef, series);
+          // Store data for oscillator charts
+          setOscillatorData({ data, rows });
+        } else {
+          setOscillatorData(null);
+        }
       };
 
       // Create plugins from registry
@@ -562,7 +581,7 @@ export default function ProApp() {
       }, 0);
 
       // Handle resize
-      const onResize = () => {
+      resizeHandler = () => {
         if (!chartRef.current || !containerRef.current) return;
         const rect = containerRef.current.getBoundingClientRect();
         chartRef.current.applyOptions({
@@ -570,7 +589,16 @@ export default function ProApp() {
           height: Math.max(200, Math.floor(rect.height)),
         });
       };
-      window.addEventListener("resize", onResize);
+      window.addEventListener("resize", resizeHandler);
+
+      // Use ResizeObserver for better handling of container size changes
+      resizeObserver = new ResizeObserver(() => {
+        resizeHandler?.();
+      });
+      resizeObserver.observe(container);
+
+      // Initial resize to ensure correct dimensions
+      setTimeout(() => resizeHandler?.(), 100);
     };
 
     void init();
@@ -583,6 +611,14 @@ export default function ProApp() {
     }
 
     return () => {
+      // Cleanup resize observer and event listener
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      if (resizeHandler) {
+        window.removeEventListener("resize", resizeHandler);
+      }
+
       try {
         const instances = pluginMapRef.current;
         for (const key of Object.keys(instances)) {
@@ -644,18 +680,42 @@ export default function ProApp() {
     );
   }
 
+  // Check URL parameter for oscillator layout: side or bottom (default: bottom)
+  const oscillatorLayout = searchParams.get("oscillatorLayout") || "bottom";
+  // Check URL parameter for indicator mode: scrollable or compact (default: scrollable)
+  const indicatorMode = searchParams.get("indicatorMode") || "scrollable";
+
   return (
     <div
       ref={wrapperRef}
       tabIndex={0}
       onKeyDown={handleKeyDown}
       onMouseDown={handleWrapperMouseDown}
-      style={{ position: "relative", width: "100%", height: "100vh", outline: "none" }}
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100vh",
+        outline: "none",
+        display: "flex",
+        flexDirection: oscillatorData && oscillatorLayout === "side" ? "row" : "column"
+      }}
     >
-      <div
-        ref={containerRef}
-        style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
-      />
+      {/* Main price chart */}
+      <div style={{
+        flex: oscillatorData
+          ? (indicatorMode === "compact"
+              ? (oscillatorLayout === "side" ? "0 0 50%" : "0 0 50%")
+              : (oscillatorLayout === "side" ? "0 0 65%" : "0 0 60%")
+            )
+          : "1",
+        position: "relative",
+        minHeight: 0,
+        overflow: "hidden"
+      }}>
+        <div
+          ref={containerRef}
+          style={{ width: "100%", height: "100%" }}
+        />
 
       {/* Top centered toolbar: symbol + timeframe */}
       <div
@@ -924,6 +984,34 @@ export default function ProApp() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      </div>
+
+      {/* Oscillator charts panel */}
+      {oscillatorData && (
+        <div
+          style={{
+            flex: indicatorMode === "compact"
+              ? (oscillatorLayout === "side" ? "0 0 50%" : "0 0 50%")
+              : (oscillatorLayout === "side" ? "0 0 35%" : "0 0 40%"),
+            overflowY: indicatorMode === "compact" ? "hidden" : "auto",
+            overflowX: "hidden",
+            borderLeft: oscillatorLayout === "side" ? "1px solid #e0e0e0" : "none",
+            borderTop: oscillatorLayout === "bottom" ? "1px solid #e0e0e0" : "none",
+            background: "#fafafa",
+            padding: 8,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <OscillatorCharts
+            data={oscillatorData.data}
+            rows={oscillatorData.rows}
+            mainChartRef={chartRef}
+            layout={oscillatorLayout as "side" | "bottom"}
+            mode={indicatorMode as "scrollable" | "compact"}
+          />
         </div>
       )}
     </div>
