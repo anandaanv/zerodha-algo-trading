@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./styles.css";
 import "./screener/screener.css";
+import Dashboard from "./components/Dashboard";
 import ProApp from "./pro/ProApp";
 
 // Screener pages
@@ -17,7 +18,8 @@ const root = createRoot(document.getElementById("root")!);
 root.render(
   <BrowserRouter>
     <Routes>
-      <Route path="/" element={<ProApp />} />
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/chart" element={<ProApp />} />
       <Route path="/screener" element={<ScreenerListPage />} />
       <Route path="/screener/new" element={<ScreenerCreatePage />} />
       <Route path="/screener/:id" element={<ScreenerDetailPage />} />
