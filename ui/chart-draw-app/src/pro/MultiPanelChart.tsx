@@ -1,25 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
-import { type CandlestickData, createChart, type IChartApi } from "lightweight-charts";
-import { getAllPlugins } from "./plugins/PluginRegistry";
-import { fetchOHLC, loadOverlaysFromServer } from "./proApi";
-import { buildFirstOfDaySet, formatTickMarkIST, formatCrosshairISTFull } from "./timeUtils";
-
-type BarRow = {
-  time?: number;
-  timestamp?: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-};
-
-type ChartPanel = {
-  timeframe: string;
-  containerRef: React.RefObject<HTMLDivElement>;
-  chartRef: React.MutableRefObject<IChartApi | null>;
-  pluginMapRef: React.MutableRefObject<Record<string, any>>;
-};
+import React from "react";
+import { useSearchParams } from "react-router-dom";
+import SingleChartPanel from "./SingleChartPanel";
 
 type Props = {
   symbol: string;
@@ -28,147 +9,16 @@ type Props = {
 };
 
 export default function MultiPanelChart({ symbol, timeframes, mapping }: Props) {
-  const [panels] = useState<ChartPanel[]>(() =>
-    timeframes.map((tf) => ({
-      timeframe: tf,
-      containerRef: React.createRef<HTMLDivElement>(),
-      chartRef: { current: null },
-      pluginMapRef: { current: {} },
-    }))
-  );
+  const [searchParams] = useSearchParams();
 
-  const toEnum = (p: string) => mapping[p] ?? p;
-
-  useEffect(() => {
-    const initPanel = async (panel: ChartPanel) => {
-      if (!panel.containerRef.current) return;
-
-      const container = panel.containerRef.current;
-      const bounds = container.getBoundingClientRect();
-
-      // Create chart
-      const chart = createChart(container, {
-        width: Math.max(200, Math.floor(bounds.width)),
-        height: Math.max(200, Math.floor(bounds.height)),
-        layout: {
-          background: { color: "#ffffff" },
-          textColor: "#333",
-        },
-        grid: {
-          vertLines: { color: "#f0f0f0" },
-          horzLines: { color: "#f0f0f0" },
-        },
-        timeScale: {
-          timeVisible: true,
-          secondsVisible: true,
-          tickMarkFormatter: (time: number) => {
-            const firstBarOfDayMs = new Set<number>();
-            return formatTickMarkIST(time as number, panel.timeframe, firstBarOfDayMs);
-          },
-        },
-        localization: {
-          dateFormat: "dd MMM 'yy",
-          timeFormatter: (time: any) => formatCrosshairISTFull(time),
-        },
-        handleScroll: {
-          mouseWheel: true,
-          pressedMouseMove: true,
-          horzTouchDrag: true,
-          vertTouchDrag: true,
-        },
-      });
-
-      panel.chartRef.current = chart;
-
-      const series = chart.addCandlestickSeries({
-        upColor: "#26a69a",
-        downColor: "#ef5350",
-        wickUpColor: "#26a69a",
-        wickDownColor: "#ef5350",
-        borderVisible: false,
-      });
-
-      // Load candles
-      try {
-        const rows: BarRow[] = await fetchOHLC(symbol, toEnum(panel.timeframe));
-        const data: CandlestickData[] = rows.map((b) => ({
-          time: (b.time ?? b.timestamp ?? 0) as number,
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-        }));
-        series.setData(data);
-      } catch (e) {
-        console.error("Failed to load candles for", panel.timeframe, e);
-      }
-
-      // Create plugins
-      const instances: Record<string, any> = {};
-      for (const def of getAllPlugins()) {
-        try {
-          instances[def.key] = new (def.ctor as any)({ chart, series, container });
-        } catch (err) {
-          console.error("Failed to init plugin", def.key, err);
-        }
-      }
-      panel.pluginMapRef.current = instances;
-
-      // Load overlays from server
-      try {
-        const ok = await loadOverlaysFromServer(symbol, panel.timeframe);
-        if (ok?.overlays) {
-          for (const def of getAllPlugins()) {
-            const data = ok.overlays[def.key] ?? [];
-            try {
-              instances[def.key]?.importAll?.(data);
-            } catch (e) {
-              console.warn("Import overlay failed for", def.key, e);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("Load overlays failed for", panel.timeframe, e);
-      }
-    };
-
-    // Initialize all panels
-    panels.forEach(initPanel);
-
-    // Handle resize
-    const onResize = () => {
-      panels.forEach((panel) => {
-        if (!panel.chartRef.current || !panel.containerRef.current) return;
-        const rect = panel.containerRef.current.getBoundingClientRect();
-        panel.chartRef.current.applyOptions({
-          width: Math.max(200, Math.floor(rect.width)),
-          height: Math.max(200, Math.floor(rect.height)),
-        });
-      });
-    };
-    window.addEventListener("resize", onResize);
-
-    return () => {
-      window.removeEventListener("resize", onResize);
-      panels.forEach((panel) => {
-        try {
-          const instances = panel.pluginMapRef.current;
-          for (const key of Object.keys(instances)) {
-            instances[key]?.destroy?.();
-          }
-        } catch {}
-        try {
-          panel.chartRef.current?.remove?.();
-        } catch {}
-        panel.chartRef.current = null;
-        panel.pluginMapRef.current = {};
-      });
-    };
-  }, [symbol, timeframes, panels, mapping, toEnum]);
+  // Check if indicators should be enabled
+  const showIndicators = searchParams.get("indicators") === "true" || searchParams.get("indicators") === "1";
+  const indicatorMode = (searchParams.get("indicatorMode") || "compact") as "scrollable" | "compact";
+  const oscillatorLayout = (searchParams.get("oscillatorLayout") || "bottom") as "side" | "bottom";
 
   // Calculate grid layout based on number of panels
   const getGridLayout = () => {
-    const count = panels.length;
+    const count = timeframes.length;
     if (count === 1) return { cols: 1, rows: 1 };
     if (count === 2) return { cols: 2, rows: 1 };
     if (count === 3) return { cols: 3, rows: 1 };
@@ -209,9 +59,9 @@ export default function MultiPanelChart({ symbol, timeframes, mapping }: Props) 
           background: "#f5f5f5",
         }}
       >
-        {panels.map((panel) => (
+        {timeframes.map((timeframe) => (
           <div
-            key={panel.timeframe}
+            key={timeframe}
             style={{
               position: "relative",
               background: "#fff",
@@ -236,9 +86,18 @@ export default function MultiPanelChart({ symbol, timeframes, mapping }: Props) 
                 boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
               }}
             >
-              {panel.timeframe}
+              {timeframe}
             </div>
-            <div ref={panel.containerRef} style={{ width: "100%", height: "100%" }} />
+
+            {/* Single chart panel with indicators */}
+            <SingleChartPanel
+              symbol={symbol}
+              timeframe={timeframe}
+              mapping={mapping}
+              showIndicators={showIndicators}
+              indicatorMode={indicatorMode}
+              oscillatorLayout={oscillatorLayout}
+            />
           </div>
         ))}
       </div>
