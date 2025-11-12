@@ -166,22 +166,22 @@ tasks.register("npmInstall", Exec) {
 }
 
 // npm run build
-tasks.register("npmBuild", Exec) {
-    description = "Build chart-draw app (vite)"
-    workingDir uiDir
-    commandLine npmCmd, "run", "build"
-    dependsOn "npmInstall"
-    onlyIf { file("${uiDir}/package.json").exists() }
-}
-
-// Copy dist to Spring Boot resources (in build dir, not source tree)
-tasks.register("copyFrontend", Sync) {
-    description = "Copy built frontend to build/resources/static for packaging"
-    dependsOn "npmBuild"
-    from(frontendDist)
-    into(staticTargetDir)
-    onlyIf { file(frontendDist).exists() }
-}
+//tasks.register("npmBuild", Exec) {
+//    description = "Build chart-draw app (vite)"
+//    workingDir uiDir
+//    commandLine npmCmd, "run", "build"
+//    dependsOn "npmInstall"
+//    onlyIf { file("${uiDir}/package.json").exists() }
+//}
+//
+//// Copy dist to Spring Boot resources (in build dir, not source tree)
+//tasks.register("copyFrontend", Sync) {
+//    description = "Copy built frontend to build/resources/static for packaging"
+//    dependsOn "npmBuild"
+//    from(frontendDist)
+//    into(staticTargetDir)
+//    onlyIf { file(frontendDist).exists() }
+//}
 
 // Include frontend assets in jar/war packaging
 tasks.named("processResources") {
