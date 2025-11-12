@@ -39,9 +39,13 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/assets/**", "/static/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
+                        // Kite login and app config pages (public for now)
+                        .requestMatchers("/kite-login", "/app").permitAll()
+
                         // Role-based access control
                         .requestMatchers("/api/trades/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart/**", "/api/screener/**", "/api/overlays/**").hasAnyRole("MODERATOR", "ADMIN")
+                        .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                         // All other endpoints require authentication
