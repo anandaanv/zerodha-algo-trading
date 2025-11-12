@@ -150,20 +150,20 @@ bootJar {
 // --------------------------------------------------------
 // Frontend (npm) integration: build and package static UI
 // --------------------------------------------------------
-def isWindows = System.getProperty("os.name").toLowerCase().contains("win")
-def npmCmd = isWindows ? "npm.cmd" : "npm"
-def uiDir = "${projectDir}/ui/chart-draw-app"
-def frontendDist = "${uiDir}/dist"
-def staticTargetDir = "${buildDir}/resources/main/static/"
-
-// npm install
-tasks.register("npmInstall", Exec) {
-    description = "Install npm dependencies for chart-draw app"
-    workingDir uiDir
-    commandLine npmCmd, "install"
-    // Only run if package.json exists
-    onlyIf { file("${uiDir}/package.json").exists() }
-}
+//def isWindows = System.getProperty("os.name").toLowerCase().contains("win")
+//def npmCmd = isWindows ? "npm.cmd" : "npm"
+//def uiDir = "${projectDir}/ui/chart-draw-app"
+//def frontendDist = "${uiDir}/dist"
+//def staticTargetDir = "${buildDir}/resources/main/static/"
+//
+//// npm install
+//tasks.register("npmInstall", Exec) {
+//    description = "Install npm dependencies for chart-draw app"
+//    workingDir uiDir
+//    commandLine npmCmd, "install"
+//    // Only run if package.json exists
+//    onlyIf { file("${uiDir}/package.json").exists() }
+//}
 
 // npm run build
 //tasks.register("npmBuild", Exec) {
