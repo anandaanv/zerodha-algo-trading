@@ -183,17 +183,17 @@ tasks.register("npmInstall", Exec) {
 //    onlyIf { file(frontendDist).exists() }
 //}
 
-// Include frontend assets in jar/war packaging
-tasks.named("processResources") {
-    dependsOn "copyFrontend"
-}
-
-// Clean frontend outputs from build dir
-tasks.register("cleanFrontend", Delete) {
-    description = "Clean copied frontend assets from build dir"
-    delete staticTargetDir
-}
-
-tasks.named("clean") {
-    dependsOn "cleanFrontend"
-}
+//// Include frontend assets in jar/war packaging
+//tasks.named("processResources") {
+//    dependsOn "copyFrontend"
+//}
+//
+//// Clean frontend outputs from build dir
+//tasks.register("cleanFrontend", Delete) {
+//    description = "Clean copied frontend assets from build dir"
+//    delete staticTargetDir
+//}
+//
+//tasks.named("clean") {
+//    dependsOn "cleanFrontend"
+//}
