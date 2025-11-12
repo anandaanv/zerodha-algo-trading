@@ -83,4 +83,78 @@ public class ChartStateController {
             return ResponseEntity.status(500).build();
         }
     }
+
+    /**
+     * Export all chart states as JSON (ADMIN only).
+     * GET /api/chart-state/export
+     */
+    @GetMapping("/chart-state/export")
+    public ResponseEntity<?> exportAll() {
+        try {
+            var allStates = repository.findAll();
+            var exportList = allStates.stream().map(ent -> {
+                try {
+                    Map<String, Object> overlays = objectMapper.readValue(ent.getOverlaysJson(), Map.class);
+                    Map<String, Object> meta = ent.getMetaJson() == null ? Map.of() : objectMapper.readValue(ent.getMetaJson(), Map.class);
+                    return new ChartStateDTO(ent.getSymbol(), ent.getPeriod(), overlays, meta, ent.getCreatedAt());
+                } catch (Exception e) {
+                    return null;
+                }
+            }).filter(dto -> dto != null).toList();
+
+            return ResponseEntity.ok(exportList);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Import chart states from JSON (ADMIN only).
+     * POST /api/chart-state/import
+     * Body: array of ChartStateDTO objects
+     */
+    @PostMapping("/chart-state/import")
+    public ResponseEntity<?> importAll(@RequestBody java.util.List<Map<String, Object>> importData) {
+        try {
+            int imported = 0;
+            for (Map<String, Object> item : importData) {
+                try {
+                    String symbol = (String) item.get("symbol");
+                    String period = (String) item.get("period");
+                    Object overlaysObj = item.get("overlays");
+                    Object metaObj = item.get("meta");
+
+                    if (symbol == null || period == null) continue;
+
+                    String overlaysJson = overlaysObj == null ? "{}" : objectMapper.writeValueAsString(overlaysObj);
+                    String metaJson = metaObj == null ? null : objectMapper.writeValueAsString(metaObj);
+
+                    // Check if already exists, update if so
+                    UserChartState existing = repository.findTopBySymbolAndPeriodOrderByCreatedAtDesc(symbol, period);
+                    if (existing != null) {
+                        existing.setOverlaysJson(overlaysJson);
+                        existing.setMetaJson(metaJson);
+                        existing.setCreatedAt(LocalDateTime.now());
+                        repository.save(existing);
+                    } else {
+                        UserChartState newState = UserChartState.builder()
+                                .symbol(symbol)
+                                .period(period)
+                                .overlaysJson(overlaysJson)
+                                .metaJson(metaJson)
+                                .createdAt(LocalDateTime.now())
+                                .build();
+                        repository.save(newState);
+                    }
+                    imported++;
+                } catch (Exception e) {
+                    // Skip invalid entries
+                }
+            }
+
+            return ResponseEntity.ok(Map.of("imported", imported, "total", importData.size()));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
 }

@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import SyncModal from "./SyncModal";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, logout, hasRole } = useAuth();
+  const [showSyncModal, setShowSyncModal] = useState(false);
 
   return (
     <div
@@ -19,7 +21,7 @@ export default function Dashboard() {
         position: "relative",
       }}
     >
-      {/* Logout button */}
+      {/* Logout and Sync buttons */}
       <div
         style={{
           position: "absolute",
@@ -33,6 +35,22 @@ export default function Dashboard() {
         <span style={{ color: "#fff", fontWeight: 500 }}>
           {user?.username} ({user?.role})
         </span>
+        {user?.role === "ADMIN" && (
+          <button
+            onClick={() => setShowSyncModal(true)}
+            style={{
+              padding: "0.5rem 1rem",
+              borderRadius: "8px",
+              border: "1px solid #fff",
+              background: "rgba(255, 255, 255, 0.2)",
+              color: "#fff",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            Sync
+          </button>
+        )}
         <button
           onClick={logout}
           style={{
@@ -194,6 +212,9 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Sync Modal */}
+      <SyncModal isOpen={showSyncModal} onClose={() => setShowSyncModal(false)} />
     </div>
   );
 }
