@@ -35,8 +35,8 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request) {
         try {
-            User.Role role = User.Role.valueOf(request.getRole().toUpperCase());
-            User user = authService.registerUser(request.getUsername(), request.getPassword(), role);
+            // Always register as USER role by default, ignore role parameter
+            User user = authService.registerUser(request.getUsername(), request.getPassword(), User.Role.USER);
             String token = jwtUtil.generateToken(user.getUsername(), user.getRole());
 
             return ResponseEntity.ok(new LoginResponse(
