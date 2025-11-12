@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
+import { withAuth } from "../utils/apiHelper";
 
 interface SyncModalProps {
   isOpen: boolean;
@@ -13,7 +13,6 @@ interface RemoteSyncConfig {
 }
 
 export default function SyncModal({ isOpen, onClose }: SyncModalProps) {
-  const { token } = useAuth();
   const [config, setConfig] = useState<RemoteSyncConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -26,11 +25,7 @@ export default function SyncModal({ isOpen, onClose }: SyncModalProps) {
 
   const fetchConfig = async () => {
     try {
-      const response = await fetch("/api/remote-sync/config", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch("/api/remote-sync/config", withAuth());
 
       if (!response.ok) {
         throw new Error("Failed to fetch sync configuration");
@@ -86,14 +81,13 @@ export default function SyncModal({ isOpen, onClose }: SyncModalProps) {
       const exportData = await exportResponse.json();
 
       // Step 3: Import to local
-      const importResponse = await fetch("/api/chart-state/import", {
+      const importResponse = await fetch("/api/chart-state/import", withAuth({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(exportData),
-      });
+      }));
 
       if (!importResponse.ok) {
         throw new Error("Failed to import to local server");
@@ -125,11 +119,7 @@ export default function SyncModal({ isOpen, onClose }: SyncModalProps) {
 
     try {
       // Step 1: Export from local
-      const exportResponse = await fetch("/api/chart-state/export", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const exportResponse = await fetch("/api/chart-state/export", withAuth());
 
       if (!exportResponse.ok) {
         throw new Error("Failed to export from local server");

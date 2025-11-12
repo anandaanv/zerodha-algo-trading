@@ -58,6 +58,9 @@ export default function ProApp() {
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const indicatorSeriesRef = useRef<Record<string, ISeriesApi<any>>>({});
   const [oscillatorData, setOscillatorData] = useState<{ data: any[]; rows: BarRow[] } | null>(null);
+  const [showIndicators, setShowIndicators] = useState<boolean>(
+    searchParams.get("indicators") === "true" || searchParams.get("indicators") === "1"
+  );
 
   // map key -> instance
   const pluginMapRef = useRef<Record<string, any>>({});
@@ -495,9 +498,6 @@ export default function ProApp() {
       // Helper to map UI key to server enum
       const toEnum = (p: string) => mapping[p] ?? p;
 
-      // Check if indicators should be enabled
-      const showIndicators = searchParams.get("indicators") === "true" || searchParams.get("indicators") === "1";
-
       // Load historical candles and set to series
       const loadCandles = async (sym: string, per: string) => {
         const rows: BarRow[] = await fetchOHLC(sym, toEnum(per));
@@ -669,6 +669,14 @@ export default function ProApp() {
     await applySelectionRef.current?.(currentSymbolRef.current || symbol, next);
   }, [symbol]);
 
+  const toggleIndicators = useCallback(() => {
+    setShowIndicators(prev => !prev);
+    // Reload current chart with new indicator state
+    setTimeout(() => {
+      applySelectionRef.current?.(currentSymbolRef.current || symbol, currentPeriodRef.current || period);
+    }, 0);
+  }, [symbol, period]);
+
   // Render multi-panel chart if multiple timeframes requested
   if (isMultiPanelMode && multiPanelTimeframes.length > 1) {
     return (
@@ -781,6 +789,35 @@ export default function ProApp() {
             );
           })}
         </div>
+      </div>
+
+      {/* Top right: Indicator toggle button */}
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 12,
+          zIndex: 1100,
+        }}
+      >
+        <button
+          onClick={toggleIndicators}
+          title={showIndicators ? "Hide Indicators" : "Show Indicators"}
+          style={{
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "1px solid #e0e0e0",
+            background: showIndicators ? "linear-gradient(135deg, #1976d2, #42a5f5)" : "#fff",
+            color: showIndicators ? "#fff" : "#333",
+            cursor: "pointer",
+            fontWeight: 600,
+            fontSize: 12,
+            boxShadow: showIndicators ? "0 6px 16px rgba(25,118,210,0.25)" : "0 2px 6px rgba(0,0,0,0.08)",
+            transition: "all 0.2s ease",
+          }}
+        >
+          {showIndicators ? "📊 ON" : "📊 OFF"}
+        </button>
       </div>
 
       {/* Left toolbar */}
