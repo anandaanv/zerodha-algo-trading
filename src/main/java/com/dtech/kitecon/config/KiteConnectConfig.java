@@ -41,7 +41,7 @@ public class KiteConnectConfig {
 
     public final void initialize(String requestToken) throws KiteException, IOException {
         // Load from app_secrets if apiKey is empty
-        if (apiKey == null || apiKey.trim().isEmpty()) {
+        if (apiKey == null || apiKey.trim().isEmpty() || secret == null || secret.trim().isEmpty()) {
             loadFromAppSecrets();
         }
 
