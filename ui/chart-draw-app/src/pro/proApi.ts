@@ -1,6 +1,7 @@
 // ui/chart-draw-app/src/pro/proApi.ts
 
 import { addServiceTokenToUrl, withAuth } from '../utils/apiHelper';
+import {apiFetch, getApiUrl} from "../config/api";
 
 export type SymbolItem = {
   tradingsymbol: string;
@@ -30,10 +31,10 @@ export type OhlcRow = {
 export async function fetchSymbols(query: string): Promise<SymbolItem[]> {
   const q = (query || "").trim();
   try {
-    const url = new URL("/api/symbols", window.location.origin);
+    const url = getApiUrl("/api/symbols");
     if (q) url.searchParams.set("query", q);
     addServiceTokenToUrl(url);
-    const res = await fetch(url.toString(), withAuth());
+    const res = await apiFetch(url.toString(), withAuth());
     if (res.ok) {
       const arr = await res.json();
       return (Array.isArray(arr) ? arr : []).map((it: any) => {
@@ -62,35 +63,35 @@ export async function fetchSymbols(query: string): Promise<SymbolItem[]> {
 }
 
 export async function fetchIntervalMapping(): Promise<Record<string, string>> {
-  const url = new URL("/api/intervals/mapping", window.location.origin);
+  const url = getApiUrl("/api/intervals/mapping");
   addServiceTokenToUrl(url);
-  const res = await fetch(url.toString(), withAuth());
+  const res = await apiFetch(url.toString(), withAuth());
   if (!res.ok) throw new Error("interval mapping fetch failed");
   return await res.json();
 }
 
 export async function fetchPeriodItems(): Promise<PeriodItem[]> {
-  const url = new URL("/api/intervals/periods", window.location.origin);
+  const url = getApiUrl("/api/intervals/periods");
   addServiceTokenToUrl(url);
-  const res = await fetch(url.toString(), withAuth());
+  const res = await apiFetch(url.toString(), withAuth());
   if (!res.ok) throw new Error("period items fetch failed");
   return await res.json();
 }
 
 export async function fetchOHLC(symbol: string, interval: string): Promise<OhlcRow[]> {
-  const url = new URL("/api/ohlc", window.location.origin);
+  const url = getApiUrl("/api/ohlc");
   url.searchParams.set("symbol", symbol);
   url.searchParams.set("interval", interval);
   addServiceTokenToUrl(url);
-  const res = await fetch(url.toString(), withAuth());
+  const res = await apiFetch(url.toString(), withAuth());
   if (!res.ok) throw new Error(`ohlc fetch failed ${res.status}`);
   return await res.json();
 }
 
 export async function saveOverlaysToServer(symbol: string, period: string, overlaysPayload: Record<string, any>): Promise<void> {
-  const url = new URL("/api/chart-state", window.location.origin);
+  const url = getApiUrl("/api/chart-state");
   addServiceTokenToUrl(url);
-  await fetch(url.toString(), withAuth({
+  await apiFetch(url.toString(), withAuth({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ symbol, period, overlays: overlaysPayload }),
@@ -98,11 +99,11 @@ export async function saveOverlaysToServer(symbol: string, period: string, overl
 }
 
 export async function loadOverlaysFromServer(symbol: string, period: string): Promise<{ overlays?: Record<string, any> } | null> {
-  const url = new URL("/api/chart-state", window.location.origin);
+  const url = getApiUrl("/api/chart-state");
   url.searchParams.set("symbol", symbol);
   url.searchParams.set("period", String(period));
   addServiceTokenToUrl(url);
-  const res = await fetch(url.toString(), withAuth());
+  const res = await apiFetch(url.toString(), withAuth());
   if (!res.ok) return null;
   return await res.json();
 }

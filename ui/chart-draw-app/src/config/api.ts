@@ -5,7 +5,8 @@
 // 3) window.location.origin (same-origin fallback)
 export const API_BASE_URL: string = (() => {
   // Vite env
-  const fromEnv = (typeof import.meta !== "undefined" && (import.meta as any)?.env?.VITE_API_BASE_URL) as string | undefined;
+    const fromEnv = import.meta.env?.VITE_API_BASE_URL;
+    console.log("[API_BASE_URL] fromEnv:", fromEnv, "all env:", (import.meta as any)?.env);
   if (fromEnv && typeof fromEnv === "string" && fromEnv.trim().length > 0) return fromEnv.trim();
 
   // Runtime global (optional; can be set before app boot)
@@ -24,7 +25,15 @@ export const API_BASE_URL: string = (() => {
 })();
 
 // Helper to build absolute API URLs
-export const getApiUrl = (path: string): string => {
+export const getApiUrl = (path: string): URL => {
   const p = path?.startsWith("/") ? path : `/${path ?? ""}`;
-  return new URL(p, API_BASE_URL || window.location.origin).toString();
+  return new URL(p, API_BASE_URL || window.location.origin);
+};
+
+export const apiFetch = (path: string, options: any) => {
+    let url = path;
+    if (!path.includes(API_BASE_URL)) {
+        url = `${API_BASE_URL}${path}`;
+    }
+    return fetch(url, options || {});
 };

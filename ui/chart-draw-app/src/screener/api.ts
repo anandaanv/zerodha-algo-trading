@@ -1,3 +1,6 @@
+import {apiFetch} from "../config/api";
+import {withAuth} from "../utils/apiHelper";
+
 export type UpsertPayload = {
   script: string;
   timeframe: string;
@@ -30,7 +33,7 @@ export type RunConfig = {
 };
 
 export async function getIntervalUiMapping(): Promise<IntervalUiMapping> {
-  const res = await fetch("/api/intervals/mapping");
+  const res = await apiFetch("/api/intervals/mapping", withAuth());
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
@@ -39,7 +42,7 @@ export async function getIntervalUiMapping(): Promise<IntervalUiMapping> {
 }
 
 export async function getSeriesEnums(): Promise<string[]> {
-  const res = await fetch("/api/screener-meta/series-enums");
+  const res = await apiFetch("/api/screener-meta/series-enums", withAuth());
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
@@ -48,11 +51,11 @@ export async function getSeriesEnums(): Promise<string[]> {
 }
 
 export async function createScreener(payload: UpsertPayload): Promise<ScreenerResponse> {
-  const res = await fetch("/api/screeners", {
+  const res = await apiFetch("/api/screeners", withAuth({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  }));
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
@@ -61,11 +64,11 @@ export async function createScreener(payload: UpsertPayload): Promise<ScreenerRe
 }
 
 export async function updateScreener(id: number, payload: UpsertPayload): Promise<ScreenerResponse> {
-  const res = await fetch(`/api/screeners/${id}`, {
+  const res = await apiFetch(`/api/screeners/${id}`, withAuth({
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  }));
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
@@ -74,7 +77,7 @@ export async function updateScreener(id: number, payload: UpsertPayload): Promis
 }
 
 export async function listScreeners(): Promise<ScreenerResponse[]> {
-  const res = await fetch("/api/screeners");
+  const res = await apiFetch("/api/screeners", withAuth());
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
@@ -83,7 +86,7 @@ export async function listScreeners(): Promise<ScreenerResponse[]> {
 }
 
 export async function getScreener(id: number): Promise<ScreenerResponse> {
-  const res = await fetch(`/api/screeners/${id}`);
+  const res = await apiFetch(`/api/screeners/${id}`, withAuth());
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
@@ -97,7 +100,7 @@ export async function runScreener(id: number, params: { symbol: string; nowIndex
     nowIndex: String(params.nowIndex),
     ...(params.timeframe ? { timeframe: params.timeframe } : {}),
   }).toString();
-  const res = await fetch(`/api/screeners/${id}/run?${q}`, { method: "POST" });
+  const res = await apiFetch(`/api/screeners/${id}/run?${q}`, withAuth({ method: "POST" }));
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Run failed: ${res.status}`);
@@ -105,11 +108,11 @@ export async function runScreener(id: number, params: { symbol: string; nowIndex
 }
 
 export async function validateScreenerScript(script: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch("/api/screeners/validate", {
+  const res = await apiFetch("/api/screeners/validate", withAuth({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ script }),
-  });
+  }));
   if (!res.ok) {
     const text = await res.text();
     return { ok: false, error: text || `Validate request failed: ${res.status}` };
@@ -118,7 +121,7 @@ export async function validateScreenerScript(script: string): Promise<{ ok: bool
 }
 
 export async function updateSubscriptions(id: number): Promise<void> {
-  const res = await fetch(`/api/screeners/${id}/subscribe`, { method: "POST" });
+  const res = await apiFetch(`/api/screeners/${id}/subscribe`, withAuth({ method: "POST" }));
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Update subscriptions failed: ${res.status}`);

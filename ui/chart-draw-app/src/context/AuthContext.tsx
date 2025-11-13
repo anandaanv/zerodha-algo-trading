@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import {apiFetch} from "../config/api";
 
 interface AuthContextType {
   user: User | null;
@@ -55,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (username: string, password: string) => {
-    const response = await fetch("/api/auth/login", {
+    const response = await apiFetch("/api/auth/login", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { withAuth } from "../utils/apiHelper";
+import {apiFetch} from "../config/api";
 
 interface SyncModalProps {
   isOpen: boolean;
@@ -81,7 +82,7 @@ export default function SyncModal({ isOpen, onClose }: SyncModalProps) {
       const exportData = await exportResponse.json();
 
       // Step 3: Import to local
-      const importResponse = await fetch("/api/chart-state/import", withAuth({
+      const importResponse = await apiFetch("/api/chart-state/import", withAuth({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -119,7 +120,7 @@ export default function SyncModal({ isOpen, onClose }: SyncModalProps) {
 
     try {
       // Step 1: Export from local
-      const exportResponse = await fetch("/api/chart-state/export", withAuth());
+      const exportResponse = await apiFetch("/api/chart-state/export", withAuth());
 
       if (!exportResponse.ok) {
         throw new Error("Failed to export from local server");

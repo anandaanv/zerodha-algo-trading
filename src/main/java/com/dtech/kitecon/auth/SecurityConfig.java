@@ -40,7 +40,7 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
                         // Kite login and app config pages (public for now)
-                        .requestMatchers("/kite-login", "/app").permitAll()
+                        .requestMatchers("/kite-login").permitAll()
 
                         // Role-based access control
                         .requestMatchers("/api/trades/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
