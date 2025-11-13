@@ -1,7 +1,16 @@
 #!/bin/bash
 
+# Usage: ./script.sh [API_HOST]
+# Example: ./script.sh https://tradeapi.dheemantech.in
+# Default: http://localhost:8080
+
+API_HOST="${1:-http://localhost:8080}"
+
+echo "Using API host: $API_HOST"
+echo ""
+
 # Create ADMIN user: anand / protrader
-curl -X POST http://localhost:8080/api/auth/register \
+curl -X POST "$API_HOST/api/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
     "username": "anand",
@@ -12,7 +21,7 @@ curl -X POST http://localhost:8080/api/auth/register \
 echo -e "\n\n"
 
 # Create MODERATOR user: moderator / modpass (optional)
-curl -X POST http://localhost:8080/api/auth/register \
+curl -X POST "$API_HOST/api/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
     "username": "moderator",
@@ -23,7 +32,7 @@ curl -X POST http://localhost:8080/api/auth/register \
 echo -e "\n\n"
 
 # Create USER: trader / trader123 (optional)
-curl -X POST http://localhost:8080/api/auth/register \
+curl -X POST "$API_HOST/api/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
     "username": "trader",
