@@ -41,15 +41,8 @@ export default function KiteSuccess() {
           throw new Error(errorText || `Failed to initialize: ${response.status}`);
         }
 
-        const result = await response.text();
+        navigate("/dashboard");
 
-        if (result === "success") {
-          // Redirect to dashboard on success
-          navigate("/dashboard");
-        } else {
-          setError("Unexpected response from server.");
-          setLoading(false);
-        }
       } catch (err) {
         console.error("Kite callback error:", err);
         setError(err instanceof Error ? err.message : "An error occurred during authentication.");
