@@ -8,6 +8,8 @@ import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ProApp from "./pro/ProApp";
+import KiteLogin from "./components/KiteLogin";
+import KiteSuccess from "./components/KiteSuccess";
 
 // Screener pages
 import ScreenerCreatePage from "./screener/pages/ScreenerCreatePage";
@@ -24,6 +26,8 @@ root.render(
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login />} />
+        <Route path="/kite-login" element={<KiteLogin />} />
+        <Route path="/kite-success" element={<KiteSuccess />} />
 
         {/* Protected routes */}
         <Route

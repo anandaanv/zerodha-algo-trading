@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     proxy: mode === 'development' ? {
-      "/api": "http://localhost:8080"
+      "/api": "https://tradeapi.dheemantech.in/kitecon"
     } : undefined
   },
   build: {
