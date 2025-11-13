@@ -6,8 +6,10 @@ import com.dtech.kitecon.repository.KiteConnectSettingsRepository;
 import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.User;
+
 import java.io.IOException;
 import java.util.Optional;
+
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,107 +22,111 @@ import jakarta.annotation.PostConstruct;
 @RequiredArgsConstructor
 public class KiteConnectConfig {
 
-  @Value("${kite.api.key}")
-  private String apiKey;
+    @Value("${kite.api.key}")
+    private String apiKey;
 
-  @Value("${kite.api.user}")
-  private String userId;
+    @Value("${kite.api.user}")
+    private String userId;
 
-  @Value("${kite.api.secret}")
-  private String secret;
+    @Value("${kite.api.secret}")
+    private String secret;
 
-  private KiteConnect kiteConnect;
+    private KiteConnect kiteConnect;
 
-  private final KiteConnectSettingsRepository settingsRepository;
-  private final AppSecretsRepository appSecretsRepository;
+    private final KiteConnectSettingsRepository settingsRepository;
+    private final AppSecretsRepository appSecretsRepository;
 
-  @Value("${SECRETS_ENV:dev}")
-  private String secretsEnv;
+    @Value("${SECRETS_ENV:dev}")
+    private String secretsEnv;
 
-  public final void initialize(String requestToken) throws KiteException, IOException {
-    // Load from app_secrets if apiKey is empty
-    if (apiKey == null || apiKey.trim().isEmpty()) {
-      loadFromAppSecrets();
+    public final void initialize(String requestToken) throws KiteException, IOException {
+        // Load from app_secrets if apiKey is empty
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            loadFromAppSecrets();
+        }
+
+        this.kiteConnect = new KiteConnect(apiKey);
+
+        //If you wish to enable debug logs send true in the constructor, this will log request and response.
+        //KiteConnect kiteConnect = new KiteConnect("xxxxyyyyzzzz", true);
+
+        // If you wish to set proxy then pass proxy as a second parameter in the constructor with api_key. syntax:- new KiteConnect("xxxxxxyyyyyzzz", proxy).
+        //KiteConnect kiteConnect = new KiteConnect("xxxxyyyyzzzz", userProxy, false);
+
+        // Set userId
+        kiteConnect.setUserId(userId);
+
+        // Get login url
+        String url = kiteConnect.getLoginURL();
+
+        User user = kiteConnect.generateSession(requestToken, secret);
+        kiteConnect.setAccessToken(user.accessToken);
+        kiteConnect.setPublicToken(user.publicToken);
+
+        // Persist updated tokens
+        upsertTokens(user.accessToken, user.publicToken);
     }
 
-    this.kiteConnect = new KiteConnect(apiKey);
+    public void initFromDatabase() {
+        if (apiKey == null || apiKey.trim().isEmpty()) {
+            loadFromAppSecrets();
+        }
 
-    //If you wish to enable debug logs send true in the constructor, this will log request and response.
-    //KiteConnect kiteConnect = new KiteConnect("xxxxyyyyzzzz", true);
+        Optional<com.dtech.kitecon.persistence.KiteConnectSettings> existing = settingsRepository.findById(1L);
+        com.dtech.kitecon.persistence.KiteConnectSettings settings;
+        if (existing.isPresent()) {
+            settings = existing.get();
+            if (settings.getApiKey() != null) this.apiKey = settings.getApiKey();
+            if (settings.getUserId() != null) this.userId = settings.getUserId();
+            if (settings.getSecret() != null) this.secret = settings.getSecret();
+        } else {
+            settings = new com.dtech.kitecon.persistence.KiteConnectSettings();
+            settings.setId(1L);
+            settings.setApiKey(this.apiKey);
+            settings.setUserId(this.userId);
+            settings.setSecret(this.secret);
+            settingsRepository.save(settings);
+        }
 
-    // If you wish to set proxy then pass proxy as a second parameter in the constructor with api_key. syntax:- new KiteConnect("xxxxxxyyyyyzzz", proxy).
-    //KiteConnect kiteConnect = new KiteConnect("xxxxyyyyzzzz", userProxy, false);
+        this.kiteConnect = new KiteConnect(apiKey);
+        kiteConnect.setUserId(userId);
 
-    // Set userId
-    kiteConnect.setUserId(userId);
-
-    // Get login url
-    String url = kiteConnect.getLoginURL();
-
-    User user = kiteConnect.generateSession(requestToken, secret);
-    kiteConnect.setAccessToken(user.accessToken);
-    kiteConnect.setPublicToken(user.publicToken);
-
-    // Persist updated tokens
-    upsertTokens(user.accessToken, user.publicToken);
-  }
-
-  public void initFromDatabase() {
-    Optional<com.dtech.kitecon.persistence.KiteConnectSettings> existing = settingsRepository.findById(1L);
-    com.dtech.kitecon.persistence.KiteConnectSettings settings;
-    if (existing.isPresent()) {
-      settings = existing.get();
-      if (settings.getApiKey() != null) this.apiKey = settings.getApiKey();
-      if (settings.getUserId() != null) this.userId = settings.getUserId();
-      if (settings.getSecret() != null) this.secret = settings.getSecret();
-    } else {
-      settings = new com.dtech.kitecon.persistence.KiteConnectSettings();
-      settings.setId(1L);
-      settings.setApiKey(this.apiKey);
-      settings.setUserId(this.userId);
-      settings.setSecret(this.secret);
-      settingsRepository.save(settings);
+        if (settings.getAccessToken() != null) {
+            kiteConnect.setAccessToken(settings.getAccessToken());
+        }
+        if (settings.getPublicToken() != null) {
+            kiteConnect.setPublicToken(settings.getPublicToken());
+        }
     }
 
-    this.kiteConnect = new KiteConnect(apiKey);
-    kiteConnect.setUserId(userId);
-
-    if (settings.getAccessToken() != null) {
-      kiteConnect.setAccessToken(settings.getAccessToken());
+    private void upsertTokens(String accessToken, String publicToken) {
+        com.dtech.kitecon.persistence.KiteConnectSettings settings =
+                settingsRepository.findById(1L).orElseGet(() -> {
+                    com.dtech.kitecon.persistence.KiteConnectSettings s = new com.dtech.kitecon.persistence.KiteConnectSettings();
+                    s.setId(1L);
+                    s.setApiKey(this.apiKey);
+                    s.setUserId(this.userId);
+                    s.setSecret(this.secret);
+                    return s;
+                });
+        settings.setAccessToken(accessToken);
+        settings.setPublicToken(publicToken);
+        settingsRepository.save(settings);
     }
-    if (settings.getPublicToken() != null) {
-      kiteConnect.setPublicToken(settings.getPublicToken());
+
+    private void loadFromAppSecrets() {
+        Optional<AppSecrets> apiKeyOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.key");
+        Optional<AppSecrets> userIdOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.user");
+        Optional<AppSecrets> secretOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.secret");
+
+        apiKeyOpt.ifPresent(s -> this.apiKey = s.getPropValue());
+        userIdOpt.ifPresent(s -> this.userId = s.getPropValue());
+        secretOpt.ifPresent(s -> this.secret = s.getPropValue());
     }
-  }
 
-  private void upsertTokens(String accessToken, String publicToken) {
-    com.dtech.kitecon.persistence.KiteConnectSettings settings =
-        settingsRepository.findById(1L).orElseGet(() -> {
-          com.dtech.kitecon.persistence.KiteConnectSettings s = new com.dtech.kitecon.persistence.KiteConnectSettings();
-          s.setId(1L);
-          s.setApiKey(this.apiKey);
-          s.setUserId(this.userId);
-          s.setSecret(this.secret);
-          return s;
-        });
-    settings.setAccessToken(accessToken);
-    settings.setPublicToken(publicToken);
-    settingsRepository.save(settings);
-  }
-
-  private void loadFromAppSecrets() {
-    Optional<AppSecrets> apiKeyOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.key");
-    Optional<AppSecrets> userIdOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.user");
-    Optional<AppSecrets> secretOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.secret");
-
-    apiKeyOpt.ifPresent(s -> this.apiKey = s.getPropValue());
-    userIdOpt.ifPresent(s -> this.userId = s.getPropValue());
-    secretOpt.ifPresent(s -> this.secret = s.getPropValue());
-  }
-
-  @Bean
-  public KiteConnect getKiteConnect() {
-    return kiteConnect;
-  }
+    @Bean
+    public KiteConnect getKiteConnect() {
+        return kiteConnect;
+    }
 
 }
