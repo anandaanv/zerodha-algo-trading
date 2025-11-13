@@ -1,5 +1,7 @@
 package com.dtech.kitecon.config;
 
+import com.dtech.kitecon.data.AppSecrets;
+import com.dtech.kitecon.repository.AppSecretsRepository;
 import com.dtech.kitecon.repository.KiteConnectSettingsRepository;
 import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
@@ -30,8 +32,17 @@ public class KiteConnectConfig {
   private KiteConnect kiteConnect;
 
   private final KiteConnectSettingsRepository settingsRepository;
+  private final AppSecretsRepository appSecretsRepository;
+
+  @Value("${SECRETS_ENV:dev}")
+  private String secretsEnv;
 
   public final void initialize(String requestToken) throws KiteException, IOException {
+    // Load from app_secrets if apiKey is empty
+    if (apiKey == null || apiKey.trim().isEmpty()) {
+      loadFromAppSecrets();
+    }
+
     this.kiteConnect = new KiteConnect(apiKey);
 
     //If you wish to enable debug logs send true in the constructor, this will log request and response.
@@ -95,6 +106,16 @@ public class KiteConnectConfig {
     settings.setAccessToken(accessToken);
     settings.setPublicToken(publicToken);
     settingsRepository.save(settings);
+  }
+
+  private void loadFromAppSecrets() {
+    Optional<AppSecrets> apiKeyOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.key");
+    Optional<AppSecrets> userIdOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.user");
+    Optional<AppSecrets> secretOpt = appSecretsRepository.findByEnvAndPropKey(secretsEnv, "kite.api.secret");
+
+    apiKeyOpt.ifPresent(s -> this.apiKey = s.getPropValue());
+    userIdOpt.ifPresent(s -> this.userId = s.getPropValue());
+    secretOpt.ifPresent(s -> this.secret = s.getPropValue());
   }
 
   @Bean
