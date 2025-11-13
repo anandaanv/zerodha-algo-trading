@@ -41,4 +41,11 @@ public class ConfigController {
     return "success";
   }
 
+    @GetMapping("/update-token")
+    public void updateToken(@RequestParam("request_token") String token)
+            throws IOException, KiteException, InterruptedException {
+        kiteConnectConfig.initialize(token);
+        tickerService.init();
+    }
+
 }

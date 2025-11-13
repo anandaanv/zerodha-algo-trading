@@ -48,7 +48,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/chart/**", "/api/screener/**", "/api/overlays/**")
                               .hasAnyRole("MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
-                        .requestMatchers("/api/admin/**", "/app").hasRole("ADMIN")
+                        .requestMatchers("/api/admin/**", "/app", "/update-token").hasRole("ADMIN")
 
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
