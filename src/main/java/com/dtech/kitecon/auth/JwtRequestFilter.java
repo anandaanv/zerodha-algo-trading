@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,6 +18,7 @@ import java.util.Collections;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class JwtRequestFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
@@ -67,6 +69,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             if (userOptional.isPresent() && jwtUtil.validateToken(jwt, username)) {
                 User user = userOptional.get();
 
+                log.error("User {} logged in with JWT token, for url {}", username, request.getRequestURL());
                 // Only allow if user is enabled
                 if (user.getEnabled()) {
                     var authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
