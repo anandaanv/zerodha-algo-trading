@@ -43,8 +43,10 @@ public class SecurityConfig {
                         .requestMatchers("/kite-login").permitAll()
 
                         // Role-based access control
-                        .requestMatchers("/api/trades/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
-                        .requestMatchers("/api/chart/**", "/api/screener/**", "/api/overlays/**").hasAnyRole("MODERATOR", "ADMIN")
+                        .requestMatchers("/api/trades/**", "/app")
+                              .hasAnyRole("USER", "MODERATOR", "ADMIN")
+                        .requestMatchers("/api/chart/**", "/api/screener/**", "/api/overlays/**", "/api/trades")
+                              .hasAnyRole("MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
