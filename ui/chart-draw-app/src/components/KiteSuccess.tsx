@@ -34,7 +34,7 @@ export default function KiteSuccess() {
         }
 
         // Send request_token to backend /app endpoint
-        const response = await apiFetch(`/app?request_token=${requestToken}`, withAuth());
+        const response = await apiFetch(`/update-token?request_token=${requestToken}`, withAuth());
 
         if (!response.ok) {
           const errorText = await response.text();

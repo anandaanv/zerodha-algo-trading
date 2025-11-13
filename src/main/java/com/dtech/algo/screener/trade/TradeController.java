@@ -14,6 +14,7 @@ import java.util.Optional;
 @RestController
 @RequestMapping("/api/trades")
 @RequiredArgsConstructor
+@CrossOrigin(origins = {"*"})
 public class TradeController {
 
     private final IdentifiedTradeRepository repository;
