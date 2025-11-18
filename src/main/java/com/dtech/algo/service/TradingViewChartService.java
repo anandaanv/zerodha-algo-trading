@@ -98,6 +98,9 @@ public class TradingViewChartService {
     private BlockingQueue<BrowserInstance> browserPool;
     private final AtomicBoolean browserPoolInitialized = new AtomicBoolean(false);
 
+    // Browser executable path (detected at startup)
+    private String browserExecutable;
+
     /**
      * Browser instance wrapper
      */
@@ -132,11 +135,90 @@ public class TradingViewChartService {
     }
 
     /**
+     * Detect available browser executable (google-chrome or chromium)
+     */
+    private String detectBrowserExecutable() {
+        String[] browsers = {"google-chrome", "chromium", "chromium-browser"};
+
+        for (String browser : browsers) {
+            try {
+                ProcessBuilder pb = new ProcessBuilder("which", browser);
+                Process p = pb.start();
+                int exitCode = p.waitFor();
+
+                if (exitCode == 0) {
+                    log.info("Detected browser: {}", browser);
+                    return browser;
+                }
+            } catch (Exception e) {
+                log.debug("Browser {} not found", browser);
+            }
+        }
+
+        log.warn("No browser found (tried: google-chrome, chromium, chromium-browser), defaulting to google-chrome");
+        return "google-chrome";
+    }
+
+    /**
+     * Get common browser arguments for headless screenshot capture
+     */
+    private List<String> getCommonBrowserArgs() {
+        List<String> args = new ArrayList<>();
+        args.add(browserExecutable);
+        args.add("--headless");
+        args.add("--disable-gpu");
+        args.add("--no-sandbox");
+        args.add("--disable-dev-shm-usage");
+        args.add("--disable-software-rasterizer");
+        args.add("--disable-extensions");
+        args.add("--disable-default-apps");
+
+        // chromium might not support some of these, but they're generally safe
+        args.add("--disable-background-timer-throttling");
+        args.add("--disable-backgrounding-occluded-windows");
+        args.add("--disable-renderer-backgrounding");
+        args.add("--disable-features=TranslateUI");
+
+        return args;
+    }
+
+    /**
+     * Build ProcessBuilder with browser-specific arguments for creating an instance
+     */
+    private ProcessBuilder buildBrowserProcessBuilder(int debuggingPort) {
+        List<String> command = getCommonBrowserArgs();
+        command.add("--remote-debugging-port=" + debuggingPort);
+        command.add("--window-size=3840,2880");
+        command.add("--default-background-color=00000000");
+
+        return new ProcessBuilder(command);
+    }
+
+    /**
+     * Build ProcessBuilder with browser-specific arguments for screenshot
+     */
+    private ProcessBuilder buildScreenshotProcessBuilder(String screenshotPath, String url, int timeoutMs) {
+        List<String> command = getCommonBrowserArgs();
+        command.add("--screenshot=" + screenshotPath);
+        command.add("--window-size=3840,2880");
+        command.add("--default-background-color=00000000");
+        command.add("--virtual-time-budget=" + timeoutMs);
+        command.add("--hide-scrollbars");
+        command.add(url);
+
+        return new ProcessBuilder(command);
+    }
+
+    /**
      * Initialize browser pool on service startup
      */
     @PostConstruct
     public void initializeBrowserPool() {
         if (browserPoolInitialized.compareAndSet(false, true)) {
+            // Detect available browser
+            browserExecutable = detectBrowserExecutable();
+            log.info("Using browser executable: {}", browserExecutable);
+
             log.info("Initializing browser pool with {} instances", browserPoolSize);
             browserPool = new LinkedBlockingQueue<>(browserPoolSize);
 
@@ -187,23 +269,7 @@ public class TradingViewChartService {
      */
     private BrowserInstance createBrowserInstance(int debuggingPort) {
         try {
-            ProcessBuilder processBuilder = new ProcessBuilder(
-                    "google-chrome",
-                    "--headless",
-                    "--disable-gpu",
-                    "--disable-software-rasterizer",
-                    "--disable-background-timer-throttling",
-                    "--disable-backgrounding-occluded-windows",
-                    "--disable-renderer-backgrounding",
-                    "--disable-features=TranslateUI",
-                    "--disable-extensions",
-                    "--disable-default-apps",
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--remote-debugging-port=" + debuggingPort,
-                    "--window-size=3840,2880",
-                    "--default-background-color=00000000"
-            );
+            ProcessBuilder processBuilder = buildBrowserProcessBuilder(debuggingPort);
 
             processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
@@ -1049,26 +1115,12 @@ public class TradingViewChartService {
             // Use Chrome DevTools Protocol to capture screenshot
             String fileUrl = "file://" + Paths.get(htmlFilePath).toAbsolutePath().toString();
 
-            // Create a new Chrome process specifically for this screenshot
+            // Create a new browser process specifically for this screenshot
             // (using the running instance via DevTools would be more complex)
-            ProcessBuilder processBuilder = new ProcessBuilder(
-                    "google-chrome",
-                    "--headless",
-                    "--disable-gpu",
-                    "--disable-software-rasterizer",
-                    "--disable-background-timer-throttling",
-                    "--disable-backgrounding-occluded-windows",
-                    "--disable-renderer-backgrounding",
-                    "--disable-features=TranslateUI",
-                    "--disable-extensions",
-                    "--disable-default-apps",
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--screenshot=" + screenshotPath,
-                    "--window-size=3840,2880",
-                    "--default-background-color=00000000",
-                    "--virtual-time-budget=10000", // Allow 10 seconds for rendering
-                    fileUrl
+            ProcessBuilder processBuilder = buildScreenshotProcessBuilder(
+                screenshotPath.toString(),
+                fileUrl,
+                10000
             );
 
             processBuilder.redirectErrorStream(true);
@@ -1262,23 +1314,12 @@ public class TradingViewChartService {
             
             // Ensure parent directory exists
             Files.createDirectories(screenshotPath.getParent());
-            
-            // Use Chrome to capture screenshot in 16:9 ratio (3840x2160 - 4K landscape)
-            ProcessBuilder processBuilder = new ProcessBuilder(
-                    "google-chrome",
-                    "--headless",
-                    "--disable-gpu",
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-software-rasterizer",
-                    "--disable-extensions",
-                    "--disable-default-apps",
-                    "--screenshot=" + screenshotPath.toAbsolutePath(),
-                    "--window-size=3840,2880",
-                    "--default-background-color=00000000",
-                    "--virtual-time-budget=15000", // Allow 15 seconds for rendering
-                    "--hide-scrollbars",
-                    url
+
+            // Use detected browser to capture screenshot
+            ProcessBuilder processBuilder = buildScreenshotProcessBuilder(
+                screenshotPath.toAbsolutePath().toString(),
+                url,
+                15000
             );
 
             processBuilder.redirectErrorStream(true);
