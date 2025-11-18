@@ -52,6 +52,20 @@ export default function Dashboard() {
           </button>
         )}
         <button
+          onClick={() => navigate("/kite-login")}
+          style={{
+            padding: "0.5rem 1rem",
+            borderRadius: "8px",
+            border: "1px solid #fff",
+            background: "rgba(255, 255, 255, 0.2)",
+            color: "#fff",
+            cursor: "pointer",
+            fontWeight: 500,
+          }}
+        >
+          Kite Login
+        </button>
+        <button
           onClick={logout}
           style={{
             padding: "0.5rem 1rem",
