@@ -206,7 +206,25 @@ public class TradingViewChartService {
         command.add("--hide-scrollbars");
         command.add(url);
 
-        return new ProcessBuilder(command);
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        return processBuilder;
+    }
+
+    /**
+     * Log process output to standard logger
+     */
+    private void logProcessOutput(Process process, String processName) {
+        new Thread(() -> {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    log.debug("[{}] {}", processName, line);
+                }
+            } catch (Exception e) {
+                log.warn("Error reading process output for {}: {}", processName, e.getMessage());
+            }
+        }, "process-logger-" + processName).start();
     }
 
     /**
@@ -272,7 +290,11 @@ public class TradingViewChartService {
             ProcessBuilder processBuilder = buildBrowserProcessBuilder(debuggingPort);
 
             processBuilder.redirectErrorStream(true);
+            log.debug(processBuilder.command());
             Process process = processBuilder.start();
+
+            // Log browser output
+            logProcessOutput(process, "browser-" + debuggingPort);
 
             // Give browser time to start up
             Thread.sleep(2000);
@@ -1126,6 +1148,9 @@ public class TradingViewChartService {
             processBuilder.redirectErrorStream(true);
             Process screenshotProcess = processBuilder.start();
 
+            // Log screenshot process output
+            logProcessOutput(screenshotProcess, "screenshot-chart");
+
             // Wait for the screenshot process to complete
             boolean completed = screenshotProcess.waitFor(browserTimeoutSeconds, TimeUnit.SECONDS);
             if (!completed) {
@@ -1324,6 +1349,9 @@ public class TradingViewChartService {
 
             processBuilder.redirectErrorStream(true);
             Process screenshotProcess = processBuilder.start();
+
+            // Log screenshot process output
+            logProcessOutput(screenshotProcess, "screenshot-url");
 
             // Wait for the screenshot process to complete
             boolean completed = screenshotProcess.waitFor(browserTimeoutSeconds + 10, TimeUnit.SECONDS);
