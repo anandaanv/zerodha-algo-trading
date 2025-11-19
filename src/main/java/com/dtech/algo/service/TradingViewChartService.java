@@ -165,6 +165,10 @@ public class TradingViewChartService {
     private List<String> getCommonBrowserArgs() {
         List<String> args = new ArrayList<>();
         args.add(browserExecutable);
+
+        if (browserExecutable.contains("chromium")) {
+            args.add("--user-data-dir=/var/chrome-home");
+        }
         args.add("--headless");
         args.add("--disable-gpu");
         args.add("--no-sandbox");
