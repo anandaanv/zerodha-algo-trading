@@ -138,7 +138,7 @@ public class TradingViewChartService {
      * Detect available browser executable (google-chrome or chromium)
      */
     private String detectBrowserExecutable() {
-        String[] browsers = {"google-chrome", "chromium", "chromium-browser"};
+        String[] browsers = {"google-chrome", "chromium-browser"};
 
         for (String browser : browsers) {
             try {
