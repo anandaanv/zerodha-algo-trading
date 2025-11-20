@@ -1,6 +1,6 @@
 import type { Trade } from "./types";
-
-const API_BASE = (import.meta as any).env?.VITE_API_BASE || "/api";
+import {apiFetch} from "../config/api";
+import {withAuth} from "../utils/apiHelper";
 
 function toIsoDate(d?: Date) {
   return d ? d.toISOString() : undefined;
@@ -28,8 +28,8 @@ export async function fetchTrades(params: {
   if (params.page != null) q.set("page", String(params.page));
   if (params.size != null) q.set("size", String(params.size));
 
-  const url = `${API_BASE}/trades${q.toString() ? `?${q.toString()}` : ""}`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const url = `/api/trades${q.toString() ? `?${q.toString()}` : ""}`;
+  const res = await apiFetch(url, withAuth({ headers: { Accept: "application/json" } }));
   if (!res.ok) {
     throw new Error(`Failed to fetch trades: ${res.status} ${res.statusText}`);
   }
@@ -37,8 +37,8 @@ export async function fetchTrades(params: {
 }
 
 export async function fetchTradeById(id: string | number): Promise<Trade> {
-  const url = `${API_BASE}/trades/${id}`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const url = `/api/trades/${id}`;
+  const res = await apiFetch(url, withAuth({ headers: { Accept: "application/json" } }));
   if (!res.ok) {
     throw new Error(`Failed to fetch trade ${id}: ${res.status} ${res.statusText}`);
   }
