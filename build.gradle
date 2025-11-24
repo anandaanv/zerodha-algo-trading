@@ -157,7 +157,9 @@ war {
 // For external Tomcat, it needs to be in WEB-INF/classes, not WAR root
 bootWar {
     // This is already handled by processResources, but making it explicit
-    classpath = configurations.runtimeClasspath
+    from('src/main/resources/META-INF/services') {
+        into 'META-INF/services'
+    }
 }
 //build.dependsOn installTa4j
 
