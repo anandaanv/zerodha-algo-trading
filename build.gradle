@@ -145,6 +145,14 @@ tasks.named("bootRun") {
 bootJar {
     exclude('screener/**')
 }
+
+// Ensure META-INF/services is included in WAR
+war {
+    from('src/main/resources') {
+        include 'META-INF/services/**'
+        into 'WEB-INF/classes'
+    }
+}
 //build.dependsOn installTa4j
 
 // --------------------------------------------------------
