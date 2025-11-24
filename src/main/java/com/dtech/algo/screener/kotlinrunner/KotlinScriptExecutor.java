@@ -22,7 +22,8 @@ public final class KotlinScriptExecutor implements AutoCloseable {
 
     public KotlinScriptExecutor(ScreenerRunLogService runLogService) {
         this.runLogService = runLogService;
-        ClassLoader engineCL = ClassLoader.getSystemClassLoader(); // isolate from RestartCL
+        // Use application classloader instead of system classloader for Tomcat WAR deployment
+        ClassLoader engineCL = Thread.currentThread().getContextClassLoader(); // isolate from RestartCL
         this.pool = Executors.newFixedThreadPool(4, new ThreadFactory() {
             private final AtomicInteger n = new AtomicInteger();
             @Override public Thread newThread(Runnable r) {
@@ -39,7 +40,22 @@ public final class KotlinScriptExecutor implements AutoCloseable {
                 // Use TCCL so kotlin-scripting-jsr223 finds services
                 Thread.currentThread().setContextClassLoader(engineCL);
                 ScriptEngineManager mgr = new ScriptEngineManager(engineCL);
+
+                // Try ServiceLoader first
                 ScriptEngine eng = mgr.getEngineByName("kotlin"); // or "kts"
+
+                // Fallback: explicitly register the factory if ServiceLoader failed
+                if (eng == null) {
+                    try {
+                        Class<?> factoryClass = engineCL.loadClass("org.jetbrains.kotlin.script.jsr223.KotlinJsr223JvmLocalScriptEngineFactory");
+                        ScriptEngineFactory factory = (ScriptEngineFactory) factoryClass.getDeclaredConstructor().newInstance();
+                        mgr.registerEngineName("kotlin", factory);
+                        eng = mgr.getEngineByName("kotlin");
+                    } catch (Exception e) {
+                        throw new IllegalStateException("Failed to load Kotlin JSR-223 engine via ServiceLoader or explicit registration", e);
+                    }
+                }
+
                 if (eng == null) throw new IllegalStateException("Kotlin JSR-223 engine not found");
                 return eng;
             } finally {

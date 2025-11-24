@@ -122,7 +122,7 @@ public class ScreenerRegistryService {
      */
     public void validateScript(String code) {
         try {
-            getNewEngine(ClassLoader.getSystemClassLoader()).eval(code);
+            getNewEngine(Thread.currentThread().getContextClassLoader()).eval(code);
         } catch (Exception e) {
             throw new IllegalArgumentException("Compilation error: " + e.getMessage(), e);
         }
@@ -149,14 +149,28 @@ public class ScreenerRegistryService {
 
     private void initEngineIfRequired() {
         if (this.kotlinEngine == null) {
-            ClassLoader tccl = ClassLoader.getSystemClassLoader();
+            ClassLoader tccl = Thread.currentThread().getContextClassLoader();
             this.kotlinEngine = getNewEngine(tccl);
         }
     }
 
     private ScriptEngine getNewEngine(ClassLoader tccl) {
         ScriptEngineManager manager = new ScriptEngineManager(tccl);
-        return manager.getEngineByName("kotlin");
+        ScriptEngine engine = manager.getEngineByName("kotlin");
+
+        // Fallback: explicitly register the factory if ServiceLoader failed
+        if (engine == null) {
+            try {
+                Class<?> factoryClass = tccl.loadClass("org.jetbrains.kotlin.script.jsr223.KotlinJsr223JvmLocalScriptEngineFactory");
+                javax.script.ScriptEngineFactory factory = (javax.script.ScriptEngineFactory) factoryClass.getDeclaredConstructor().newInstance();
+                manager.registerEngineName("kotlin", factory);
+                engine = manager.getEngineByName("kotlin");
+            } catch (Exception e) {
+                log.error("Failed to load Kotlin JSR-223 engine via ServiceLoader or explicit registration", e);
+            }
+        }
+
+        return engine;
     }
 
     private List<Path> discoverScripts(Path dir) {
