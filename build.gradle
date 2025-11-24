@@ -45,7 +45,6 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-tomcat'
-    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'io.jsonwebtoken:jjwt-api:0.12.5'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.5'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
@@ -107,7 +106,7 @@ dependencies {
     implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm:2.1.0'
     implementation 'org.jetbrains.kotlin:kotlin-scripting-jsr223:2.1.0'
     implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.0'
-
+    implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm-host:2.1.0'
 }
 
 task createDirectories {
@@ -154,10 +153,10 @@ war {
 }
 
 // Ensure META-INF/services is included in bootWar
+// For external Tomcat, it needs to be in WEB-INF/classes, not WAR root
 bootWar {
-    from('src/main/resources/META-INF/services') {
-        into 'META-INF/services'
-    }
+    // This is already handled by processResources, but making it explicit
+    classpath = configurations.runtimeClasspath
 }
 //build.dependsOn installTa4j
 
