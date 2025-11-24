@@ -152,6 +152,13 @@ war {
         into 'META-INF/services'
     }
 }
+
+// Ensure META-INF/services is included in bootWar
+bootWar {
+    from('src/main/resources/META-INF/services') {
+        into 'META-INF/services'
+    }
+}
 //build.dependsOn installTa4j
 
 // --------------------------------------------------------
