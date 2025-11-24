@@ -150,7 +150,7 @@ bootJar {
 war {
     from('src/main/resources') {
         include 'META-INF/services/**'
-        into 'WEB-INF/classes'
+        into 'META-INF/services'
     }
 }
 //build.dependsOn installTa4j
