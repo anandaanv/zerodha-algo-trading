@@ -148,8 +148,7 @@ bootJar {
 
 // Ensure META-INF/services is included in WAR
 war {
-    from('src/main/resources') {
-        include 'META-INF/services/**'
+    from('src/main/resources/META-INF/services') {
         into 'META-INF/services'
     }
 }
