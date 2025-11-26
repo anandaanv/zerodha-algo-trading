@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./styles.css";
 import "./screener/screener.css";
 import { AuthProvider } from "./context/AuthContext";
+import Layout from "./components/Layout";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -23,7 +24,8 @@ const root = createRoot(document.getElementById("root")!);
 root.render(
   <BrowserRouter>
     <AuthProvider>
-      <Routes>
+      <Layout>
+        <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/kite-login" element={<KiteLogin />} />
@@ -92,6 +94,7 @@ root.render(
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Layout>
     </AuthProvider>
   </BrowserRouter>
 );

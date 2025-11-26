@@ -1051,32 +1051,6 @@ export default function ProApp() {
           />
         </div>
       )}
-
-      {/* TradingView Attribution */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 8,
-          right: 12,
-          fontSize: 13,
-          color: "#666",
-          zIndex: 1100,
-          background: "rgba(255,255,255,0.95)",
-          padding: "6px 10px",
-          borderRadius: 4,
-          backdropFilter: "blur(4px)",
-        }}
-      >
-        Charts powered by{" "}
-        <a
-          href="https://www.tradingview.com/"
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{ color: "#1976d2", textDecoration: "none" }}
-        >
-          TradingView
-        </a>
-      </div>
     </div>
   );
 }
