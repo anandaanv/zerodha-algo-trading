@@ -23,11 +23,34 @@
             grid-template-columns: repeat({{CHART_GRID_COLS}}, 1fr);
             grid-template-rows: repeat({{CHART_GRID_ROWS}}, 1fr);
             gap: 10px;
-            padding: 10px;
+            padding: 10px 10px 40px 10px;
             background-color: #000;
             width: 100vw;
-            height: 100vh;
+            height: calc(100vh - 40px);
             box-sizing: border-box;
+        }
+
+        .tradingview-attribution {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #131722;
+            padding: 10px;
+            text-align: center;
+            font-size: 12px;
+            color: #787B86;
+            border-top: 1px solid #2B2B43;
+            z-index: 1000;
+        }
+
+        .tradingview-attribution a {
+            color: #2962FF;
+            text-decoration: none;
+        }
+
+        .tradingview-attribution a:hover {
+            text-decoration: underline;
         }
 
         .chart-cell {
@@ -69,6 +92,9 @@
 <body>
     <div class="chart-grid">
         {{CHART_CONTAINERS}}
+    </div>
+    <div class="tradingview-attribution">
+        Charts powered by <a href="https://www.tradingview.com/" target="_blank" rel="noopener noreferrer">TradingView</a>
     </div>
 
     <script>
