@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --mode development",
-    "build": "vite build --mode production && cp -r charting_library dist/",
-    "build:dev": "vite build --mode development && cp -r charting_library dist/",
+    "build": "vite build --mode production && cp -r charting_library/charting_library_cloned_data/charting_library dist/",
+    "build:dev": "vite build --mode development && cp -r charting_library/charting_library_cloned_data/charting_library dist/",
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
