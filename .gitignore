@@ -117,3 +117,5 @@ Desktop.ini
 
 # Docker / compose artifacts (if any generated)
 *.orig.tmp
+
+ui/chart-draw-app/charting_library/**

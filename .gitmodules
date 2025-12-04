@@ -1,3 +1,0 @@
-[submodule "ui/chart-draw-app/charting_library"]
-	path = ui/chart-draw-app/charting_library
-	url = git@github.com:tradingview/charting-library-tutorial.git
