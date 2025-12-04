@@ -8,7 +8,8 @@ import Layout from "./components/Layout";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
-import ProApp from "./pro/ProApp";
+import LegacyChartApp from "./legacy-chart/ProApp";
+import TVChartApp from "./tradingview/TVChartApp";
 import KiteLogin from "./components/KiteLogin";
 import KiteSuccess from "./components/KiteSuccess";
 
@@ -41,10 +42,18 @@ root.render(
           }
         />
         <Route
+          path="/chart-legacy"
+          element={
+            <ProtectedRoute requiredRole="MODERATOR">
+              <LegacyChartApp />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/chart"
           element={
             <ProtectedRoute requiredRole="MODERATOR">
-              <ProApp />
+              <TVChartApp />
             </ProtectedRoute>
           }
         />
