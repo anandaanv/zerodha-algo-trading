@@ -12,12 +12,7 @@ declare const TradingView: any;
 // Helper functions for chart state persistence
 async function loadChartStateFromServer(symbol: string, interval: string): Promise<any> {
   try {
-    const response = apiFetch(`/api/chart-state?symbol=${symbol}&period=${intervalToPeriod(interval)}`, withAuth({
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
-      }
-    }));
-
+    const response = await apiFetch(`/api/chart-state?symbol=${symbol}&period=${intervalToPeriod(interval)}`, withAuth());
     if (response.ok) {
       const data = await response.json();
       return data.meta || null;
@@ -43,7 +38,6 @@ async function saveChartStateToServer(symbol: string, interval: string, chartDat
         meta: chartData // Store TradingView chart data in meta
       })
     }));
-    console.log('Chart state saved to server');
   } catch (e) {
     console.error('Failed to save chart state to server:', e);
   }
@@ -103,8 +97,7 @@ export default function TVChartApp() {
       const savedState = await loadChartStateFromServer(defaultSymbol, defaultInterval);
       if (savedState) {
         try {
-          chart.restoreData(savedState, true);
-          console.log('Chart state restored from server');
+          tvWidget.load(savedState);
         } catch (e) {
           console.error('Failed to restore chart state:', e);
         }
@@ -116,7 +109,7 @@ export default function TVChartApp() {
         if (saveTimeout) clearTimeout(saveTimeout);
         saveTimeout = window.setTimeout(() => {
           try {
-            chart.save((data: any) => {
+            tvWidget.save((data: any) => {
               saveChartStateToServer(defaultSymbol, defaultInterval, data);
             });
           } catch (e) {
@@ -125,7 +118,7 @@ export default function TVChartApp() {
         }, 2000); // Debounce 2 seconds
       };
 
-      // Listen to drawing changes
+      // Listen to data loaded
       chart.onDataLoaded().subscribe(null, saveChartState);
 
       // Subscribe to interval changes
@@ -137,6 +130,11 @@ export default function TVChartApp() {
 
       // Subscribe to symbol changes
       chart.onSymbolChanged().subscribe(null, saveChartState);
+
+      // Subscribe to drawing changes (studies, indicators, shapes, lines, etc.)
+      tvWidget.subscribe('drawing_event', saveChartState);
+      tvWidget.subscribe('study_event', saveChartState);
+      tvWidget.subscribe('onAutoSaveNeeded', saveChartState);
     });
 
     return () => {
