@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --mode development",
-    "build": "vite build --mode production && cp -r charting_library/charting_library dist/",
-    "build:dev": "vite build --mode development && cp -r charting_library/charting_library dist/",
+    "build": "vite build --mode production && mkdir -p dist/charting_library && cp -r charting_library/charting_library dist/charting_library/",
+    "build:dev": "vite build --mode development && mkdir -p dist/charting_library && cp -r charting_library/charting_library dist/charting_library/",
     "preview": "vite preview --port 5173"
   },
   "dependencies": {
