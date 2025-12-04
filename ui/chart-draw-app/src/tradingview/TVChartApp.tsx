@@ -2,6 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import datafeed from './datafeed';
 import TVMultiPanelChart from './TVMultiPanelChart';
+import {apiFetch} from "../config/api";
+import {withAuth} from "../utils/apiHelper";
+import { mapTimeframeToInterval, intervalToPeriod } from './intervalUtils';
 
 // TradingView types (loaded globally via script tag)
 declare const TradingView: any;
@@ -9,11 +12,11 @@ declare const TradingView: any;
 // Helper functions for chart state persistence
 async function loadChartStateFromServer(symbol: string, interval: string): Promise<any> {
   try {
-    const response = await fetch(`/api/chart-state?symbol=${symbol}&period=${interval}`, {
+    const response = apiFetch(`/api/chart-state?symbol=${symbol}&period=${intervalToPeriod(interval)}`, withAuth({
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       }
-    });
+    }));
 
     if (response.ok) {
       const data = await response.json();
@@ -28,19 +31,18 @@ async function loadChartStateFromServer(symbol: string, interval: string): Promi
 
 async function saveChartStateToServer(symbol: string, interval: string, chartData: any): Promise<void> {
   try {
-    await fetch('/api/chart-state', {
+    apiFetch('/api/chart-state', withAuth({
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
       },
       body: JSON.stringify({
         symbol,
-        period: interval,
+        period: intervalToPeriod(interval),
         overlays: {}, // Keep empty for backward compatibility with legacy charts
         meta: chartData // Store TradingView chart data in meta
       })
-    });
+    }));
     console.log('Chart state saved to server');
   } catch (e) {
     console.error('Failed to save chart state to server:', e);
@@ -150,24 +152,4 @@ export default function TVChartApp() {
       <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
     </div>
   );
-}
-
-// Map your timeframe format to TradingView interval format
-function mapTimeframeToInterval(timeframe: string | null): string {
-  if (!timeframe) return '60';
-
-  const mapping: Record<string, string> = {
-    '1m': '1',
-    '3m': '3',
-    '5m': '5',
-    '15m': '15',
-    '30m': '30',
-    '1h': '60',
-    '2h': '120',
-    '1d': '1D',
-    '1w': '1W',
-    '1M': '1M',
-  };
-
-  return mapping[timeframe.toLowerCase()] || '60';
 }
