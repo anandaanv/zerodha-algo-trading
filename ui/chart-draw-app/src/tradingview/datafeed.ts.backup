@@ -1,0 +1,258 @@
+// TradingView Datafeed implementation
+import { fetchSymbols, fetchOHLC, fetchIntervalMapping, type SymbolItem } from './tvApi';
+
+// Map UI resolutions to your backend intervals
+const resolutionToInterval: Record<string, string> = {};
+let intervalMapping: Record<string, string> = {};
+
+// Cache for symbol list
+let symbolsCache: SymbolItem[] = [];
+let symbolsCacheTime = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Last bar cache for streaming
+const lastBarsCache = new Map<string, any>();
+
+// Cache for getBars to prevent duplicate requests
+const getBarsCache = new Map<string, { data: any[], timestamp: number }>();
+const BARS_CACHE_DURATION = 30 * 1000; // 30 seconds
+
+const configurationData = {
+  supported_resolutions: ['1', '3', '5', '15', '30', '60', '120', '1D', '1W', '1M'],
+  exchanges: [
+    { value: 'NSE', name: 'NSE', desc: 'National Stock Exchange' },
+    { value: 'BSE', name: 'BSE', desc: 'Bombay Stock Exchange' },
+  ],
+  symbols_types: [
+    { name: 'Stock', value: 'stock' },
+    { name: 'Index', value: 'index' },
+  ],
+};
+
+async function getAllSymbols(): Promise<SymbolItem[]> {
+  const now = Date.now();
+  if (symbolsCache.length > 0 && now - symbolsCacheTime < CACHE_DURATION) {
+    return symbolsCache;
+  }
+
+  try {
+    symbolsCache = await fetchSymbols('');
+    symbolsCacheTime = now;
+    return symbolsCache;
+  } catch (error) {
+    console.error('[getAllSymbols] Error:', error);
+    return [];
+  }
+}
+
+const datafeed: any = {
+  onReady: (callback: any) => {
+    console.log('[onReady]: Method call');
+
+    // Load interval mapping
+    fetchIntervalMapping()
+      .then((mapping) => {
+        intervalMapping = mapping;
+
+        // Build reverse mapping for resolutions
+        for (const [key, value] of Object.entries(mapping)) {
+          // Map "1h" -> "60", "1d" -> "1D", etc.
+          if (key === '1m') resolutionToInterval['1'] = value;
+          else if (key === '3m') resolutionToInterval['3'] = value;
+          else if (key === '5m') resolutionToInterval['5'] = value;
+          else if (key === '15m') resolutionToInterval['15'] = value;
+          else if (key === '30m') resolutionToInterval['30'] = value;
+          else if (key === '1h') resolutionToInterval['60'] = value;
+          else if (key === '2h') resolutionToInterval['120'] = value;
+          else if (key === '1d') resolutionToInterval['1D'] = value;
+          else if (key === '1w') resolutionToInterval['1W'] = value;
+          else if (key === '1M') resolutionToInterval['1M'] = value;
+        }
+
+        setTimeout(() => callback(configurationData), 0);
+      })
+      .catch((error) => {
+        console.error('[onReady] Error loading interval mapping:', error);
+        setTimeout(() => callback(configurationData), 0);
+      });
+  },
+
+  searchSymbols: async (userInput: string, exchange: string, symbolType: string, onResultReadyCallback: any) => {
+    console.log('[searchSymbols]: Method call', userInput);
+
+    try {
+      const symbols = await fetchSymbols(userInput);
+
+      const results = symbols.map((s) => ({
+        symbol: s.tradingsymbol,
+        full_name: s.tradingsymbol,
+        description: s.name || s.tradingsymbol,
+        exchange: s.exchange || 'NSE',
+        ticker: s.tradingsymbol,
+        type: 'stock',
+      }));
+
+      onResultReadyCallback(results);
+    } catch (error) {
+      console.error('[searchSymbols] Error:', error);
+      onResultReadyCallback([]);
+    }
+  },
+
+  resolveSymbol: async (symbolName: string, onSymbolResolvedCallback: any, onResolveErrorCallback: any) => {
+    console.log('[resolveSymbol]: Method call', symbolName);
+
+    try {
+      const symbols = await getAllSymbols();
+      const symbolItem = symbols.find((s) => s.tradingsymbol === symbolName);
+
+      if (!symbolItem) {
+        console.log('[resolveSymbol]: Cannot resolve symbol', symbolName);
+        onResolveErrorCallback('unknown_symbol');
+        return;
+      }
+
+      const symbolInfo = {
+        ticker: symbolItem.tradingsymbol,
+        name: symbolItem.tradingsymbol,
+        description: symbolItem.name || symbolItem.tradingsymbol,
+        type: 'stock',
+        session: '0915-1530',
+        timezone: 'Asia/Kolkata',
+        exchange: symbolItem.exchange || 'NSE',
+        minmov: 1,
+        pricescale: 100,
+        has_intraday: true,
+        has_daily: true,
+        has_weekly_and_monthly: true,
+        supported_resolutions: configurationData.supported_resolutions,
+        volume_precision: 0,
+        data_status: 'streaming',
+        format: 'price',
+      };
+
+      console.log('[resolveSymbol]: Symbol resolved', symbolName);
+      onSymbolResolvedCallback(symbolInfo);
+    } catch (error) {
+      console.error('[resolveSymbol] Error:', error);
+      onResolveErrorCallback('symbol resolution failed');
+    }
+  },
+
+  getBars: async (symbolInfo: any, resolution: string, periodParams: any, onHistoryCallback: any, onErrorCallback: any) => {
+    const { from, to, firstDataRequest } = periodParams;
+    console.log('[getBars]: ========== START ==========');
+    console.log('[getBars]: Symbol:', symbolInfo.name, 'Resolution:', resolution);
+    console.log('[getBars]: TradingView requesting from:', from, '(', new Date(from * 1000).toISOString(), ')');
+    console.log('[getBars]: TradingView requesting to:', to, '(', new Date(to * 1000).toISOString(), ')');
+
+    try {
+      // Map TradingView resolution to your backend interval
+      const interval = resolutionToInterval[resolution] || intervalMapping['1h'] || 'OneHour';
+      console.log('[getBars]: Backend interval:', interval);
+
+      // Check cache first
+      const cacheKey = `${symbolInfo.name}_${interval}`;
+      const cachedData = getBarsCache.get(cacheKey);
+      const now = Date.now();
+
+      if (cachedData && (now - cachedData.timestamp) < BARS_CACHE_DURATION) {
+        console.log('[getBars]: ✓ Using CACHED data (', cachedData.data.length, 'bars)');
+        console.log('[getBars]: ========== END (CACHED) ==========');
+        onHistoryCallback(cachedData.data, { noData: false });
+        return;
+      }
+
+      console.log('[getBars]: Fetching fresh data from API...');
+      const rows = await fetchOHLC(symbolInfo.name, interval);
+
+      console.log('[getBars]: ✓ Received', rows.length, 'rows from API');
+      if (rows.length > 0) {
+        console.log('[getBars]: First row:', JSON.stringify(rows[0]));
+        console.log('[getBars]: Last row:', JSON.stringify(rows[rows.length - 1]));
+
+        // Detect if timestamps are in seconds or milliseconds
+        const firstTime = (rows[0].time || rows[0].timestamp || 0) as number;
+        const isMs = firstTime > 10000000000; // > year 2286 in seconds = milliseconds
+        console.log('[getBars]: First timestamp value:', firstTime, isMs ? '(milliseconds)' : '(seconds)');
+      }
+
+      if (!rows || rows.length === 0) {
+        console.log('[getBars]: ⚠ No data from API');
+        onHistoryCallback([], { noData: true });
+        return;
+      }
+
+      // Your API returns timestamps in MILLISECONDS (confirmed from legacy chart code)
+      // TradingView needs SECONDS, so we ALWAYS divide by 1000
+      const firstTime = (rows[0].time || rows[0].timestamp || 0) as number;
+
+      console.log('[getBars]: Timestamp conversion:');
+      console.log('  - Raw value from API:', firstTime);
+      console.log('  - As date (treating as ms):', new Date(firstTime).toISOString());
+      console.log('  - Converted to seconds:', Math.floor(firstTime / 1000));
+      console.log('  - Converted date:', new Date(firstTime).toISOString()); // This should show correct date
+
+      const bars = rows
+        .map((row) => {
+          const timeValue = (row.time || row.timestamp || 0) as number;
+          // ALWAYS convert milliseconds to seconds for TradingView
+          const timeInSeconds = Math.floor(timeValue / 1000);
+
+          return {
+            time: timeInSeconds,
+            open: Number(row.open),
+            high: Number(row.high),
+            low: Number(row.low),
+            close: Number(row.close),
+            volume: Number(row.volume || 0),
+          };
+        })
+        .sort((a, b) => a.time - b.time);
+
+      console.log('[getBars]: Converted to', bars.length, 'bars');
+      if (bars.length > 0) {
+        console.log('[getBars]: First bar time:', bars[0].time, '=', new Date(bars[0].time * 1000).toISOString());
+        console.log('[getBars]: Last bar time:', bars[bars.length - 1].time, '=', new Date(bars[bars.length - 1].time * 1000).toISOString());
+        console.log('[getBars]: First bar:', JSON.stringify(bars[0]));
+      }
+
+      // Don't filter by date range - let TradingView handle it
+      // TradingView will use what it needs
+
+      if (bars.length === 0) {
+        console.log('[getBars]: ⚠ No bars after conversion');
+        onHistoryCallback([], { noData: false });
+        return;
+      }
+
+      // Cache last bar for streaming
+      if (firstDataRequest) {
+        lastBarsCache.set(symbolInfo.ticker || symbolInfo.name, bars[bars.length - 1]);
+      }
+
+      // Store in cache to prevent duplicate requests
+      getBarsCache.set(cacheKey, { data: bars, timestamp: Date.now() });
+
+      console.log('[getBars]: ✓✓✓ SUCCESS - Returning', bars.length, 'bars to TradingView');
+      console.log('[getBars]: ========== END ==========');
+      onHistoryCallback(bars, { noData: false });
+    } catch (error) {
+      console.error('[getBars]: ❌ ERROR:', error);
+      onErrorCallback(String(error));
+    }
+  },
+
+  subscribeBars: (symbolInfo: any, resolution: string, onRealtimeCallback: any, subscriberUID: string, onResetCacheNeededCallback: any) => {
+    console.log('[subscribeBars]: Method call with subscriberUID:', subscriberUID);
+    // TODO: Implement real-time updates if your backend supports WebSocket
+    // For now, we can implement polling or leave it as historical data only
+  },
+
+  unsubscribeBars: (subscriberUID: string) => {
+    console.log('[unsubscribeBars]: Method call with subscriberUID:', subscriberUID);
+    // TODO: Clean up subscriptions
+  },
+};
+
+export default datafeed;
