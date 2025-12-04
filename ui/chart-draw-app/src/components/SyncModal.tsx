@@ -26,7 +26,7 @@ export default function SyncModal({ isOpen, onClose }: SyncModalProps) {
 
   const fetchConfig = async () => {
     try {
-      const response = await fetch("/api/remote-sync/config", withAuth());
+      const response = await apiFetch("/api/remote-sync/config", withAuth());
 
       if (!response.ok) {
         throw new Error("Failed to fetch sync configuration");

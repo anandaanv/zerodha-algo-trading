@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import datafeed from './datafeed';
+import { mapTimeframeToInterval } from './intervalUtils';
 
 // TradingView types (loaded globally via script tag)
 declare const TradingView: any;
@@ -54,22 +55,4 @@ export default function TVChartContainer({ symbol, timeframe }: Props) {
   }, [symbol, timeframe, interval]);
 
   return <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />;
-}
-
-// Map your timeframe format to TradingView interval format
-function mapTimeframeToInterval(timeframe: string): string {
-  const mapping: Record<string, string> = {
-    '1m': '1',
-    '3m': '3',
-    '5m': '5',
-    '15m': '15',
-    '30m': '30',
-    '1h': '60',
-    '2h': '120',
-    '1d': '1D',
-    '1w': '1W',
-    '1M': '1M',
-  };
-
-  return mapping[timeframe.toLowerCase()] || '60';
 }
