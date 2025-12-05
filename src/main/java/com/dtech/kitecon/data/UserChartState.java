@@ -9,7 +9,8 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "user_chart_state")
+@Table(name = "user_chart_state",
+       uniqueConstraints = @UniqueConstraint(columnNames = {"symbol", "period", "layout_name"}))
 @Data
 @Builder
 @AllArgsConstructor
@@ -28,12 +29,20 @@ public class UserChartState {
     @Column(nullable = false)
     private String period;
 
-    // JSON payload containing overlays keyed by plugin key
+    // Layout name (e.g. "default", "My Trading Setup")
+    // Allows multiple saved layouts per symbol+period combination
+    @Column(name = "layout_name", nullable = false)
+    @Builder.Default
+    private String layoutName = "default";
+
+    // JSON payload containing drawings/line tools (TradingView drawings)
+    // This is saved separately from chart layout as per TradingView best practices
     @Lob
     @Column(name = "overlays_json", columnDefinition = "TEXT")
     private String overlaysJson;
 
-    // Optional metadata stored as JSON (can be null)
+    // Chart layout metadata: indicators, chart settings, but NOT drawings
+    // Drawings are stored in overlaysJson for per-symbol reusability
     @Lob
     @Column(name = "meta_json", columnDefinition = "TEXT")
     private String metaJson;

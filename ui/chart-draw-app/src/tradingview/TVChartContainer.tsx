@@ -26,7 +26,7 @@ export default function TVChartContainer({ symbol, timeframe }: Props) {
       container: chartContainerRef.current,
       library_path: '/charting_library/charting_library/',
       locale: 'en',
-      disabled_features: ['header_symbol_search', 'symbol_search_hot_key', 'header_compare', 'use_localstorage_for_settings'],
+      disabled_features: ['header_symbol_search', 'symbol_search_hot_key', 'header_compare'],
       enabled_features: [],
       fullscreen: false,
       autosize: true,
