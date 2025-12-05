@@ -43,7 +43,7 @@ export default function TVChartApp() {
       library_path: '/charting_library/charting_library/',
       locale: 'en',
       disabled_features: ['use_localstorage_for_settings'],
-      enabled_features: [],
+      enabled_features: ['saveload_separate_drawings_storage'],
       save_load_adapter: saveLoadAdapter,
       auto_save_delay: 5,
       load_last_chart: true,
@@ -59,6 +59,33 @@ export default function TVChartApp() {
 
     tvWidget.onChartReady(() => {
       console.log('TradingView Chart is ready');
+
+      const chart = tvWidget.activeChart();
+      let saveTimeout: number | null = null;
+
+      const saveDrawings = async () => {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        saveTimeout = window.setTimeout(async () => {
+          try {
+            // Get current drawings state from chart (contains Maps)
+            const state = chart.getLineToolsState();
+            // Save via adapter (adapter handles Map-to-object conversion)
+            await saveLoadAdapter.saveLineToolsAndGroups(undefined, chart.id(), state);
+          } catch (e) {
+            console.error('Failed to auto-save drawings:', e);
+          }
+        }, 2000); // Debounce 2 seconds
+      };
+
+      // Subscribe to drawing events to trigger auto-save
+      tvWidget.subscribe('drawing_event', () => {
+        saveDrawings();
+      });
+
+      // Subscribe to auto-save events for chart layout (indicators, settings)
+      tvWidget.subscribe('onAutoSaveNeeded', () => {
+        // TradingView will automatically call saveChart via save_load_adapter
+      });
     });
 
     return () => {
