@@ -69,12 +69,16 @@ const datafeed: any = {
 
   resolveSymbol: async (symbolName: string, onSymbolResolvedCallback: any, onResolveErrorCallback: any) => {
     try {
-      const symbols = await getAllSymbols();
+      // Try to fetch the specific symbol directly
+      const symbols = await fetchSymbols(symbolName);
       const symbolItem = symbols.find((s) => s.tradingsymbol === symbolName);
+
       if (!symbolItem) {
+        // If not found, try searching with fallback
         onResolveErrorCallback('unknown_symbol');
         return;
       }
+
       onSymbolResolvedCallback({
         ticker: symbolItem.tradingsymbol,
         name: symbolItem.tradingsymbol,
