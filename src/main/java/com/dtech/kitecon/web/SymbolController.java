@@ -40,12 +40,14 @@ public class SymbolController {
                         new String[]{"NSE", "NFO"});
 
         LocalDate today = LocalDate.now();
+        Comparator<LocalDateTime> nullsFirst = Comparator.nullsFirst(Comparator.naturalOrder());
         return found.stream()
                 .filter(inst -> isActive(inst, today))
-                .sorted(Comparator.comparing(Instrument::getLotSize)
+                .filter(inst -> inst.getInstrumentType() != null && inst.getName() != null)
+                .sorted(Comparator.comparing(Instrument::getLotSize, Comparator.nullsFirst(Comparator.naturalOrder()))
                         .thenComparing(Instrument::getName)
                         .thenComparing(Instrument::getInstrumentType)
-                        .thenComparing(Instrument::getExpiry))
+                        .thenComparing(Instrument::getExpiry, nullsFirst))
                 .map(inst -> new SymbolInfo(
                         inst.getTradingsymbol(),
                         inst.getName(),
@@ -65,7 +67,8 @@ public class SymbolController {
         LocalDateTime exp = inst.getExpiry();
         if (exp == null) return true;
         // Active only if expiry date is strictly after today's date
-        return exp.toLocalDate().isAfter(today);
+        return exp.toLocalDate().isAfter(today)
+                && inst.getInstrumentType() != null && inst.getName() != null;
     }
 
     public static record SymbolInfo(
