@@ -2,33 +2,53 @@ import React, { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import datafeed from './datafeed';
 import TVMultiPanelChart from './TVMultiPanelChart';
-import { mapTimeframeToInterval } from './intervalUtils';
+import { mapTimeframeToInterval, intervalToPeriod } from './intervalUtils';
 import { createSaveLoadAdapter } from './saveLoadAdapter';
 
 // TradingView types (loaded globally via script tag)
 declare const TradingView: any;
 
 export default function TVChartApp() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
+
+  // Storage keys
+  const STORAGE_SYMBOL_KEY = 'lastSymbol';
+  const STORAGE_TIMEFRAME_KEY = 'lastTimeframe';
 
   // Parse URL parameters
   const urlSymbol = searchParams.get('script') || searchParams.get('symbol');
   const urlTimeframe = searchParams.get('timeframe') || searchParams.get('period');
 
-  // Default values
-  const defaultSymbol = urlSymbol || 'TCS';
+  // Get from localStorage if not in URL
+  const savedSymbol = localStorage.getItem(STORAGE_SYMBOL_KEY);
+  const savedTimeframe = localStorage.getItem(STORAGE_TIMEFRAME_KEY);
+
+  // Determine actual values (URL > localStorage > defaults)
+  const defaultSymbol = urlSymbol || savedSymbol || 'TCS';
+  const rawTimeframe = urlTimeframe || savedTimeframe || '1h';
 
   // Check if multiple timeframes are requested (comma-separated)
-  const timeframes = urlTimeframe ? urlTimeframe.split(',').map((tf) => tf.trim()) : [];
+  const timeframes = rawTimeframe ? rawTimeframe.split(',').map((tf) => tf.trim()) : [];
 
   // If multiple timeframes, render multi-panel view
   if (timeframes.length > 1) {
     return <TVMultiPanelChart symbol={defaultSymbol} timeframes={timeframes} />;
   }
 
-  const defaultInterval = mapTimeframeToInterval(urlTimeframe) || '60';
+  const defaultInterval = mapTimeframeToInterval(rawTimeframe) || '60';
+
+  // Save to localStorage and update URL if needed
+  useEffect(() => {
+    localStorage.setItem(STORAGE_SYMBOL_KEY, defaultSymbol);
+    localStorage.setItem(STORAGE_TIMEFRAME_KEY, rawTimeframe);
+
+    // Update URL if parameters are missing
+    if (!urlSymbol || !urlTimeframe) {
+      setSearchParams({ symbol: defaultSymbol, timeframe: rawTimeframe }, { replace: true });
+    }
+  }, [defaultSymbol, rawTimeframe, urlSymbol, urlTimeframe, setSearchParams]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -85,6 +105,22 @@ export default function TVChartApp() {
       // Subscribe to auto-save events for chart layout (indicators, settings)
       tvWidget.subscribe('onAutoSaveNeeded', () => {
         // TradingView will automatically call saveChart via save_load_adapter
+      });
+
+      // Subscribe to symbol changes to update localStorage and URL
+      chart.onSymbolChanged().subscribe(null, () => {
+        const newSymbol = chart.symbol();
+        localStorage.setItem(STORAGE_SYMBOL_KEY, newSymbol);
+        setSearchParams({ symbol: newSymbol, timeframe: rawTimeframe }, { replace: true });
+      });
+
+      // Subscribe to interval changes to update localStorage and URL
+      chart.onIntervalChanged().subscribe(null, () => {
+        const newInterval = chart.resolution();
+        // Convert TradingView resolution back to timeframe format
+        const newTimeframe = intervalToPeriod(newInterval);
+        localStorage.setItem(STORAGE_TIMEFRAME_KEY, newTimeframe);
+        setSearchParams({ symbol: defaultSymbol, timeframe: newTimeframe }, { replace: true });
       });
     });
 
