@@ -90,6 +90,17 @@ function objectToMap(obj: any): any {
 export function createSaveLoadAdapter(symbol: string, interval: string) {
   const period = intervalToPeriod(interval);
   const defaultLayoutName = 'default';
+  const storageKey = `lastLayout_${symbol}_${period}`;
+
+  // Helper to get last opened layout name
+  const getLastLayoutName = (): string => {
+    return localStorage.getItem(storageKey) || defaultLayoutName;
+  };
+
+  // Helper to save last opened layout name
+  const saveLastLayoutName = (layoutName: string) => {
+    localStorage.setItem(storageKey, layoutName);
+  };
 
   return {
     // ========== Chart Layout Management ==========
@@ -103,13 +114,23 @@ export function createSaveLoadAdapter(symbol: string, interval: string) {
         );
         if (response.ok) {
           const layouts = await response.json();
-          return layouts.map((layout: any) => ({
+          const chartList = layouts.map((layout: any) => ({
             id: layout.id,
             name: layout.name,
             symbol: layout.symbol,
             resolution: mapTimeframeToInterval(layout.resolution),
             timestamp: layout.timestamp,
           }));
+
+          // Sort so that last opened layout appears first
+          const lastLayoutName = getLastLayoutName();
+          chartList.sort((a: any, b: any) => {
+            const aIsLast = a.name === lastLayoutName ? 1 : 0;
+            const bIsLast = b.name === lastLayoutName ? 1 : 0;
+            return bIsLast - aIsLast; // Last layout goes first
+          });
+
+          return chartList;
         }
         return [];
       } catch (e) {
@@ -159,6 +180,8 @@ export function createSaveLoadAdapter(symbol: string, interval: string) {
         }));
 
         if (response.ok) {
+          // Save this as the last opened layout
+          saveLastLayoutName(layoutName);
           return chartId;
         }
         throw new Error('Failed to save chart');
@@ -181,6 +204,8 @@ export function createSaveLoadAdapter(symbol: string, interval: string) {
 
         if (response.ok) {
           const data = await response.json();
+          // Save this as the last opened layout
+          saveLastLayoutName(layoutName);
           return data.meta?.content || '';
         }
         return '';
