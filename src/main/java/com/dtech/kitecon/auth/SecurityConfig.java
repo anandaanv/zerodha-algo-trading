@@ -45,10 +45,10 @@ public class SecurityConfig {
                         // Role-based access control
 //                        .requestMatchers("/api/trades")
 //                              .hasAnyRole("USER", "MODERATOR", "ADMIN")
-                        // DELETE on chart-state requires MODERATOR/ADMIN
-                        .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/chart-state").hasAnyRole("MODERATOR", "ADMIN")
-                        // Other chart-state operations allow USER
-                        .requestMatchers("/api/symbols", "/api/ohlc", "/api/chart-state", "/api/chart-state/layouts", "/api/chart-state/drawings").hasAnyRole("USER", "MODERATOR", "ADMIN")
+                        // DELETE operations require MODERATOR/ADMIN
+                        .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/chart-state", "/api/layouts/**").hasAnyRole("MODERATOR", "ADMIN")
+                        // Chart operations allow USER
+                        .requestMatchers("/api/symbols", "/api/ohlc", "/api/chart-state/**", "/api/layouts/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart/**", "/api/screener/**", "/api/overlays/**")
                               .hasAnyRole("MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
