@@ -168,7 +168,7 @@ const datafeed: any = {
       const filteredBars = bars.filter(bar => bar.time >= fromMs && bar.time < toMs);
 
       if (filteredBars.length === 0) {
-        onHistoryCallback([], { noData: true });
+        onHistoryCallback(bars, { noData: false });
       } else {
         onHistoryCallback(filteredBars, { noData: false });
       }

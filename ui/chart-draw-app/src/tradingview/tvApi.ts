@@ -29,8 +29,9 @@ export async function fetchSymbols(query: string): Promise<SymbolItem[]> {
   const q = (query || '').trim();
   try {
     const url = getApiUrl('/api/symbols');
-    if (q) url.searchParams.set('query', q);
-    addServiceTokenToUrl(url);
+    // Backend requires query param - use 'A' as default to get some results
+    url.searchParams.set('query', q || 'A');
+    // Don't add service token - symbols endpoint requires JWT auth only
     const res = await apiFetch(url.toString(), withAuth());
     if (res.ok) {
       const arr = await res.json();
