@@ -1,8 +1,9 @@
 package com.dtech.kitecon.market.orders;
 
-import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.data.Instrument;
-import com.zerodhatech.kiteconnect.KiteConnect;
+import com.dtech.kitecon.market.facade.MarketException;
+import com.dtech.kitecon.market.facade.MarketFacade;
+import com.dtech.kitecon.market.facade.MarketFacadeProvider;
 import com.zerodhatech.models.Order;
 import com.zerodhatech.models.OrderParams;
 import com.zerodhatech.models.Trade;
@@ -18,26 +19,28 @@ import org.springframework.stereotype.Component;
 @Component
 @Qualifier("zerodhaOrderManagerOld")
 public class ZerodhaOrderManager implements OrderManager {
-  private final KiteConnectConfig kiteConnectConfig;
+  private final MarketFacadeProvider marketFacadeProvider;
 
   @Override
   public String placeMISOrder(Double price, int amount, Instrument instrument, String orderType)
       throws OrderException {
-    KiteConnect connect = kiteConnectConfig.getKiteConnect();
-    OrderParams params = new OrderParams();
-    params.exchange = "NSE";
-    params.tradingsymbol = instrument.getTradingsymbol();
-    params.transactionType = orderType.toUpperCase();
-    params.quantity = amount;
-    params.price = price;
-    params.product = "MIS";
-    params.orderType = "LIMIT";
-    params.validity = "DAY";
-    params.disclosedQuantity = amount;
-    params.parentOrderId = UUID.randomUUID().toString();
     try {
-      Order order = connect.placeOrder(params, "regular");
+      MarketFacade facade = marketFacadeProvider.getFacade();
+      OrderParams params = new OrderParams();
+      params.exchange = "NSE";
+      params.tradingsymbol = instrument.getTradingsymbol();
+      params.transactionType = orderType.toUpperCase();
+      params.quantity = amount;
+      params.price = price;
+      params.product = "MIS";
+      params.orderType = "LIMIT";
+      params.validity = "DAY";
+      params.disclosedQuantity = amount;
+      params.parentOrderId = UUID.randomUUID().toString();
+      Order order = facade.placeOrder(params, "regular");
       return order.orderId;
+    } catch (MarketException e) {
+      throw new OrderException(e);
     } catch (Throwable e) {
       throw new OrderException(e);
     }
@@ -46,9 +49,12 @@ public class ZerodhaOrderManager implements OrderManager {
   @Override
   public Integer getActualOrderStatus(String orderId) throws OrderException {
     try {
-      List<Trade> orderTrades = kiteConnectConfig.getKiteConnect().getOrderTrades(orderId);
+      MarketFacade facade = marketFacadeProvider.getFacade();
+      List<Trade> orderTrades = facade.getOrderTrades(orderId);
       return orderTrades.stream()
           .collect(Collectors.summingInt(trade -> Integer.parseInt(trade.quantity)));
+    } catch (MarketException e) {
+      throw new OrderException(e);
     } catch (Throwable th) {
       throw new OrderException(th);
     }
