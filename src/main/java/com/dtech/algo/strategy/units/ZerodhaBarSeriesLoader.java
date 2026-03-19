@@ -5,18 +5,16 @@ import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.algo.strategy.builder.cache.BarSeriesCache;
 import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
-import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.market.facade.MarketException;
+import com.dtech.kitecon.market.facade.MarketFacade;
+import com.dtech.kitecon.market.facade.MarketFacadeProvider;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.strategy.dataloader.BarsLoader;
-import com.zerodhatech.kiteconnect.KiteConnect;
-import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
 import lombok.RequiredArgsConstructor;
 
-import java.io.IOException;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
@@ -29,8 +27,8 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * BarSeriesLoader that fetches data directly from Zerodha Kite API
- * instead of loading from database
+ * BarSeriesLoader that fetches data from broker APIs via MarketFacade
+ * Uses MarketFacadeProvider to support multiple brokers (Zerodha, Dhan, etc.)
  */
 @RequiredArgsConstructor
 @Service
@@ -38,7 +36,7 @@ import java.util.List;
 @Primary
 public class ZerodhaBarSeriesLoader implements BarSeriesLoader {
 
-    private final KiteConnectConfig kiteConnectConfig;
+    private final MarketFacadeProvider marketFacadeProvider;
     private final InstrumentRepository instrumentRepository;
     private final BarSeriesCache barSeriesCache;
 
@@ -61,8 +59,8 @@ public class ZerodhaBarSeriesLoader implements BarSeriesLoader {
                 throw new IllegalArgumentException("Instrument not found: " + barSeriesConfig.getInstrument());
             }
 
-            // Fetch data from Zerodha Kite API
-            HistoricalData historicalData = fetchFromZerodha(instrument, barSeriesConfig);
+            // Fetch data from broker API via MarketFacade
+            HistoricalData historicalData = fetchFromBroker(instrument, barSeriesConfig);
 
             // Convert to IntervalBarSeries
             IntervalBarSeries intervalBarSeries = buildBarSeries(instrument, historicalData, barSeriesConfig);
@@ -70,27 +68,27 @@ public class ZerodhaBarSeriesLoader implements BarSeriesLoader {
             // Cache it
             barSeriesCache.put(key, intervalBarSeries);
 
-            log.info("Loaded {} bars from Zerodha for {} {}",
+            log.info("Loaded {} bars for {} {}",
                 intervalBarSeries.getBarCount(),
                 instrument.getTradingsymbol(),
                 barSeriesConfig.getInterval());
 
             return intervalBarSeries;
 
-        } catch (KiteException | IOException e) {
-            log.error("Error loading bar series from Zerodha for {}", barSeriesConfig.getInstrument(), e);
-            throw new RuntimeException("Failed to load data from Zerodha: " + e.getMessage(), e);
+        } catch (MarketException e) {
+            log.error("Error loading bar series for {}: {}", barSeriesConfig.getInstrument(), e.getMessage(), e);
+            throw new RuntimeException("Failed to load data from broker: " + e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Unexpected error loading bar series from Zerodha for {}", barSeriesConfig.getInstrument(), e);
-            throw new RuntimeException("Failed to load data from Zerodha: " + e.getMessage(), e);
+            log.error("Unexpected error loading bar series for {}", barSeriesConfig.getInstrument(), e);
+            throw new RuntimeException("Failed to load data from broker: " + e.getMessage(), e);
         }
     }
 
     /**
-     * Fetch historical data from Zerodha Kite API
+     * Fetch historical data from broker API
      */
-    private HistoricalData fetchFromZerodha(Instrument instrument, BarSeriesConfig config) throws KiteException, IOException {
-        KiteConnect kiteConnect = kiteConnectConfig.getKiteConnect();
+    private HistoricalData fetchFromBroker(Instrument instrument, BarSeriesConfig config) throws MarketException {
+        MarketFacade facade = marketFacadeProvider.getFacade();
 
         Date fromDate = Date.from(config.getStartDate().atZone(ZoneId.systemDefault()).toInstant());
         Date toDate = Date.from(config.getEndDate().atZone(ZoneId.systemDefault()).toInstant());
@@ -98,10 +96,10 @@ public class ZerodhaBarSeriesLoader implements BarSeriesLoader {
         String interval = config.getInterval().getKiteKey();
         String token = String.valueOf(instrument.getInstrumentToken());
 
-        log.debug("Fetching from Zerodha: token={}, interval={}, from={}, to={}",
-            token, interval, fromDate, toDate);
+        log.debug("Fetching from {}: token={}, interval={}, from={}, to={}",
+            facade.getBrokerName(), token, interval, fromDate, toDate);
 
-        return kiteConnect.getHistoricalData(fromDate, toDate, token, interval, false, false);
+        return facade.getHistoricalData(fromDate, toDate, token, interval, false, false);
     }
 
     /**

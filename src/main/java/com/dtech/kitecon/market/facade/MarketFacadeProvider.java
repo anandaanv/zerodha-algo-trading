@@ -1,10 +1,15 @@
 package com.dtech.kitecon.market.facade;
 
+import com.dtech.dhan.config.DhanConnectConfig;
+import com.dtech.dhan.facade.DhanMarketFacade;
 import com.dtech.kitecon.config.KiteConnectConfig;
 import com.zerodhatech.kiteconnect.KiteConnect;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Provider for MarketFacade instances.
@@ -21,14 +26,20 @@ import org.springframework.stereotype.Component;
  * - Cleaner lifecycle management
  */
 @Component
-@RequiredArgsConstructor
 @Slf4j
 public class MarketFacadeProvider {
 
     private final KiteConnectConfig kiteConnectConfig;
+
+    @Autowired(required = false)
+    private DhanConnectConfig dhanConnectConfig;
+
     // Future: Add other broker configs here
-    // private final DhanConnectConfig dhanConnectConfig;
     // private final UpstoxConnectConfig upstoxConnectConfig;
+
+    public MarketFacadeProvider(KiteConnectConfig kiteConnectConfig) {
+        this.kiteConnectConfig = kiteConnectConfig;
+    }
 
     /**
      * Get default market facade (currently Zerodha)
@@ -51,10 +62,11 @@ public class MarketFacadeProvider {
             return createZerodhaFacade();
         }
 
+        if ("dhan".equalsIgnoreCase(brokerName)) {
+            return createDhanFacade();
+        }
+
         // Future broker implementations:
-        // if ("dhan".equalsIgnoreCase(brokerName)) {
-        //     return createDhanFacade();
-        // }
         // if ("upstox".equalsIgnoreCase(brokerName)) {
         //     return createUpstoxFacade();
         // }
@@ -86,8 +98,14 @@ public class MarketFacadeProvider {
      * @return Array of available broker names
      */
     public String[] getAvailableBrokers() {
-        // Future: Dynamically detect which brokers are configured
-        return new String[]{"zerodha"};
+        List<String> brokers = new ArrayList<>();
+        brokers.add("zerodha");
+
+        if (dhanConnectConfig != null && dhanConnectConfig.isConfigured()) {
+            brokers.add("dhan");
+        }
+
+        return brokers.toArray(new String[0]);
     }
 
     /**
@@ -120,12 +138,20 @@ public class MarketFacadeProvider {
     }
 
     /**
-     * Create Dhan market facade (future)
+     * Create Dhan market facade
      */
-    // private MarketFacade createDhanFacade() {
-    //     // Implementation when Dhan support is added
-    //     throw new UnsupportedOperationException("Dhan support coming soon");
-    // }
+    private MarketFacade createDhanFacade() {
+        if (dhanConnectConfig == null) {
+            throw new IllegalStateException("Dhan is not enabled. Set 'dhan.enabled=true' in application.properties");
+        }
+
+        if (!dhanConnectConfig.isConfigured()) {
+            throw new IllegalStateException("Dhan is not configured. Missing access token. Please update via /api/dhan/update-token");
+        }
+
+        String accessToken = dhanConnectConfig.getAccessToken();
+        return new DhanMarketFacade(dhanConnectConfig.getDhanApiClient(), accessToken);
+    }
 
     /**
      * Create Upstox market facade (future)
