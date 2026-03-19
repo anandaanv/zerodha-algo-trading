@@ -7,6 +7,7 @@ import com.dtech.algo.strategy.builder.StrategyBuilderIfc;
 import com.dtech.algo.strategy.builder.ifc.BarSeriesLoader;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
 import com.dtech.algo.strategy.config.StrategyConfig;
+import com.dtech.algo.strategy.units.RdbmsBarSeriesLoader;
 import lombok.RequiredArgsConstructor;
 import org.reflections.Reflections;
 import org.reflections.scanners.SubTypesScanner;
@@ -30,7 +31,7 @@ import java.util.Set;
 @Component
 public class BackTestingHandlerJson {
 
-  private final BarSeriesLoader barSeriesLoader;
+  private final RdbmsBarSeriesLoader barSeriesLoader;
   private final StrategyBuilderIfc strategyBuilder;
 
 

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { GoogleLogin, CredentialResponse } from "@react-oauth/google";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -8,7 +9,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,6 +24,28 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+    setError("");
+    setLoading(true);
+
+    try {
+      if (credentialResponse.credential) {
+        await loginWithGoogle(credentialResponse.credential);
+        navigate("/dashboard");
+      } else {
+        throw new Error("No credential received from Google");
+      }
+    } catch (err: any) {
+      setError(err.message || "Google login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleError = () => {
+    setError("Google login failed. Please try again.");
   };
 
   return (
@@ -156,6 +179,32 @@ export default function Login() {
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            margin: "2rem 0 1.5rem",
+          }}
+        >
+          <div style={{ flex: 1, height: "1px", background: "#ddd" }} />
+          <span style={{ padding: "0 1rem", color: "#999", fontSize: "0.9rem" }}>
+            OR
+          </span>
+          <div style={{ flex: 1, height: "1px", background: "#ddd" }} />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            useOneTap={false}
+            text="continue_with"
+            shape="rectangular"
+            size="large"
+            width="336"
+          />
+        </div>
       </div>
     </div>
   );

@@ -20,8 +20,18 @@ public class User {
     @Column(unique = true, nullable = false, length = 100)
     private String username;
 
-    @Column(nullable = false)
-    private String password; // BCrypt hashed
+    @Column(nullable = true)
+    private String password; // BCrypt hashed (nullable for OAuth users)
+
+    @Column(unique = true, length = 255)
+    private String email;
+
+    @Column(name = "google_id", unique = true, length = 255)
+    private String googleId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private AuthProvider provider = AuthProvider.LOCAL;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -51,5 +61,10 @@ public class User {
         USER,      // Access to trades only
         MODERATOR, // Access to charts and screeners
         ADMIN      // Access to everything
+    }
+
+    public enum AuthProvider {
+        LOCAL,
+        GOOGLE
     }
 }

@@ -30,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Log4j2
 public class BarSeriesHelper {
     private final HistoricalDateLimit historicalDateLimit;
-    private final LatestBarSeriesProvider barSeriesLoader;
+    private final LatestBarSeriesProvider barSeriesLoader; // Auto-selected: Zerodha or Database based on config
     private final DatabaseBatchUpdateService databaseBatchUpdateService;
     private final InstrumentRepository instrumentRepository;
 
@@ -60,7 +60,9 @@ public class BarSeriesHelper {
 
     /**
      * Retrieves an IntervalBarSeries for the given stock and timeframe
-     * 
+     * Uses auto-selected BarSeriesLoader (ZerodhaBarSeriesLoader or RdbmsBarSeriesLoader)
+     * based on market.data.provider configuration
+     *
      * @param stock The instrument symbol
      * @param tf The timeframe/interval as string
      * @return The loaded IntervalBarSeries

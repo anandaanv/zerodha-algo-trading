@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import "./styles.css";
 import "./screener/screener.css";
 import { AuthProvider } from "./context/AuthContext";
@@ -13,6 +14,10 @@ import TVChartApp from "./tradingview/TVChartApp";
 import KiteLogin from "./components/KiteLogin";
 import KiteSuccess from "./components/KiteSuccess";
 
+// Get Google OAuth Client ID from environment variable
+// Set this in .env file: VITE_GOOGLE_OAUTH_CLIENT_ID=your_client_id_here
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID || "";
+
 // Screener pages
 import ScreenerCreatePage from "./screener/pages/ScreenerCreatePage";
 import ScreenerListPage from "./screener/pages/ScreenerListPage";
@@ -23,10 +28,11 @@ import { tradesRoutes } from "./trades";
 
 const root = createRoot(document.getElementById("root")!);
 root.render(
-  <BrowserRouter>
-    <AuthProvider>
-      <Layout>
-        <Routes>
+  <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+    <BrowserRouter>
+      <AuthProvider>
+        <Layout>
+          <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login />} />
         <Route path="/kite-login" element={<KiteLogin />} />
@@ -102,8 +108,9 @@ root.render(
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      </Layout>
-    </AuthProvider>
-  </BrowserRouter>
+        </Routes>
+        </Layout>
+      </AuthProvider>
+    </BrowserRouter>
+  </GoogleOAuthProvider>
 );

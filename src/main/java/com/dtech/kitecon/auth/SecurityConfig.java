@@ -39,6 +39,10 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/assets/**", "/static/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
+                        // Legal pages (required for Google OAuth)
+                        .requestMatchers("/privacy-policy", "/privacy-policy.html", "/privacy").permitAll()
+                        .requestMatchers("/terms-of-service", "/terms-of-service.html", "/terms").permitAll()
+
                         // Kite login and app config pages (public for now)
                         .requestMatchers("/kite-login", "/api/trades").permitAll()
 
@@ -53,6 +57,9 @@ public class SecurityConfig {
                               .hasAnyRole("MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**", "/app", "/update-token").hasRole("ADMIN")
+
+                        // Snapshot and analysis endpoints - allow USER role
+                        .requestMatchers("/api/snapshots/**", "/api/analysis/**", "/api/tags/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
