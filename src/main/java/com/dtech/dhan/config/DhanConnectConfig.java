@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -21,11 +22,10 @@ import java.util.Optional;
  * Manages Dhan authentication and access token persistence
  * Follows singleton pattern similar to KiteConnectConfig
  */
-@Component
+@Configuration
 @Getter
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(name = "dhan.enabled", havingValue = "true", matchIfMissing = false)
 public class DhanConnectConfig {
 
     @Value("${dhan.client.id:}")

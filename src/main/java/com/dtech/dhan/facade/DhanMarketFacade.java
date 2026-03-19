@@ -33,6 +33,7 @@ public class DhanMarketFacade implements MarketFacade {
 
     private final DhanApiClient dhanApiClient;
     private final String accessToken;
+    private final String clientId;
 
     @Override
     public String getBrokerName() {
@@ -81,12 +82,12 @@ public class DhanMarketFacade implements MarketFacade {
             // Determine if daily or intraday
             if ("day".equals(interval) || "1d".equals(interval)) {
                 response = dhanApiClient.getHistoricalDaily(
-                    token, "NSE_EQ", "EQUITY", fromDate, toDate, accessToken
+                    token, "NSE_EQ", "EQUITY", fromDate, toDate, accessToken, clientId
                 );
             } else {
                 int intervalMinutes = parseIntervalToMinutes(interval);
                 response = dhanApiClient.getHistoricalIntraday(
-                    token, "NSE_EQ", "EQUITY", intervalMinutes, fromDate, toDate, accessToken
+                    token, "NSE_EQ", "EQUITY", intervalMinutes, fromDate, toDate, accessToken, clientId
                 );
             }
 
@@ -107,7 +108,7 @@ public class DhanMarketFacade implements MarketFacade {
                     .collect(Collectors.toList());
 
             List<DhanQuoteResponse.QuoteData> quotes =
-                dhanApiClient.getQuotes(dhanInstruments, accessToken);
+                dhanApiClient.getQuotes(dhanInstruments, accessToken, clientId);
 
             // Convert to Zerodha Quote format
             Map<String, Quote> result = new HashMap<>();
@@ -134,7 +135,7 @@ public class DhanMarketFacade implements MarketFacade {
                     .collect(Collectors.toList());
 
             List<DhanLTPResponse.LTPData> ltpData =
-                dhanApiClient.getLTP(dhanInstruments, accessToken);
+                dhanApiClient.getLTP(dhanInstruments, accessToken, clientId);
 
             Map<String, LTPQuote> result = new HashMap<>();
             for (int i = 0; i < instruments.length && i < ltpData.size(); i++) {

@@ -44,7 +44,8 @@ public class DhanApiClient {
             String instrument,
             LocalDate fromDate,
             LocalDate toDate,
-            String accessToken
+            String accessToken,
+            String clientId
     ) {
         String url = baseUrl + "/charts/historical";
 
@@ -57,7 +58,7 @@ public class DhanApiClient {
                 .toDate(toDate.format(DATE_FORMATTER))
                 .build();
 
-        return executePost(url, request, DhanHistoricalResponse.class, accessToken);
+        return executePost(url, request, DhanHistoricalResponse.class, accessToken, clientId);
     }
 
     /**
@@ -70,7 +71,8 @@ public class DhanApiClient {
             int interval, // 1, 5, 15, 25, 60
             LocalDate fromDate,
             LocalDate toDate,
-            String accessToken
+            String accessToken,
+            String clientId
     ) {
         String url = baseUrl + "/charts/intraday";
 
@@ -84,7 +86,7 @@ public class DhanApiClient {
                 .toDate(toDate.format(DATE_FORMATTER))
                 .build();
 
-        return executePost(url, request, DhanHistoricalResponse.class, accessToken);
+        return executePost(url, request, DhanHistoricalResponse.class, accessToken, clientId);
     }
 
     // ==================== Market Quotes ====================
@@ -95,7 +97,8 @@ public class DhanApiClient {
     public DhanQuoteResponse.QuoteData getQuote(
             String securityId,
             String exchangeSegment,
-            String accessToken
+            String accessToken,
+            String clientId
     ) {
         List<DhanQuoteResponse.QuoteData> quotes = getQuotes(
                 Collections.singletonList(
@@ -104,7 +107,8 @@ public class DhanApiClient {
                         .exchangeSegment(exchangeSegment)
                         .build()
                 ),
-                accessToken
+                accessToken,
+                clientId
         );
         return quotes.isEmpty() ? null : quotes.get(0);
     }
@@ -114,7 +118,8 @@ public class DhanApiClient {
      */
     public List<DhanQuoteResponse.QuoteData> getQuotes(
             List<DhanQuoteRequest.InstrumentIdentifier> instruments,
-            String accessToken
+            String accessToken,
+            String clientId
     ) {
         String url = baseUrl + "/marketfeed/quote";
 
@@ -122,7 +127,7 @@ public class DhanApiClient {
                 .instruments(instruments)
                 .build();
 
-        DhanQuoteResponse response = executePost(url, request, DhanQuoteResponse.class, accessToken);
+        DhanQuoteResponse response = executePost(url, request, DhanQuoteResponse.class, accessToken, clientId);
         return response != null && response.getData() != null ? response.getData() : Collections.emptyList();
     }
 
@@ -133,7 +138,8 @@ public class DhanApiClient {
      */
     public List<DhanLTPResponse.LTPData> getLTP(
             List<DhanLTPRequest.InstrumentIdentifier> instruments,
-            String accessToken
+            String accessToken,
+            String clientId
     ) {
         String url = baseUrl + "/marketfeed/ltp";
 
@@ -141,7 +147,7 @@ public class DhanApiClient {
                 .instruments(instruments)
                 .build();
 
-        DhanLTPResponse response = executePost(url, request, DhanLTPResponse.class, accessToken);
+        DhanLTPResponse response = executePost(url, request, DhanLTPResponse.class, accessToken, clientId);
         return response != null && response.getData() != null ? response.getData() : Collections.emptyList();
     }
 
@@ -151,8 +157,15 @@ public class DhanApiClient {
      * Execute POST request with proper error handling
      */
     private <T, R> R executePost(String url, T request, Class<R> responseClass, String accessToken) {
+        return executePost(url, request, responseClass, accessToken, null);
+    }
+
+    /**
+     * Execute POST request with proper error handling and client ID
+     */
+    private <T, R> R executePost(String url, T request, Class<R> responseClass, String accessToken, String clientId) {
         try {
-            HttpHeaders headers = createHeaders(accessToken);
+            HttpHeaders headers = createHeaders(accessToken, clientId);
             HttpEntity<T> entity = new HttpEntity<>(request, headers);
 
             log.debug("Dhan API POST: {} with request type: {}", url, request.getClass().getSimpleName());
@@ -181,10 +194,13 @@ public class DhanApiClient {
     /**
      * Create HTTP headers with authentication
      */
-    private HttpHeaders createHeaders(String accessToken) {
+    private HttpHeaders createHeaders(String accessToken, String clientId) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("access-token", accessToken);
+        if (clientId != null && !clientId.trim().isEmpty()) {
+            headers.set("client-id", clientId);
+        }
         headers.set("Accept", MediaType.APPLICATION_JSON_VALUE);
         return headers;
     }

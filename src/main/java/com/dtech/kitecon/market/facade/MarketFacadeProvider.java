@@ -4,6 +4,7 @@ import com.dtech.dhan.config.DhanConnectConfig;
 import com.dtech.dhan.facade.DhanMarketFacade;
 import com.dtech.kitecon.config.KiteConnectConfig;
 import com.zerodhatech.kiteconnect.KiteConnect;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -27,19 +28,12 @@ import java.util.List;
  */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class MarketFacadeProvider {
 
     private final KiteConnectConfig kiteConnectConfig;
 
-    @Autowired(required = false)
-    private DhanConnectConfig dhanConnectConfig;
-
-    // Future: Add other broker configs here
-    // private final UpstoxConnectConfig upstoxConnectConfig;
-
-    public MarketFacadeProvider(KiteConnectConfig kiteConnectConfig) {
-        this.kiteConnectConfig = kiteConnectConfig;
-    }
+    private final DhanConnectConfig dhanConnectConfig;
 
     /**
      * Get default market facade (currently Zerodha)
@@ -150,7 +144,8 @@ public class MarketFacadeProvider {
         }
 
         String accessToken = dhanConnectConfig.getAccessToken();
-        return new DhanMarketFacade(dhanConnectConfig.getDhanApiClient(), accessToken);
+        String clientId = dhanConnectConfig.getClientId();
+        return new DhanMarketFacade(dhanConnectConfig.getDhanApiClient(), accessToken, clientId);
     }
 
     /**
