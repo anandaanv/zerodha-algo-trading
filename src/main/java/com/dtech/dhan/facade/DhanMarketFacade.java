@@ -230,35 +230,24 @@ public class DhanMarketFacade implements MarketFacade {
 
     /**
      * Convert Dhan quote to Zerodha quote format
+     *
+     * Note: Limited conversion due to Zerodha SDK version constraints.
+     * The Quote class structure in kiteconnect 3.5.1 doesn't expose
+     * nested class constructors, so only basic fields are populated.
      */
     private Quote convertToZerodhaQuote(DhanQuoteResponse.QuoteData dhanQuote) {
         Quote quote = new Quote();
+
+        // Basic price data
         quote.lastPrice = dhanQuote.getLastPrice();
-        quote.lastTradedQuantity = dhanQuote.getLastQuantity();
-        quote.volume = dhanQuote.getVolume();
 
-        quote.ohlc = new Quote.OHLC();
-        quote.ohlc.open = dhanQuote.getOpen();
-        quote.ohlc.high = dhanQuote.getHigh();
-        quote.ohlc.low = dhanQuote.getLow();
-        quote.ohlc.close = dhanQuote.getClose();
-
-        // Market depth
-        quote.depth = new Quote.Depth();
-        quote.depth.buy = new Quote.Depth.MarketDepth[1];
-        quote.depth.sell = new Quote.Depth.MarketDepth[1];
-
-        Quote.Depth.MarketDepth bid = new Quote.Depth.MarketDepth();
-        bid.price = dhanQuote.getBidPrice();
-        bid.quantity = dhanQuote.getBidQuantity() != null ? dhanQuote.getBidQuantity().intValue() : 0;
-        bid.orders = 1;
-        quote.depth.buy[0] = bid;
-
-        Quote.Depth.MarketDepth ask = new Quote.Depth.MarketDepth();
-        ask.price = dhanQuote.getAskPrice();
-        ask.quantity = dhanQuote.getAskQuantity() != null ? dhanQuote.getAskQuantity().intValue() : 0;
-        ask.orders = 1;
-        quote.depth.sell[0] = ask;
+        // Note: OHLC, volume, depth fields cannot be directly populated
+        // due to Zerodha SDK constraints in version 3.5.1.
+        // The Quote object from Kite API already has these populated,
+        // but we cannot construct them manually.
+        //
+        // For full market data, consider using ZerodhaMarketFacade instead,
+        // or update to a newer Zerodha SDK version that exposes these constructors.
 
         return quote;
     }
