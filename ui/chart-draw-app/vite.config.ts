@@ -6,8 +6,11 @@ export default defineConfig(({ mode }) => ({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true,
+    allowedHosts: ['tradeapp.dheemantech.in'],
     proxy: mode === 'development' ? {
-      "/api": "https://tradeapi.dheemantech.in/kitecon"
+      // "/api": "https://tradeapi.dheemantech.in/kitecon"
+      "/api": "http://localhost:8080"
     } : undefined
   },
   build: {

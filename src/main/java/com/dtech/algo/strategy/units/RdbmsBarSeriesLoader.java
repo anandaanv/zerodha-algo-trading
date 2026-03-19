@@ -12,7 +12,7 @@ import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.strategy.dataloader.BarsLoader;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Primary;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeriesBuilder;
@@ -24,7 +24,7 @@ import java.util.List;
 
 @RequiredArgsConstructor
 @Service
-@Primary
+@ConditionalOnProperty(name = "market.data.provider", havingValue = "database")
 public class RdbmsBarSeriesLoader implements BarSeriesLoader {
 
     private final CandleRepository candleRepository;

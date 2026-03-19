@@ -49,6 +49,24 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/google")
+    public ResponseEntity<?> googleLogin(@RequestBody GoogleLoginRequest request) {
+        try {
+            String token = authService.authenticateWithGoogle(request.getIdToken());
+            User user = authService.getUserByUsername(
+                    jwtUtil.extractUsername(token)
+            );
+
+            return ResponseEntity.ok(new LoginResponse(
+                    token,
+                    user.getUsername(),
+                    user.getRole().name()
+            ));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(401).body(new ErrorResponse(e.getMessage()));
+        }
+    }
+
     @GetMapping("/me")
     public ResponseEntity<?> getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -91,6 +109,11 @@ public class AuthController {
         private final Long id;
         private final String username;
         private final String role;
+    }
+
+    @Data
+    public static class GoogleLoginRequest {
+        private String idToken;
     }
 
     @Data

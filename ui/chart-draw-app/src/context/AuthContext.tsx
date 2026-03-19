@@ -5,6 +5,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (username: string, password: string) => Promise<void>;
+  loginWithGoogle: (googleIdToken: string) => Promise<void>;
   logout: () => void;
   isAuthenticated: boolean;
   hasRole: (role: string) => boolean;
@@ -82,6 +83,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("auth_user", JSON.stringify(userData));
   };
 
+  const loginWithGoogle = async (googleIdToken: string) => {
+    const response = await apiFetch("/api/auth/google", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ idToken: googleIdToken }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Google login failed");
+    }
+
+    const data = await response.json();
+    const userData: User = {
+      username: data.username,
+      role: data.role,
+    };
+
+    setToken(data.token);
+    setUser(userData);
+
+    localStorage.setItem("auth_token", data.token);
+    localStorage.setItem("auth_user", JSON.stringify(userData));
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -106,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     token,
     login,
+    loginWithGoogle,
     logout,
     isAuthenticated: !!token && !!user,
     hasRole,
