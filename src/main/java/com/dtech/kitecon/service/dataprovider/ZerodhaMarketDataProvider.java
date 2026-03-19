@@ -4,15 +4,14 @@ import com.dtech.algo.series.ExtendedBarSeries;
 import com.dtech.algo.series.Interval;
 import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.algo.strategy.config.BarSeriesConfig;
-import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.market.facade.MarketException;
+import com.dtech.kitecon.market.facade.MarketFacade;
+import com.dtech.kitecon.market.facade.MarketFacadeProvider;
 import com.dtech.kitecon.repository.InstrumentRepository;
-import com.zerodhatech.kiteconnect.KiteConnect;
-import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.HistoricalData;
 import com.zerodhatech.models.Quote;
 
-import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,7 +35,7 @@ import java.util.Map;
 @Slf4j
 public class ZerodhaMarketDataProvider implements MarketDataProvider {
 
-    private final KiteConnectConfig kiteConnectConfig;
+    private final MarketFacadeProvider marketFacadeProvider;
     private final InstrumentRepository instrumentRepository;
 
     @Override
@@ -47,8 +46,8 @@ public class ZerodhaMarketDataProvider implements MarketDataProvider {
     @Override
     public boolean isAvailable() {
         try {
-            KiteConnect kiteConnect = kiteConnectConfig.getKiteConnect();
-            return kiteConnect != null && kiteConnect.getAccessToken() != null;
+            MarketFacade facade = marketFacadeProvider.getFacade();
+            return facade != null && facade.isAvailable();
         } catch (Exception e) {
             log.warn("Zerodha provider not available: {}", e.getMessage());
             return false;
@@ -76,12 +75,12 @@ public class ZerodhaMarketDataProvider implements MarketDataProvider {
                 throw new IllegalArgumentException("Instrument not found: " + symbol);
             }
 
-            KiteConnect kiteConnect = kiteConnectConfig.getKiteConnect();
+            MarketFacade facade = marketFacadeProvider.getFacade();
             String[] instruments = {instrument.getExchange() + ":" + instrument.getTradingsymbol()};
 
-            Map<String, Quote> quotes = kiteConnect.getQuote(instruments);
+            Map<String, Quote> quotes = facade.getQuote(instruments);
             return quotes.get(instrument.getExchange() + ":" + instrument.getTradingsymbol());
-        } catch (KiteException | IOException e) {
+        } catch (MarketException e) {
             throw new Exception("Failed to get quote from Zerodha: " + e.getMessage(), e);
         }
     }
@@ -89,7 +88,7 @@ public class ZerodhaMarketDataProvider implements MarketDataProvider {
     @Override
     public Map<String, Quote> getQuotes(List<String> symbols) throws Exception {
         try {
-            KiteConnect kiteConnect = kiteConnectConfig.getKiteConnect();
+            MarketFacade facade = marketFacadeProvider.getFacade();
 
             // Resolve all symbols to instruments
             String[] instruments = symbols.stream()
@@ -100,8 +99,8 @@ public class ZerodhaMarketDataProvider implements MarketDataProvider {
                 .filter(inst -> inst != null)
                 .toArray(String[]::new);
 
-            return kiteConnect.getQuote(instruments);
-        } catch (KiteException | IOException e) {
+            return facade.getQuote(instruments);
+        } catch (MarketException e) {
             throw new Exception("Failed to get quotes from Zerodha: " + e.getMessage(), e);
         }
     }
@@ -115,14 +114,14 @@ public class ZerodhaMarketDataProvider implements MarketDataProvider {
         boolean continuous
     ) throws Exception {
         try {
-            KiteConnect kiteConnect = kiteConnectConfig.getKiteConnect();
+            MarketFacade facade = marketFacadeProvider.getFacade();
 
             Date fromDate = Date.from(from.atStartOfDay(ZoneId.systemDefault()).toInstant());
             Date toDate = Date.from(to.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant());
 
-            HistoricalData data = kiteConnect.getHistoricalData(fromDate, toDate, String.valueOf(instrumentToken), interval, continuous, false);
+            HistoricalData data = facade.getHistoricalData(fromDate, toDate, String.valueOf(instrumentToken), interval, continuous, false);
             return data != null && data.dataArrayList != null ? List.of(data) : List.of();
-        } catch (KiteException | IOException e) {
+        } catch (MarketException e) {
             throw new Exception("Failed to get historical data from Zerodha: " + e.getMessage(), e);
         }
     }

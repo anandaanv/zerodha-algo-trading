@@ -124,8 +124,12 @@ public class KiteConnectConfig {
         secretOpt.ifPresent(s -> this.secret = s.getPropValue());
     }
 
-    @Bean
-    public KiteConnect getKiteConnect() {
+    /**
+     * Get KiteConnect instance
+     * NOTE: Not a @Bean anymore - managed by MarketFacadeProvider
+     * Use MarketFacadeProvider.getFacade() instead for new code
+     */
+    KiteConnect getKiteConnect() {
         return kiteConnect;
     }
 
