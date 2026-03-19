@@ -141,7 +141,7 @@ public class ZerodhaMarketFacade implements MarketFacade {
     public String getLoginURL() throws MarketException {
         try {
             return kiteConnect.getLoginURL();
-        } catch (KiteException e) {
+        } catch (Exception e) {
             throw new MarketException("zerodha", extractErrorCode(e), "Failed to get login URL", e);
         }
     }
@@ -164,9 +164,9 @@ public class ZerodhaMarketFacade implements MarketFacade {
     // ==================== Helper Methods ====================
 
     /**
-     * Extract error code from KiteException
+     * Extract error code from exceptions
      */
-    private String extractErrorCode(Exception e) {
+    private String extractErrorCode(Throwable e) {
         if (e instanceof KiteException) {
             KiteException ke = (KiteException) e;
             // KiteException has error code and message

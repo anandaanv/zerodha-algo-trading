@@ -129,7 +129,7 @@ public class KiteConnectConfig {
      * NOTE: Not a @Bean anymore - managed by MarketFacadeProvider
      * Use MarketFacadeProvider.getFacade() instead for new code
      */
-    KiteConnect getKiteConnect() {
+    public KiteConnect getKiteConnect() {
         return kiteConnect;
     }
 
