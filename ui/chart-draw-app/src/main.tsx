@@ -11,6 +11,7 @@ import Dashboard from "./components/Dashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LegacyChartApp from "./legacy-chart/ProApp";
 import TVChartApp from "./tradingview/TVChartApp";
+import PromptBuilderPage from "./tradingview/PromptBuilderPage";
 import KiteLogin from "./components/KiteLogin";
 import KiteSuccess from "./components/KiteSuccess";
 
@@ -60,6 +61,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="USER">
               <TVChartApp />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/prompt-builder"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <PromptBuilderPage />
             </ProtectedRoute>
           }
         />

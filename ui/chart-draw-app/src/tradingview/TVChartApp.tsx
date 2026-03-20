@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import datafeed from './datafeed';
 import TVMultiPanelChart from './TVMultiPanelChart';
@@ -7,6 +8,7 @@ import { createSaveLoadAdapter, mapToObject } from './saveLoadAdapter';
 import AnalysisPanel from './AnalysisPanel';
 import ChartTabBar from './ChartTabBar';
 import AIChatOverlay from './AIChatOverlay';
+import PromptBuilderPage from './PromptBuilderPage';
 import {
   WorkspaceTab,
   WorkspaceLayout,
@@ -18,6 +20,7 @@ import {
   loadWorkspaceName,
   saveWorkspaceName,
   loadWorkspaceLayouts,
+  saveWorkspaceLayouts,
   getLastLayoutIdForSymbol,
   setLastLayoutIdForSymbol,
   updateWorkspaceLayout,
@@ -27,6 +30,7 @@ import WorkspaceLayoutModal from './WorkspaceLayoutModal';
 // TradingView types (loaded globally via script tag)
 declare const TradingView: any;
 
+
 export default function TVChartApp() {
   const [searchParams, setSearchParams] = useSearchParams();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -34,6 +38,7 @@ export default function TVChartApp() {
   const widgetReadyRef = useRef(false);
   const [isAnalysisPanelOpen, setIsAnalysisPanelOpen] = useState(false);
   const [isAiOverlayOpen, setIsAiOverlayOpen] = useState(false);
+  const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [layoutModalMode, setLayoutModalMode] = useState<'save' | 'load' | null>(null);
 
   // Parse URL parameters for initial defaults only
@@ -445,12 +450,22 @@ export default function TVChartApp() {
         onClose={closeTab}
         onRename={renameTab}
         onSaveLayout={() => {
+          const layoutTabs = tabs.map(t => ({ label: t.label, symbol: t.symbol, timeframe: t.timeframe }));
           if (currentLayoutId) {
-            // Overwrite current layout in place
-            const layoutTabs = tabs.map(t => ({ label: t.label, symbol: t.symbol, timeframe: t.timeframe }));
+            // Overwrite existing layout in place — no dialog
             updateWorkspaceLayout(currentLayoutId, layoutTabs);
           } else {
-            setLayoutModalMode('save');
+            // No layout saved yet — auto-create silently using workspace name
+            const layout = {
+              id: crypto.randomUUID(),
+              name: workspaceName || 'Default',
+              scope: 'ALL' as const,
+              tabs: layoutTabs,
+              createdAt: Date.now(),
+            };
+            saveWorkspaceLayouts([...loadWorkspaceLayouts(), layout]);
+            setLastLayoutIdForSymbol(workspaceName, layout.id);
+            setCurrentLayoutId(layout.id);
           }
         }}
         onSaveAsLayout={() => setLayoutModalMode('save')}
@@ -511,16 +526,28 @@ export default function TVChartApp() {
         </button>
       </div>
 
-      {/* AI Chat Overlay */}
-      <AIChatOverlay
-        open={isAiOverlayOpen}
-        onToggle={() => setIsAiOverlayOpen(prev => !prev)}
-        symbol={activeTab?.symbol || defaultSymbol}
-        timeframe={activeTab?.timeframe || rawTimeframe}
-        getChartState={getChartState}
-        tabs={tabs}
-        activeTabId={activeTabId}
-      />
+      {/* AI Chat Overlay — hidden when Prompt Builder is open */}
+      {!showPromptBuilder && (
+        <AIChatOverlay
+          open={isAiOverlayOpen}
+          onToggle={() => setIsAiOverlayOpen(prev => !prev)}
+          symbol={activeTab?.symbol || defaultSymbol}
+          timeframe={activeTab?.timeframe || rawTimeframe}
+          getChartState={getChartState}
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onOpenPromptBuilder={() => setShowPromptBuilder(true)}
+        />
+      )}
+
+      {/* Prompt Builder — rendered via portal into document.body so it
+          sits above the TradingView iframe stacking context */}
+      {showPromptBuilder && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99999 }}>
+          <PromptBuilderPage onClose={() => setShowPromptBuilder(false)} />
+        </div>,
+        document.body
+      )}
 
       {/* Analysis Panel (sidebar — fundamentals, news, snapshots) */}
       <AnalysisPanel

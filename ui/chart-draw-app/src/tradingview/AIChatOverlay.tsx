@@ -4,6 +4,9 @@ import {
   ChatMode, MultiChartChatResponse,
 } from './analysisApi';
 import { WorkspaceTab } from './workspaceTypes';
+import {
+  loadCustomPrompts, getLastUsedPromptId, setLastUsedPromptId,
+} from './promptTypes';
 
 interface Props {
   open: boolean;
@@ -13,6 +16,7 @@ interface Props {
   getChartState?: () => string;
   tabs?: WorkspaceTab[];
   activeTabId?: string;
+  onOpenPromptBuilder?: () => void;
 }
 
 interface ChatMessage {
@@ -45,12 +49,13 @@ function loadPanelW() { return Number(localStorage.getItem(PANEL_W_KEY)) || 460;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getChartState, tabs, activeTabId }: Props) {
+export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getChartState, tabs, activeTabId, onOpenPromptBuilder }: Props) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput]   = useState('');
   const [mode, setMode]     = useState<ChatMode>('VALIDATE');
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState<string | null>(null);
+  const [customPromptId, setCustomPromptId] = useState<string>(() => getLastUsedPromptId() ?? '');
 
   const [fontSizeLevel, setFontSizeLevel] = useState<FontSizeLevel>(loadFontSize);
   const [panelH, setPanelH] = useState(loadPanelH);
@@ -143,9 +148,13 @@ export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getCh
         const res: MultiChartChatResponse = await multiChartChatAnalysis({ charts, userMessage, mode });
         aiMessage = res.message;
       } else {
+        const selectedPrompt = customPromptId
+          ? loadCustomPrompts().find(p => p.id === customPromptId)
+          : null;
         const res = await technicalChatAnalysis({
           symbol, timeframe, chartStateJson, userMessage, mode,
           visibleFrom: p?.visibleFrom, visibleTo: p?.visibleTo,
+          customSystemPrompt: selectedPrompt?.promptText,
         });
         aiMessage = res.message;
       }
@@ -272,6 +281,38 @@ export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getCh
       }}>
         {loading && (
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#1976d2', flexShrink: 0 }} />
+        )}
+        {/* Prompt selector */}
+        <select
+          value={customPromptId}
+          onChange={e => {
+            setCustomPromptId(e.target.value);
+            setLastUsedPromptId(e.target.value || null);
+          }}
+          style={{
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: 6,
+            color: 'rgba(255,255,255,0.75)',
+            fontSize: fs.input - 2,
+            padding: '3px 4px',
+            flexShrink: 0,
+            maxWidth: 100,
+            cursor: 'pointer',
+          }}
+        >
+          <option value="">Default</option>
+          {loadCustomPrompts().map(p => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+        {/* Link to Prompt Builder */}
+        {onOpenPromptBuilder && (
+          <button
+            onClick={onOpenPromptBuilder}
+            title="Manage custom prompts"
+            style={{ ...btnStyle, fontSize: 12, color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}
+          >⚙</button>
         )}
         {mode === 'VALIDATE' ? (
           <textarea

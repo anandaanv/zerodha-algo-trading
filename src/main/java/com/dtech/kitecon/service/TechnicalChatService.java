@@ -35,7 +35,8 @@ public class TechnicalChatService {
 
         String message = openAI.technicalChatAnalysis(
             req.getSymbol(), req.getTimeframe(),
-            drawings, bars, req.getUserMessage(), req.getMode());
+            drawings, bars, req.getUserMessage(), req.getMode(),
+            req.getCustomSystemPrompt());
 
         return TechnicalChatResponse.builder()
             .message(message)

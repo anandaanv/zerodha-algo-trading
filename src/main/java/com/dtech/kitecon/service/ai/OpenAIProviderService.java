@@ -314,13 +314,14 @@ public class OpenAIProviderService implements AIProvider {
     }
 
     /**
-     * Technical chat analysis — REASON or VALIDATE mode
+     * Technical chat analysis — REASON or VALIDATE mode (or custom system prompt)
      */
     public String technicalChatAnalysis(
         String symbol, String timeframe,
         List<ValidationInput.Drawing> drawings,
         List<OhlcBarDTO> bars,
-        String userMessage, String mode
+        String userMessage, String mode,
+        String customSystemPrompt
     ) {
         try {
             if (openAIClient == null) {
@@ -328,15 +329,56 @@ public class OpenAIProviderService implements AIProvider {
                 return "AI analysis unavailable — OpenAI not configured.";
             }
 
-            String prompt = "REASON".equalsIgnoreCase(mode)
-                ? buildReasonPrompt(symbol, timeframe, drawings, bars)
-                : buildValidatePrompt(symbol, timeframe, drawings, bars, userMessage);
+            String prompt;
+            if (customSystemPrompt != null && !customSystemPrompt.isBlank()) {
+                prompt = buildCustomPrompt(customSystemPrompt, symbol, timeframe, drawings, bars, userMessage);
+            } else if ("REASON".equalsIgnoreCase(mode)) {
+                prompt = buildReasonPrompt(symbol, timeframe, drawings, bars);
+            } else {
+                prompt = buildValidatePrompt(symbol, timeframe, drawings, bars, userMessage);
+            }
 
             return callOpenAI(prompt);
         } catch (Exception e) {
             log.error("Error in technicalChatAnalysis", e);
             return "Unable to provide AI analysis at this time.";
         }
+    }
+
+    /** Backwards-compatible overload without customSystemPrompt. */
+    public String technicalChatAnalysis(
+        String symbol, String timeframe,
+        List<ValidationInput.Drawing> drawings,
+        List<OhlcBarDTO> bars,
+        String userMessage, String mode
+    ) {
+        return technicalChatAnalysis(symbol, timeframe, drawings, bars, userMessage, mode, null);
+    }
+
+    private String buildCustomPrompt(
+        String customSystemPrompt,
+        String symbol, String timeframe,
+        List<ValidationInput.Drawing> drawings,
+        List<OhlcBarDTO> bars,
+        String userMessage
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(customSystemPrompt).append("\n\n");
+        sb.append("Chart: **").append(symbol).append("** / ").append(timeframe).append("\n\n");
+
+        sb.append("=== DRAWINGS ON CHART ===\n");
+        appendDrawings(sb, drawings);
+        appendOhlcCsv(sb, bars);
+
+        sb.append(CHAT_SYSTEM_RULES);
+
+        if (userMessage != null && !userMessage.isBlank()) {
+            sb.append("\nTrader's message: \"").append(userMessage).append("\"\n");
+        } else {
+            sb.append("\nThe trader wants your analysis of their chart. Comment on the drawings and price action.\n");
+        }
+
+        return sb.toString();
     }
 
     private static final String CHAT_SYSTEM_RULES = """
@@ -432,6 +474,13 @@ public class OpenAIProviderService implements AIProvider {
                 DrawingDescriber.ts(bar.getTime()), bar.getOpen(), bar.getHigh(),
                 bar.getLow(), bar.getClose(), bar.getVolume()));
         }
+    }
+
+    /**
+     * Public alias so services outside this class can call OpenAI with a raw prompt.
+     */
+    public String callOpenAIRaw(String prompt) {
+        return callOpenAI(prompt);
     }
 
     /**
