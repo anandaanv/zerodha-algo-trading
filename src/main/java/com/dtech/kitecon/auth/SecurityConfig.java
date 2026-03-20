@@ -38,6 +38,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/", "/index.html", "/assets/**", "/static/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                        // WebSocket endpoint — JWT auth handled inside STOMP channel interceptor
+                        .requestMatchers("/ws/**").permitAll()
 
                         // Legal pages (required for Google OAuth)
                         .requestMatchers("/privacy-policy", "/privacy-policy.html", "/privacy").permitAll()
@@ -53,8 +55,9 @@ public class SecurityConfig {
                         .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/chart-state", "/api/layouts/**").hasAnyRole("MODERATOR", "ADMIN")
                         // Chart operations allow USER
                         .requestMatchers("/api/symbols", "/api/ohlc", "/api/chart-state/**", "/api/layouts/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
+                        .requestMatchers("/api/drawings/**", "/api/intervals/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart/**", "/api/screener/**", "/api/overlays/**")
-                              .hasAnyRole("MODERATOR", "ADMIN")
+                              .hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**", "/app", "/update-token").hasRole("ADMIN")
 

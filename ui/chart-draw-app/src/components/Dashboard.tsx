@@ -187,8 +187,8 @@ export default function Dashboard() {
         </div>
         )}
 
-        {/* Charts Card - MODERATOR, ADMIN */}
-        {hasRole("MODERATOR") && (
+        {/* Charts Card - all users */}
+        {hasRole("USER") && (
           <div
             onClick={() => navigate("/chart?indicators=true")}
             style={{

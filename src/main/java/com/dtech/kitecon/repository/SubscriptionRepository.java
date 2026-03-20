@@ -18,6 +18,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 
   List<Subscription> findAllByLatestTimestampIsNullAndStatus(String status);
 
+  List<Subscription> findAllByStatus(String status);
+
   // Helper to check if subscription already exists for a trading symbol
   boolean existsByTradingSymbol(String tradingSymbol);
 

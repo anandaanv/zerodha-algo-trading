@@ -100,7 +100,7 @@ public class DrawingExtractorService {
             JsonNode source = entry.getValue();
 
             try {
-                ValidationInput.Drawing drawing = parseSource(sourceId, source);
+                ValidationInput.Drawing drawing = parseSource(source);
                 if (drawing != null) {
                     drawings.add(drawing);
                 }
@@ -113,26 +113,32 @@ public class DrawingExtractorService {
     }
 
     /**
-     * Parse a single source into a Drawing
+     * Parse a single source into a Drawing.
+     * A drawing is included even if its points cannot be fully parsed — the AI
+     * still benefits from knowing the drawing type and label.
      */
-    private ValidationInput.Drawing parseSource(String sourceId, JsonNode source) {
-        if (!source.has("type")) {
+    private ValidationInput.Drawing parseSource(JsonNode source) {
+        // Accept both "type" and "toolname" — getChartState() uses "toolname || type"
+        String rawType = null;
+        if (source.has("type") && !source.get("type").isNull()) {
+            rawType = source.get("type").asText();
+        } else if (source.has("toolname") && !source.get("toolname").isNull()) {
+            rawType = source.get("toolname").asText();
+        }
+        if (rawType == null || rawType.isBlank()) {
             return null;
         }
 
-        String type = source.get("type").asText();
+        String normalizedType = normalizeDrawingType(rawType);
 
-        // Map TradingView type names to our normalized types
-        String normalizedType = normalizeDrawingType(type);
-
-        // Extract points
+        // Try extracting points from the node itself, then fall back to the
+        // nested "state" object that TradingView's getLineToolsState() uses.
         List<ValidationInput.Point> points = extractPoints(source);
-
-        if (points.isEmpty()) {
-            return null;
+        if (points.isEmpty() && source.has("state")) {
+            points = extractPoints(source.get("state"));
         }
 
-        // Extract properties
+        // Don't require points — a type-only drawing still gives the AI context.
         ValidationInput.DrawingProperties properties = extractProperties(source);
 
         return ValidationInput.Drawing.builder()
@@ -205,25 +211,40 @@ public class DrawingExtractorService {
     }
 
     /**
-     * Parse a single point
+     * Parse a single point. TradingView uses several different field names:
+     *  - { time_t, price }       ← getLineToolsState() format (actual data)
+     *  - { time,   price }       ← chart.save() format
+     *  - { timestamp, price }
+     *  - { x, y }
+     *
+     * Rules:
+     *  - price == 0 is the only hard discard.
+     *  - timestamp == 0 is allowed (horizontal lines have no time anchor).
+     *  - ms timestamps (> 1e10) are normalised to seconds.
      */
     private ValidationInput.Point parsePoint(JsonNode pointNode) {
         if (pointNode == null || !pointNode.isObject()) {
             return null;
         }
 
-        // TradingView typically uses 'time' and 'price' or 'index' and 'value'
         long timestamp = 0;
         double price = 0;
 
-        if (pointNode.has("time")) {
+        // --- timestamp (time_t is the actual TradingView field name) ---
+        if (pointNode.has("time_t")) {
+            timestamp = pointNode.get("time_t").asLong();
+        } else if (pointNode.has("time")) {
             timestamp = pointNode.get("time").asLong();
         } else if (pointNode.has("timestamp")) {
             timestamp = pointNode.get("timestamp").asLong();
         } else if (pointNode.has("x")) {
             timestamp = pointNode.get("x").asLong();
         }
+        if (timestamp > 10_000_000_000L) {
+            timestamp = timestamp / 1000;
+        }
 
+        // --- price ---
         if (pointNode.has("price")) {
             price = pointNode.get("price").asDouble();
         } else if (pointNode.has("value")) {
@@ -232,7 +253,7 @@ public class DrawingExtractorService {
             price = pointNode.get("y").asDouble();
         }
 
-        if (timestamp == 0 || price == 0) {
+        if (price == 0) {
             return null;
         }
 
@@ -243,38 +264,43 @@ public class DrawingExtractorService {
     }
 
     /**
-     * Extract drawing properties (color, line width, etc.)
+     * Extract drawing properties.
+     * After the getChartState() fix, visual properties arrive inside a nested
+     * "properties" node (which maps to inner.state in TradingView's structure).
+     * We check both the node itself and its "properties" child so both the
+     * chart.save() format and the getLineToolsState() format work.
      */
     private ValidationInput.DrawingProperties extractProperties(JsonNode source) {
         ValidationInput.DrawingProperties.DrawingPropertiesBuilder builder =
             ValidationInput.DrawingProperties.builder();
 
-        if (source.has("linecolor") || source.has("color")) {
-            String color = source.has("linecolor") ?
-                source.get("linecolor").asText() :
-                source.get("color").asText();
-            builder.color(color);
+        // Resolve the node that actually holds visual props.
+        // After our TVChartApp fix: { type, points, properties: { linecolor, ... } }
+        JsonNode props = source;
+        if (source.has("properties") && source.get("properties").isObject()) {
+            props = source.get("properties");
         }
 
-        if (source.has("linewidth") || source.has("width")) {
-            int width = source.has("linewidth") ?
-                source.get("linewidth").asInt() :
-                source.get("width").asInt();
-            builder.lineWidth(width);
+        if (props.has("linecolor") || props.has("color")) {
+            builder.color(props.has("linecolor") ? props.get("linecolor").asText() : props.get("color").asText());
         }
 
-        if (source.has("linestyle") || source.has("style")) {
-            String style = source.has("linestyle") ?
-                source.get("linestyle").asText() :
-                source.get("style").asText();
-            builder.lineStyle(normalizeLineStyle(style));
+        if (props.has("linewidth") || props.has("width")) {
+            builder.lineWidth(props.has("linewidth") ? props.get("linewidth").asInt() : props.get("width").asInt());
         }
 
-        if (source.has("text") || source.has("label")) {
-            String label = source.has("text") ?
-                source.get("text").asText() :
-                source.get("label").asText();
-            builder.label(label);
+        if (props.has("linestyle") || props.has("style")) {
+            builder.lineStyle(normalizeLineStyle(
+                props.has("linestyle") ? props.get("linestyle").asText() : props.get("style").asText()));
+        }
+
+        // "title" is more reliable than "text" for user-set labels in TradingView
+        if (props.has("title") && !props.get("title").asText().isBlank()) {
+            builder.label(props.get("title").asText());
+        } else if (props.has("text") && !props.get("text").asText().isBlank()) {
+            builder.label(props.get("text").asText());
+        } else if (props.has("label")) {
+            builder.label(props.get("label").asText());
         }
 
         return builder.build();
@@ -307,7 +333,7 @@ public class DrawingExtractorService {
         if (drawings.isArray()) {
             for (JsonNode drawing : drawings) {
                 try {
-                    ValidationInput.Drawing parsed = parseSource(null, drawing);
+                    ValidationInput.Drawing parsed = parseSource(drawing);
                     if (parsed != null) {
                         result.add(parsed);
                     }

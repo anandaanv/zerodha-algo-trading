@@ -1,5 +1,6 @@
 // Simplified TradingView Datafeed
-import { fetchSymbols, fetchOHLC, fetchIntervalMapping, type SymbolItem } from './tvApi';
+import { Client, type StompSubscription } from '@stomp/stompjs';
+import { fetchSymbols, fetchOHLC, fetchIntervalMapping, subscribeSymbol, type SymbolItem } from './tvApi';
 
 const resolutionToInterval: Record<string, string> = {};
 let intervalMapping: Record<string, string> = {};
@@ -9,6 +10,43 @@ const CACHE_DURATION = 5 * 60 * 1000;
 const lastBarsCache = new Map<string, any>();
 const getBarsCache = new Map<string, { data: any[], timestamp: number, oldestTime: number }>();
 const BARS_CACHE_DURATION = 60 * 1000;
+
+// ── STOMP real-time state ────────────────────────────────────────────────────
+let stompClient: Client | null = null;
+// Map from subscriberUID → StompSubscription (active)
+const activeSubscriptions = new Map<string, {
+  sub: StompSubscription;
+  symbol: string;
+  interval: string;
+}>();
+// Queue of subscribe calls that arrived before the connection was established
+const pendingSubscriptions: Array<() => void> = [];
+
+function ensureStompClient(): Client {
+  if (stompClient) return stompClient;
+
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`;
+  const jwtToken = localStorage.getItem('auth_token');
+
+  stompClient = new Client({
+    brokerURL: wsUrl,
+    connectHeaders: jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {},
+    reconnectDelay: 5000,
+    onConnect: () => {
+      // Flush all subscriptions that were queued before connection
+      const pending = pendingSubscriptions.splice(0);
+      pending.forEach(fn => fn());
+    },
+    onStompError: (frame) => {
+      console.error('[STOMP] error', frame);
+    },
+  });
+
+  stompClient.activate();
+  return stompClient;
+}
+
+// ── End STOMP state ──────────────────────────────────────────────────────────
 
 const configurationData = {
   supported_resolutions: ['1', '3', '5', '15', '30', '60', '120', '1D', '1W', '1M'],
@@ -182,8 +220,63 @@ const datafeed: any = {
     }
   },
 
-  subscribeBars: () => {},
-  unsubscribeBars: () => {},
+  subscribeBars: (
+    symbolInfo: any,
+    resolution: string,
+    onRealtimeCallback: (bar: any) => void,
+    subscriberUID: string,
+    _onResetCacheNeededCallback: () => void,
+  ) => {
+    const interval = resolutionToInterval[resolution] || 'OneHour';
+    const symbol = symbolInfo.ticker || symbolInfo.name;
+
+    // Ensure the backend is streaming ticks for this symbol
+    subscribeSymbol(symbol);
+
+    const topic = `/topic/bars/${symbol}/${interval}`;
+
+    const client = ensureStompClient();
+
+    const doSubscribe = () => {
+      const stompSub = client.subscribe(topic, (message) => {
+        try {
+          const msg = JSON.parse(message.body);
+          // Server sends epoch seconds; TradingView expects milliseconds
+          onRealtimeCallback({
+            time: msg.time * 1000,
+            open: msg.open,
+            high: msg.high,
+            low: msg.low,
+            close: msg.close,
+            volume: msg.volume ?? 0,
+          });
+        } catch (e) {
+          console.error('[subscribeBars] parse error', e);
+        }
+      });
+      activeSubscriptions.set(subscriberUID, { sub: stompSub, symbol, interval });
+    };
+
+    if (client.connected) {
+      doSubscribe();
+    } else {
+      // Queue until onConnect fires
+      pendingSubscriptions.push(doSubscribe);
+    }
+  },
+
+  unsubscribeBars: (subscriberUID: string) => {
+    const entry = activeSubscriptions.get(subscriberUID);
+    if (entry) {
+      try { entry.sub.unsubscribe(); } catch { /* already gone */ }
+      activeSubscriptions.delete(subscriberUID);
+    }
+    // Disconnect STOMP if no more subscriptions
+    if (activeSubscriptions.size === 0 && stompClient?.connected) {
+      stompClient.deactivate();
+      stompClient = null;
+    }
+  },
 };
 
 export default datafeed;

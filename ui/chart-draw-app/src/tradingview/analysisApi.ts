@@ -63,6 +63,22 @@ export interface StockAnalysisResponse {
   socialSentiment: SocialSentimentData;
 }
 
+export type ChatMode = 'REASON' | 'VALIDATE';
+
+export interface TechnicalChatRequest {
+  symbol: string;
+  timeframe: string;
+  chartStateJson: string;
+  userMessage?: string;
+  mode: ChatMode;
+}
+
+export interface TechnicalChatResponse {
+  message: string;
+  drawingCount: number;
+  mode: ChatMode;
+}
+
 // ============ API Functions ============
 
 /**
@@ -149,6 +165,20 @@ export async function getSocialSentiment(symbol: string): Promise<SocialSentimen
   }
 
   return await response.json();
+}
+
+/**
+ * Technical AI chat — REASON or VALIDATE mode
+ */
+export async function technicalChatAnalysis(req: TechnicalChatRequest): Promise<TechnicalChatResponse> {
+  const url = getApiUrl('/api/analysis/technical-chat');
+  const res = await apiFetch(url.toString(), withAuth({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  }));
+  if (!res.ok) throw new Error(`Technical chat failed: ${res.status}`);
+  return res.json();
 }
 
 /**
