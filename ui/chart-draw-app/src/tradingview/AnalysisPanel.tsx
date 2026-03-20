@@ -1,8 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { analyzeStock, StockAnalysisResponse, technicalChatAnalysis, ChatMode, TechnicalChatResponse } from './analysisApi';
+import {
+  analyzeStock, StockAnalysisResponse,
+  technicalChatAnalysis, ChatMode, TechnicalChatResponse,
+  multiChartChatAnalysis, MultiChartChatResponse,
+} from './analysisApi';
 import { createSnapshot, SnapshotRequest, SnapshotResult } from './snapshotApi';
 import { apiFetch, getApiUrl } from '../config/api';
 import { withAuth } from '../utils/apiHelper';
+import { WorkspaceTab } from './workspaceTypes';
 
 interface AnalysisPanelProps {
   open: boolean;
@@ -10,6 +15,8 @@ interface AnalysisPanelProps {
   timeframe: string;
   onClose: () => void;
   getChartState?: () => string;
+  tabs?: WorkspaceTab[];
+  activeTabId?: string;
 }
 
 type TabType = 'fundamentals' | 'news' | 'correlation' | 'social' | 'snapshot' | 'technical-ai';
@@ -20,7 +27,7 @@ interface ChatMessage {
   timestamp: number;
 }
 
-export default function AnalysisPanel({ open, symbol, timeframe, onClose, getChartState }: AnalysisPanelProps) {
+export default function AnalysisPanel({ open, symbol, timeframe, onClose, getChartState, tabs, activeTabId }: AnalysisPanelProps) {
   const [activeTab, setActiveTab] = useState<TabType>('fundamentals');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +40,9 @@ export default function AnalysisPanel({ open, symbol, timeframe, onClose, getCha
   const [chatError, setChatError] = useState<string | null>(null);
   const [publicSnapshots, setPublicSnapshots] = useState<any[]>([]);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const [multiChatLoading, setMultiChatLoading] = useState(false);
+  const [multiChatError, setMultiChatError] = useState<string | null>(null);
+  const [multiValidateInput, setMultiValidateInput] = useState('');
 
   useEffect(() => {
     if (open && symbol) fetchAnalysis();
@@ -87,14 +97,73 @@ export default function AnalysisPanel({ open, symbol, timeframe, onClose, getCha
     setChatError(null);
     try {
       const chartStateJson = getChartState();
+      // Extract visible range embedded by getChartState()
+      let visibleFrom: number | undefined;
+      let visibleTo: number | undefined;
+      try {
+        const parsed = JSON.parse(chartStateJson);
+        visibleFrom = parsed.visibleFrom;
+        visibleTo = parsed.visibleTo;
+      } catch { /* ignore */ }
+
       const response: TechnicalChatResponse = await technicalChatAnalysis({
-        symbol, timeframe, chartStateJson, userMessage, mode,
+        symbol, timeframe, chartStateJson, userMessage, mode, visibleFrom, visibleTo,
       });
       setChatHistory(prev => [...prev, { role: 'ai', content: response.message, timestamp: Date.now() }]);
     } catch (err) {
       setChatError(err instanceof Error ? err.message : 'AI request failed');
     } finally {
       setChatLoading(false);
+    }
+  };
+
+  const sendMultiChartMessage = async (mode: ChatMode) => {
+    if (!tabs || tabs.length < 2) return;
+    if (!getChartState) {
+      setMultiChatError('Chart not available.');
+      return;
+    }
+    const userMessage = mode === 'VALIDATE' ? multiValidateInput.trim() : undefined;
+    if (mode === 'VALIDATE' && !userMessage) return;
+
+    const displayMessage = mode === 'REASON'
+      ? `Multi-chart: Reason ${tabs.length} charts`
+      : `Multi-chart validate: ${userMessage}`;
+    setChatHistory(prev => [...prev, { role: 'user', content: displayMessage, timestamp: Date.now() }]);
+    if (mode === 'VALIDATE') setMultiValidateInput('');
+    setMultiChatLoading(true);
+    setMultiChatError(null);
+    try {
+      // Build chart contexts: active tab from live chart, others from stored state
+      const activeChartStateJson = getChartState();
+      let activeVisibleFrom: number | undefined;
+      let activeVisibleTo: number | undefined;
+      try {
+        const activeParsed = JSON.parse(activeChartStateJson);
+        activeVisibleFrom = activeParsed.visibleFrom;
+        activeVisibleTo = activeParsed.visibleTo;
+      } catch { /* ignore */ }
+
+      const charts = tabs.map(tab => {
+        const isActive = tab.id === activeTabId;
+        return {
+          label: tab.label,
+          symbol: tab.symbol,
+          timeframe: tab.timeframe,
+          chartStateJson: isActive ? activeChartStateJson : (tab.drawingsState || '{}'),
+          visibleFrom: isActive ? activeVisibleFrom : tab.visibleFrom,
+          visibleTo: isActive ? activeVisibleTo : tab.visibleTo,
+        };
+      });
+
+      const response: MultiChartChatResponse = await multiChartChatAnalysis({
+        charts, userMessage, mode,
+      });
+      setChatHistory(prev => [...prev, { role: 'ai', content: response.message, timestamp: Date.now() }]);
+    } catch (err) {
+      setMultiChatError(err instanceof Error ? err.message : 'Multi-chart AI request failed');
+    } finally {
+      setMultiChatLoading(false);
     }
   };
 
@@ -161,6 +230,13 @@ export default function AnalysisPanel({ open, symbol, timeframe, onClose, getCha
               onValidateInputChange={setValidateInput}
               onReason={() => sendChatMessage('REASON')}
               onValidate={() => sendChatMessage('VALIDATE')}
+              tabs={tabs}
+              multiChatLoading={multiChatLoading}
+              multiChatError={multiChatError}
+              multiValidateInput={multiValidateInput}
+              onMultiValidateInputChange={setMultiValidateInput}
+              onMultiReason={() => sendMultiChartMessage('REASON')}
+              onMultiValidate={() => sendMultiChartMessage('VALIDATE')}
             />
           )}
         </div>
@@ -442,14 +518,28 @@ interface TechnicalAITabProps {
   onValidateInputChange: (v: string) => void;
   onReason: () => void;
   onValidate: () => void;
+  // Multi-chart
+  tabs?: WorkspaceTab[];
+  multiChatLoading: boolean;
+  multiChatError: string | null;
+  multiValidateInput: string;
+  onMultiValidateInputChange: (v: string) => void;
+  onMultiReason: () => void;
+  onMultiValidate: () => void;
 }
 
 function TechnicalAITab({
   chatHistory, chatLoading, chatError, validateInput, publicSnapshots,
   chatBottomRef, onValidateInputChange, onReason, onValidate,
+  tabs, multiChatLoading, multiChatError, multiValidateInput,
+  onMultiValidateInputChange, onMultiReason, onMultiValidate,
 }: TechnicalAITabProps) {
+  const hasMultipleCharts = tabs && tabs.length >= 2;
+  const isAnyLoading = chatLoading || multiChatLoading;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {/* Chat history — shared between single and multi chart */}
       <div style={styles.chatHistory}>
         {chatHistory.length === 0 && (
           <div style={styles.chatEmpty}>
@@ -461,14 +551,17 @@ function TechnicalAITab({
             {msg.content}
           </div>
         ))}
-        {chatLoading && <div style={styles.chatBubbleAi}>Thinking...</div>}
+        {isAnyLoading && <div style={styles.chatBubbleAi}>Thinking...</div>}
         <div ref={chatBottomRef} />
       </div>
 
       {chatError && <div style={styles.error}>{chatError}</div>}
 
-      <button onClick={onReason} disabled={chatLoading}
-        style={{ ...styles.reasonButton, opacity: chatLoading ? 0.6 : 1 }}>
+      {/* Single-chart controls */}
+      <div style={styles.sectionLabel}>This chart</div>
+
+      <button onClick={onReason} disabled={isAnyLoading}
+        style={{ ...styles.reasonButton, opacity: isAnyLoading ? 0.6 : 1 }}>
         Reason my drawings
       </button>
 
@@ -478,16 +571,49 @@ function TechnicalAITab({
           placeholder="Type a claim to validate..."
           value={validateInput}
           onChange={e => onValidateInputChange(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !chatLoading && validateInput.trim() && onValidate()}
-          disabled={chatLoading}
+          onKeyDown={e => e.key === 'Enter' && !isAnyLoading && validateInput.trim() && onValidate()}
+          disabled={isAnyLoading}
           style={styles.validateInput}
         />
-        <button onClick={onValidate} disabled={chatLoading || !validateInput.trim()}
-          style={{ ...styles.validateButton, opacity: chatLoading || !validateInput.trim() ? 0.6 : 1 }}>
+        <button onClick={onValidate} disabled={isAnyLoading || !validateInput.trim()}
+          style={{ ...styles.validateButton, opacity: isAnyLoading || !validateInput.trim() ? 0.6 : 1 }}>
           Validate
         </button>
       </div>
 
+      {/* Multi-chart controls — only when 2+ tabs exist */}
+      {hasMultipleCharts && (
+        <div style={styles.multiChartSection}>
+          <div style={styles.sectionLabel}>
+            All charts ({tabs!.length}: {tabs!.map(t => `${t.label} ${t.timeframe}`).join(', ')})
+          </div>
+
+          {multiChatError && <div style={styles.error}>{multiChatError}</div>}
+
+          <button onClick={onMultiReason} disabled={isAnyLoading}
+            style={{ ...styles.multiReasonButton, opacity: isAnyLoading ? 0.6 : 1 }}>
+            Reason all charts
+          </button>
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+            <input
+              type="text"
+              placeholder="Cross-chart claim to validate..."
+              value={multiValidateInput}
+              onChange={e => onMultiValidateInputChange(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !isAnyLoading && multiValidateInput.trim() && onMultiValidate()}
+              disabled={isAnyLoading}
+              style={styles.validateInput}
+            />
+            <button onClick={onMultiValidate} disabled={isAnyLoading || !multiValidateInput.trim()}
+              style={{ ...styles.validateButton, opacity: isAnyLoading || !multiValidateInput.trim() ? 0.6 : 1 }}>
+              Validate
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Community views */}
       <div>
         <h3 style={styles.sectionTitle}>Community Views</h3>
         {publicSnapshots.length === 0 ? (
@@ -693,6 +819,9 @@ const styles: Record<string, React.CSSProperties> = {
   reasonButton: { width: '100%', padding: '10px', backgroundColor: '#7b1fa2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 },
   validateInput: { flex: 1, padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '13px', outline: 'none' },
   validateButton: { padding: '8px 16px', backgroundColor: '#388e3c', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 },
+  sectionLabel: { fontSize: '11px', fontWeight: 600, color: '#888', textTransform: 'uppercase' as const, letterSpacing: '0.5px' },
+  multiChartSection: { padding: '10px', backgroundColor: '#f3e5f5', borderRadius: '6px', display: 'flex', flexDirection: 'column' as const, gap: '8px' },
+  multiReasonButton: { width: '100%', padding: '10px', backgroundColor: '#512da8', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '14px', fontWeight: 600 },
 };
 
 // ============ Styles — SnapshotTab ============

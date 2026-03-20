@@ -15,4 +15,6 @@ public class TechnicalChatRequest {
     private String chartStateJson;  // full state from getChartState()
     private String userMessage;     // null in REASON mode
     private String mode;            // "REASON" or "VALIDATE"
+    private Long visibleFrom;       // epoch seconds — visible range start (nullable)
+    private Long visibleTo;         // epoch seconds — visible range end (nullable)
 }

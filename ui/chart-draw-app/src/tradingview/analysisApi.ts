@@ -71,6 +71,30 @@ export interface TechnicalChatRequest {
   chartStateJson: string;
   userMessage?: string;
   mode: ChatMode;
+  visibleFrom?: number;   // epoch seconds, from chart's visible range
+  visibleTo?: number;
+}
+
+export interface MultiChartContext {
+  label: string;
+  symbol: string;
+  timeframe: string;
+  chartStateJson: string;
+  visibleFrom?: number;
+  visibleTo?: number;
+}
+
+export interface MultiChartChatRequest {
+  charts: MultiChartContext[];
+  userMessage?: string;
+  mode: ChatMode;
+}
+
+export interface MultiChartChatResponse {
+  message: string;
+  chartCount: number;
+  totalDrawingCount: number;
+  mode: string;
 }
 
 export interface TechnicalChatResponse {
@@ -178,6 +202,20 @@ export async function technicalChatAnalysis(req: TechnicalChatRequest): Promise<
     body: JSON.stringify(req),
   }));
   if (!res.ok) throw new Error(`Technical chat failed: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Multi-chart AI analysis — reason/validate across 2+ chart contexts
+ */
+export async function multiChartChatAnalysis(req: MultiChartChatRequest): Promise<MultiChartChatResponse> {
+  const url = getApiUrl('/api/analysis/multi-chart-chat');
+  const res = await apiFetch(url.toString(), withAuth({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  }));
+  if (!res.ok) throw new Error(`Multi-chart analysis failed: ${res.status}`);
   return res.json();
 }
 
