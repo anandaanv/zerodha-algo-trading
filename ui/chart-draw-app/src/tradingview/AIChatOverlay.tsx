@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   technicalChatAnalysis, multiChartChatAnalysis,
   ChatMode, MultiChartChatResponse,
@@ -21,10 +21,11 @@ interface ChatMessage {
   timestamp: number;
 }
 
-const INITIAL_W = 540;
-const INITIAL_H = 560;
-const GEOMETRY_KEY = 'ai_chat_overlay_geometry';
+// ─── Persistence ──────────────────────────────────────────────────────────────
+
 const FONT_SIZE_KEY = 'ai_chat_font_size';
+const PANEL_H_KEY  = 'ai_chat_panel_h';
+const PANEL_W_KEY  = 'ai_chat_panel_w';
 
 type FontSizeLevel = 'tiny' | 'small' | 'medium' | 'large';
 const FONT_SIZES: Record<FontSizeLevel, { msg: number; input: number; label: string }> = {
@@ -37,134 +38,83 @@ const FONT_SIZE_ORDER: FontSizeLevel[] = ['tiny', 'small', 'medium', 'large'];
 
 function loadFontSize(): FontSizeLevel {
   const s = localStorage.getItem(FONT_SIZE_KEY);
-  if (s && FONT_SIZE_ORDER.includes(s as FontSizeLevel)) return s as FontSizeLevel;
-  return 'small';
+  return (s && FONT_SIZE_ORDER.includes(s as FontSizeLevel)) ? s as FontSizeLevel : 'small';
 }
-function saveFontSize(f: FontSizeLevel) {
-  try { localStorage.setItem(FONT_SIZE_KEY, f); } catch { /* ignore */ }
-}
+function loadPanelH() { return Number(localStorage.getItem(PANEL_H_KEY)) || 420; }
+function loadPanelW() { return Number(localStorage.getItem(PANEL_W_KEY)) || 460; }
 
-function loadGeometry() {
-  try {
-    const s = localStorage.getItem(GEOMETRY_KEY);
-    if (s) return JSON.parse(s) as { x: number; y: number; w: number; h: number };
-  } catch { /* ignore */ }
-  return null;
-}
-
-function saveGeometry(g: { x: number; y: number; w: number; h: number }) {
-  try { localStorage.setItem(GEOMETRY_KEY, JSON.stringify(g)); } catch { /* ignore */ }
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getChartState, tabs, activeTabId }: Props) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [mode, setMode] = useState<ChatMode>('VALIDATE');
+  const [input, setInput]   = useState('');
+  const [mode, setMode]     = useState<ChatMode>('VALIDATE');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
+
   const [fontSizeLevel, setFontSizeLevel] = useState<FontSizeLevel>(loadFontSize);
+  const [panelH, setPanelH] = useState(loadPanelH);
+  const [panelW, setPanelW] = useState(loadPanelW);
+
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+  const inputRef      = useRef<HTMLTextAreaElement>(null);
+  const panelRef      = useRef<HTMLDivElement>(null);
+  const wasHiddenRef  = useRef(false);
+
+  const fs = FONT_SIZES[fontSizeLevel];
 
   const cycleFont = () => {
     setFontSizeLevel(prev => {
       const next = FONT_SIZE_ORDER[(FONT_SIZE_ORDER.indexOf(prev) + 1) % FONT_SIZE_ORDER.length];
-      saveFontSize(next);
+      try { localStorage.setItem(FONT_SIZE_KEY, next); } catch { /* ignore */ }
       return next;
     });
   };
 
-  const fs = FONT_SIZES[fontSizeLevel];
-
-  // Position + size — restored from localStorage
-  const savedGeo = loadGeometry();
-  const [pos, setPos] = useState({
-    x: savedGeo?.x ?? 24,
-    y: savedGeo?.y ?? window.innerHeight - INITIAL_H - 24,
-  });
-  const [size, setSize] = useState({
-    w: savedGeo?.w ?? INITIAL_W,
-    h: savedGeo?.h ?? INITIAL_H,
-  });
-
-  const panelRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ startX: number; startY: number; startPosX: number; startPosY: number } | null>(null);
-
-  const chatBottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const wasHiddenDuringLoad = useRef(false);
-
-  // ─── Scroll to bottom on new messages ───────────────────────────────────
+  // ─── Auto-scroll ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!collapsed) chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, loading]);
 
-  // ─── Auto-reopen when AI responds while hidden ───────────────────────────
+  // ─── Auto-reopen when AI responds while panel hidden ──────────────────────
   useEffect(() => {
-    if (loading && (!open || collapsed)) wasHiddenDuringLoad.current = true;
-    if (!loading && wasHiddenDuringLoad.current) {
-      wasHiddenDuringLoad.current = false;
+    if (loading && !open) wasHiddenRef.current = true;
+    if (!loading && wasHiddenRef.current) {
+      wasHiddenRef.current = false;
       if (!open) onToggle();
-      setCollapsed(false);
     }
   }, [loading]);
 
+  // ─── Focus input when panel opens ─────────────────────────────────────────
   useEffect(() => {
-    if (open && !collapsed) setTimeout(() => inputRef.current?.focus(), 60);
-  }, [open, collapsed]);
+    if (open) setTimeout(() => inputRef.current?.focus(), 60);
+  }, [open]);
 
-  // ─── Dragging ────────────────────────────────────────────────────────────
-  const onMouseDownHeader = useCallback((e: React.MouseEvent) => {
-    // Don't drag when clicking buttons
-    if ((e.target as HTMLElement).tagName === 'BUTTON') return;
-    dragRef.current = { startX: e.clientX, startY: e.clientY, startPosX: pos.x, startPosY: pos.y };
-    e.preventDefault();
-  }, [pos]);
+  // ─── Set initial size directly on DOM — bypasses React style re-renders ───
+  useLayoutEffect(() => {
+    if (panelRef.current) {
+      panelRef.current.style.width  = loadPanelW() + 'px';
+      panelRef.current.style.height = loadPanelH() + 'px';
+    }
+  }, []); // once on mount only
 
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragRef.current) return;
-      const dx = e.clientX - dragRef.current.startX;
-      const dy = e.clientY - dragRef.current.startY;
-      setPos(prev => {
-        const next = {
-          x: Math.max(0, Math.min(window.innerWidth - 100, dragRef.current!.startPosX + dx)),
-          y: Math.max(0, Math.min(window.innerHeight - 40, dragRef.current!.startPosY + dy)),
-        };
-        return next;
-      });
-    };
-    const onUp = () => {
-      if (dragRef.current && panelRef.current) {
-        const rect = panelRef.current.getBoundingClientRect();
-        setPos(prev => { saveGeometry({ x: prev.x, y: prev.y, w: rect.width, h: rect.height }); return prev; });
-      }
-      dragRef.current = null;
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-    return () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-  }, []);
-
-  // ─── ResizeObserver — persist size when user drags resize handle ─────────
+  // ─── ResizeObserver — persist panel size ──────────────────────────────────
   useEffect(() => {
     if (!panelRef.current) return;
     const obs = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        const w = Math.round(width);
-        const h = Math.round(height);
-        setSize({ w, h });
-        setPos(prev => { saveGeometry({ x: prev.x, y: prev.y, w, h }); return prev; });
+      const { width, height } = entries[0].contentRect;
+      const w = Math.round(width);
+      const h = Math.round(height);
+      if (w > 50 && h > 50) {  // ignore spurious near-zero values when hidden
+        setPanelW(w); setPanelH(h);
+        try { localStorage.setItem(PANEL_W_KEY, String(w)); localStorage.setItem(PANEL_H_KEY, String(h)); } catch { /* ignore */ }
       }
     });
     obs.observe(panelRef.current);
     return () => obs.disconnect();
-  }, [open]); // re-attach when panel mounts/unmounts
+  }, []);  // mount once — panel div never unmounts now
 
-  // ─── Send message ────────────────────────────────────────────────────────
+  // ─── Send ─────────────────────────────────────────────────────────────────
   const send = async (multiChart = false) => {
     if (!getChartState) { setError('Chart not ready'); return; }
     const userMessage = mode === 'VALIDATE' ? input.trim() : undefined;
@@ -176,8 +126,7 @@ export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getCh
 
     setChatHistory(prev => [...prev, { role: 'user', content: display, timestamp: Date.now() }]);
     if (userMessage) setInput('');
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
 
     try {
       const chartStateJson = getChartState();
@@ -189,7 +138,7 @@ export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getCh
           label: tab.label, symbol: tab.symbol, timeframe: tab.timeframe,
           chartStateJson: tab.id === activeTabId ? chartStateJson : (tab.drawingsState || '{}'),
           visibleFrom: tab.id === activeTabId ? p?.visibleFrom : tab.visibleFrom,
-          visibleTo: tab.id === activeTabId ? p?.visibleTo : tab.visibleTo,
+          visibleTo:   tab.id === activeTabId ? p?.visibleTo   : tab.visibleTo,
         }));
         const res: MultiChartChatResponse = await multiChartChatAnalysis({ charts, userMessage, mode });
         aiMessage = res.message;
@@ -209,230 +158,231 @@ export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getCh
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !loading) send(false);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !loading) { e.preventDefault(); send(false); }
     if (e.key === 'Escape') onToggle();
   };
 
   const hasMultiCharts = tabs && tabs.length >= 2;
 
-  if (!open) return null;
-
   return (
-    <div
-      ref={panelRef}
-      style={{
-        position: 'fixed',
-        left: pos.x,
-        top: pos.y,
-        width: size.w,
-        maxWidth: 'calc(100vw - 48px)',
-        maxHeight: 'calc(100vh - 48px)',
-        minWidth: 280,
-        minHeight: 42,
-        height: collapsed ? 'auto' : size.h,
-        resize: collapsed ? 'none' : 'both',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRadius: 12,
-        zIndex: 9998,
-        // Very transparent — chart fully visible through it
-        background: 'rgba(255, 255, 255, 0.12)',
-        backdropFilter: 'blur(6px)',
-        WebkitBackdropFilter: 'blur(6px)',
-        border: '1px solid rgba(255, 255, 255, 0.25)',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-      }}
-    >
-      {/* Header — drag handle */}
+    <div style={{
+      position: 'fixed',
+      bottom: 16,
+      left: 16,
+      width: 'max-content',
+      minWidth: 320,
+      maxWidth: 'calc(100vw - 32px)',
+      zIndex: 9998,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'stretch',
+    }}>
+
+      {/* ── History panel — always mounted, hidden when closed so resize is preserved ── */}
+      {/* width/height set once via useLayoutEffect — React never re-sets them */}
       <div
+        ref={panelRef}
         style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '6px 10px', borderBottom: collapsed ? 'none' : '1px solid rgba(0,0,0,0.08)',
-          cursor: 'move', flexShrink: 0, userSelect: 'none',
-          background: 'rgba(255,255,255,0.18)',
-        }}
-        onMouseDown={onMouseDownHeader}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#333' }}>AI</span>
-          <span style={{ fontSize: 11, color: '#999' }}>{symbol} · {timeframe}</span>
-          {loading && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#1976d2', display: 'inline-block' }} />}
-          {!loading && chatHistory.length > 0 && (
-            <span style={{ background: 'rgba(25,118,210,0.12)', color: '#1565c0', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 5px' }}>
-              {chatHistory.length}
-            </span>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <button style={btnStyle} onClick={() => setMode('REASON')}
-            title="Reason mode"
-            className={mode === 'REASON' ? 'active' : ''}>
-            <span style={{ color: mode === 'REASON' ? '#1976d2' : '#999', fontWeight: mode === 'REASON' ? 700 : 400, fontSize: 11 }}>Reason</span>
-          </button>
-          <button style={btnStyle} onClick={() => setMode('VALIDATE')} title="Validate mode">
-            <span style={{ color: mode === 'VALIDATE' ? '#1976d2' : '#999', fontWeight: mode === 'VALIDATE' ? 700 : 400, fontSize: 11 }}>Validate</span>
-          </button>
-          <button style={{ ...btnStyle, fontSize: 10, color: '#aaa', fontWeight: 700, minWidth: 18 }} onClick={cycleFont} title={`Font size: ${fontSizeLevel} (click to cycle)`}>
-            {fs.label}
-          </button>
-          <button style={{ ...btnStyle, fontSize: 11, color: '#aaa' }} onClick={() => setCollapsed(c => !c)} title="Collapse / Expand">
-            {collapsed ? '▲' : '▼'}
-          </button>
-          <button style={{ ...btnStyle, fontSize: 16, color: '#bbb' }} onClick={onToggle} title="Hide (backtick)">×</button>
-        </div>
-      </div>
-
-      {!collapsed && (
-        <>
-          {/* Messages */}
+          minWidth: 320,
+          minHeight: 200,
+          resize: 'both',
+          overflow: 'hidden',
+          display: open ? 'flex' : 'none',
+          flexDirection: 'column',
+          borderRadius: '12px 12px 0 0',
+            background: 'rgba(15,17,26,0.55)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderBottom: 'none',
+            boxShadow: '0 -4px 24px rgba(0,0,0,0.3)',
+          }}
+        >
+          {/* Header */}
           <div style={{
-            flex: 1, overflowY: 'auto', padding: '8px 10px',
-            display: 'flex', flexDirection: 'column', gap: 7, minHeight: 0,
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '7px 12px', borderBottom: '1px solid rgba(0,0,0,0.07)',
+            background: 'rgba(255,255,255,0.08)', flexShrink: 0, userSelect: 'none',
+            borderRadius: '12px 12px 0 0',
           }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>AI</span>
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{symbol} · {timeframe}</span>
+              {loading && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#1976d2', display: 'inline-block', animation: 'pulse 1s infinite' }} />}
+              {!loading && chatHistory.length > 0 && (
+                <span style={{ background: 'rgba(100,181,246,0.2)', color: '#90caf9', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 6px' }}>
+                  {chatHistory.length}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button style={btnStyle} onClick={() => setMode('REASON')} title="Reason mode">
+                <span style={{ color: mode === 'REASON' ? '#90caf9' : 'rgba(255,255,255,0.35)', fontWeight: mode === 'REASON' ? 700 : 400, fontSize: 11 }}>Reason</span>
+              </button>
+              <button style={btnStyle} onClick={() => setMode('VALIDATE')} title="Validate mode">
+                <span style={{ color: mode === 'VALIDATE' ? '#90caf9' : 'rgba(255,255,255,0.35)', fontWeight: mode === 'VALIDATE' ? 700 : 400, fontSize: 11 }}>Validate</span>
+              </button>
+              <button style={{ ...btnStyle, fontSize: 10, color: 'rgba(255,255,255,0.4)', fontWeight: 700, minWidth: 18 }} onClick={cycleFont} title={`Font: ${fontSizeLevel}`}>
+                {fs.label}
+              </button>
+              <button style={{ ...btnStyle, fontSize: 15, color: 'rgba(255,255,255,0.35)', paddingLeft: 8 }} onClick={onToggle} title="Close (Esc / F4)">×</button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
             {chatHistory.length === 0 && (
-              <div style={{ color: '#aaa', fontSize: fs.msg, textAlign: 'center', padding: '24px 8px', lineHeight: 1.6 }}>
-                {mode === 'REASON'
-                  ? 'Draw objects on the chart, then click Send.'
-                  : 'Type a claim to validate against your drawings.'}
+              <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: fs.msg, textAlign: 'center', padding: '32px 8px', lineHeight: 1.7 }}>
+                {mode === 'REASON' ? 'Draw on the chart, then hit Send.' : 'Ask anything about this chart.'}
               </div>
             )}
             {chatHistory.map((msg, i) => (
-              <div key={i} style={msg.role === 'user' ? { ...userBubble, fontSize: fs.msg } : { ...aiBubble, fontSize: fs.msg }}>
+              <div key={i} style={msg.role === 'user'
+                ? { ...userBubble, fontSize: fs.msg }
+                : { ...aiBubble, fontSize: fs.msg }
+              }>
                 {msg.role === 'ai' ? <MarkdownText text={msg.content} /> : msg.content}
               </div>
             ))}
             {loading && (
-              <div style={aiBubble}>
-                <span style={{ color: '#bbb', letterSpacing: 3 }}>· · ·</span>
+              <div style={aiBubble}><span style={{ color: '#ccc', letterSpacing: 4 }}>· · ·</span></div>
+            )}
+            {error && (
+              <div style={{ padding: '6px 10px', background: 'rgba(255,152,0,0.12)', border: '1px solid rgba(255,152,0,0.3)', borderRadius: 8, color: '#e65100', fontSize: 12 }}>
+                {error}
               </div>
             )}
             <div ref={chatBottomRef} />
           </div>
+      </div>
 
-          {error && (
-            <div style={{ margin: '0 10px 6px', padding: '6px 10px', background: 'rgba(255,152,0,0.15)', border: '1px solid rgba(255,152,0,0.3)', borderRadius: 8, color: '#e65100', fontSize: 12, flexShrink: 0 }}>
-              {error}
-            </div>
-          )}
-
-          {/* Input row */}
-          <div style={{ display: 'flex', gap: 6, padding: '7px 10px', borderTop: '1px solid rgba(255,255,255,0.2)', flexShrink: 0, alignItems: 'center', background: 'rgba(255,255,255,0.15)' }}>
-            {mode === 'VALIDATE' ? (
-              <input
-                ref={inputRef}
-                type="text"
-                placeholder="Type claim... (Enter to send)"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={loading}
-                style={{
-                  flex: 1, minWidth: 0,
-                  background: 'rgba(255,255,255,0.6)',
-                  border: '1px solid rgba(0,0,0,0.12)',
-                  borderRadius: 8, padding: '8px 12px',
-                  fontSize: fs.input, color: '#222', outline: 'none',
-                }}
-              />
-            ) : (
-              <span style={{ flex: 1, color: '#bbb', fontSize: fs.input, fontStyle: 'italic' }}>
-                Sends drawing context to AI for reasoning.
-              </span>
-            )}
-            <button
-              onClick={() => send(false)}
-              disabled={loading || (mode === 'VALIDATE' && !input.trim())}
-              style={{
-                ...actionBtn, background: '#1976d2',
-                opacity: loading || (mode === 'VALIDATE' && !input.trim()) ? 0.4 : 1,
-              }}
-            >Send</button>
-            {hasMultiCharts && (
-              <button
-                onClick={() => send(true)}
-                disabled={loading || (mode === 'VALIDATE' && !input.trim())}
-                title={`All ${tabs!.length} charts`}
-                style={{
-                  ...actionBtn, background: '#7b1fa2',
-                  opacity: loading || (mode === 'VALIDATE' && !input.trim()) ? 0.4 : 1,
-                }}
-              >All {tabs!.length}</button>
-            )}
-          </div>
-        </>
-      )}
+      {/* ── Always-visible input bar ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '8px 12px',
+        background: 'rgba(15,17,26,0.82)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        border: '1px solid rgba(255,255,255,0.15)',
+        borderRadius: open ? '0 0 14px 14px' : 14,
+        boxShadow: '0 2px 20px rgba(0,0,0,0.3)',
+        transition: 'border-radius 0.15s',
+        minWidth: 280,
+      }}>
+        {loading && (
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#1976d2', flexShrink: 0 }} />
+        )}
+        {mode === 'VALIDATE' ? (
+          <textarea
+            ref={inputRef}
+            rows={2}
+            placeholder="What's on your mind?"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onFocus={() => { if (!open) onToggle(); }}
+            onKeyDown={handleKeyDown}
+            disabled={loading}
+            style={{
+              flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
+              resize: 'none', fontFamily: 'inherit',
+              fontSize: fs.input,
+              color: 'rgba(255,255,255,0.9)',
+              padding: '2px 0',
+              lineHeight: 1.5,
+            }}
+          />
+        ) : (
+          <span
+            style={{ flex: 1, fontSize: fs.input, color: open ? '#aaa' : 'rgba(255,255,255,0.5)', fontStyle: 'italic', cursor: 'default' }}
+            onClick={() => { if (!open) onToggle(); }}
+          >
+            Reason about my drawings…
+          </span>
+        )}
+        <button
+          onClick={() => send(false)}
+          disabled={loading || (mode === 'VALIDATE' && !input.trim())}
+          style={{
+            ...actionBtn,
+            background: '#1976d2',
+            opacity: loading || (mode === 'VALIDATE' && !input.trim()) ? 0.35 : 1,
+            fontSize: fs.input - 1,
+          }}
+        >Send</button>
+        {hasMultiCharts && (
+          <button
+            onClick={() => send(true)}
+            disabled={loading || (mode === 'VALIDATE' && !input.trim())}
+            title={`All ${tabs!.length} charts`}
+            style={{
+              ...actionBtn, background: '#7b1fa2',
+              opacity: loading || (mode === 'VALIDATE' && !input.trim()) ? 0.35 : 1,
+              fontSize: fs.input - 1,
+            }}
+          >All {tabs!.length}</button>
+        )}
+      </div>
     </div>
   );
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function tryParse(json: string): any {
   try { return JSON.parse(json); } catch { return null; }
 }
 
-// Lightweight markdown renderer: **bold**, *italic*, `code`, line breaks
 function MarkdownText({ text }: { text: string }) {
   const lines = text.split('\n');
   return (
     <>
-      {lines.map((line, i) => {
-        const parts = parseLine(line);
-        return (
-          <span key={i}>
-            {parts}
-            {i < lines.length - 1 && <br />}
-          </span>
-        );
-      })}
+      {lines.map((line, i) => (
+        <span key={i}>
+          {parseLine(line)}
+          {i < lines.length - 1 && <br />}
+        </span>
+      ))}
     </>
   );
 }
 
 function parseLine(line: string): React.ReactNode[] {
-  // Matches **bold**, *italic*, `code`
   const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
   const parts: React.ReactNode[] = [];
-  let last = 0;
-  let match;
+  let last = 0, match;
   while ((match = regex.exec(line)) !== null) {
     if (match.index > last) parts.push(line.slice(last, match.index));
-    if (match[0].startsWith('**')) {
-      parts.push(<strong key={match.index}>{match[2]}</strong>);
-    } else if (match[0].startsWith('*')) {
-      parts.push(<em key={match.index}>{match[3]}</em>);
-    } else {
-      parts.push(<code key={match.index} style={{ background: 'rgba(0,0,0,0.08)', borderRadius: 3, padding: '0 3px', fontSize: '11px' }}>{match[4]}</code>);
-    }
+    if (match[0].startsWith('**'))     parts.push(<strong key={match.index}>{match[2]}</strong>);
+    else if (match[0].startsWith('*')) parts.push(<em key={match.index}>{match[3]}</em>);
+    else                               parts.push(<code key={match.index} style={{ background: 'rgba(0,0,0,0.07)', borderRadius: 3, padding: '0 3px', fontSize: '0.9em' }}>{match[4]}</code>);
     last = match.index + match[0].length;
   }
   if (last < line.length) parts.push(line.slice(last));
   return parts;
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const btnStyle: React.CSSProperties = {
   background: 'none', border: 'none', cursor: 'pointer', padding: '2px 5px', lineHeight: 1,
 };
 
 const actionBtn: React.CSSProperties = {
-  padding: '6px 12px', border: 'none', borderRadius: 8,
-  color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+  padding: '6px 14px', border: 'none', borderRadius: 8,
+  color: 'white', fontWeight: 600, cursor: 'pointer', flexShrink: 0,
 };
 
 const userBubble: React.CSSProperties = {
   alignSelf: 'flex-end',
-  background: 'rgba(25, 118, 210, 0.75)',
-  color: 'white',
-  padding: '6px 10px', borderRadius: '12px 12px 3px 12px',
-  maxWidth: '85%', fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+  background: 'rgba(25,118,210,0.8)', color: 'white',
+  padding: '7px 12px', borderRadius: '14px 14px 3px 14px',
+  maxWidth: '85%', lineHeight: 1.5, whiteSpace: 'pre-wrap',
 };
 
 const aiBubble: React.CSSProperties = {
   alignSelf: 'flex-start',
-  background: 'rgba(255, 255, 255, 0.82)',
-  border: '1px solid rgba(0,0,0,0.06)',
-  color: '#111',
-  padding: '6px 10px', borderRadius: '12px 12px 12px 3px',
-  maxWidth: '92%', fontSize: 12, lineHeight: 1.6, whiteSpace: 'pre-wrap',
+  background: 'white', border: '1px solid rgba(0,0,0,0.07)', color: '#111',
+  padding: '7px 12px', borderRadius: '14px 14px 14px 3px',
+  maxWidth: '92%', lineHeight: 1.65, whiteSpace: 'pre-wrap',
 };
