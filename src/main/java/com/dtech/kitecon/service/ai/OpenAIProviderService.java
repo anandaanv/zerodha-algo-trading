@@ -1,5 +1,6 @@
 package com.dtech.kitecon.service.ai;
 
+import com.dtech.chartdata.model.OhlcBarDTO;
 import com.dtech.kitecon.service.ai.tools.PatternType;
 import com.dtech.kitecon.service.ai.tools.ValidationInput;
 import com.dtech.kitecon.service.ai.tools.ValidationResult;
@@ -19,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -234,6 +236,114 @@ public class OpenAIProviderService implements AIProvider {
     }
 
     /**
+     * Technical chat analysis — REASON or VALIDATE mode
+     */
+    public String technicalChatAnalysis(
+        String symbol, String timeframe,
+        List<ValidationInput.Drawing> drawings,
+        List<OhlcBarDTO> bars,
+        String userMessage, String mode
+    ) {
+        try {
+            if (openAIClient == null) {
+                log.warn("OpenAI client not initialized");
+                return "AI analysis unavailable — OpenAI not configured.";
+            }
+
+            String prompt = "REASON".equalsIgnoreCase(mode)
+                ? buildReasonPrompt(symbol, timeframe, drawings, bars)
+                : buildValidatePrompt(symbol, timeframe, drawings, bars, userMessage);
+
+            return callOpenAI(prompt);
+        } catch (Exception e) {
+            log.error("Error in technicalChatAnalysis", e);
+            return "Unable to provide AI analysis at this time.";
+        }
+    }
+
+    private String buildReasonPrompt(
+        String symbol, String timeframe,
+        List<ValidationInput.Drawing> drawings,
+        List<OhlcBarDTO> bars
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a senior technical analyst with 20+ years experience.\n");
+        sb.append("A trader is viewing ").append(symbol).append(" on a ").append(timeframe)
+          .append(" chart and has drawn:\n\n");
+
+        sb.append("=== DRAWINGS ===\n");
+        appendDrawings(sb, drawings);
+        appendOhlcCsv(sb, bars);
+
+        sb.append("\nReason about these drawings professionally. Address:\n");
+        sb.append("1. What structure/pattern is being identified?\n");
+        sb.append("2. Is the geometry valid against the price data?\n");
+        sb.append("3. Current trading bias implied?\n");
+        sb.append("4. Key price levels (targets, supports, invalidation)?\n");
+        sb.append("5. Any missing elements the trader should consider?\n");
+        sb.append("Use exact price numbers from the data.");
+
+        return sb.toString();
+    }
+
+    private String buildValidatePrompt(
+        String symbol, String timeframe,
+        List<ValidationInput.Drawing> drawings,
+        List<OhlcBarDTO> bars,
+        String userMessage
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a senior technical analyst in a conversation with a trader.\n");
+        sb.append("Trader's claim: \"").append(userMessage).append("\"\n\n");
+        sb.append("Chart: ").append(symbol).append(" / ").append(timeframe).append("\n");
+        sb.append("Drawings currently on the chart:\n");
+
+        appendDrawings(sb, drawings);
+        appendOhlcCsv(sb, bars);
+
+        sb.append("\nRULES:\n");
+        sb.append("- If the claim references a specific drawing or structure that is NOT in the drawings ");
+        sb.append("list (e.g., claim mentions \"wave 3\" or \"the trendline\" but no Elliott Wave or ");
+        sb.append("trendline is drawn), respond with a natural conversational question asking them ");
+        sb.append("to clarify or draw it. Example: \"You mentioned the 3rd wave — I don't see any ");
+        sb.append("wave count marked on the chart. Which waves are you counting? Could you draw ");
+        sb.append("them so I can validate your analysis?\"\n");
+        sb.append("- If all referenced drawings are present, validate the claim:\n");
+        sb.append("  1. Does the geometry support it?\n");
+        sb.append("  2. What does price data confirm/contradict?\n");
+        sb.append("  3. Verdict: CONFIRMED / PARTIALLY CONFIRMED / REJECTED\n");
+        sb.append("  4. Trading implication.\n");
+        sb.append("Be objective. Disagree if warranted. Keep it conversational.");
+
+        return sb.toString();
+    }
+
+    private void appendDrawings(StringBuilder sb, List<ValidationInput.Drawing> drawings) {
+        if (drawings.isEmpty()) {
+            sb.append("No drawings found on the chart.\n");
+            return;
+        }
+        for (ValidationInput.Drawing d : drawings) {
+            sb.append(DrawingDescriber.describe(d)).append("\n");
+        }
+    }
+
+    private void appendOhlcCsv(StringBuilder sb, List<OhlcBarDTO> bars) {
+        if (bars != null && !bars.isEmpty()) {
+            int maxCandles = Math.min(bars.size(), 200);
+            int startIdx = bars.size() - maxCandles;
+            sb.append(String.format("\n=== PRICE DATA (last %d candles, CSV) ===\n", maxCandles));
+            sb.append("datetime,open,high,low,close,volume\n");
+            for (int i = startIdx; i < bars.size(); i++) {
+                OhlcBarDTO bar = bars.get(i);
+                sb.append(String.format("%s,%.2f,%.2f,%.2f,%.2f,%.0f\n",
+                    DrawingDescriber.ts(bar.getTime()), bar.getOpen(), bar.getHigh(),
+                    bar.getLow(), bar.getClose(), bar.getVolume()));
+            }
+        }
+    }
+
+    /**
      * Call OpenAI API using SDK with Conversations/Response API
      */
     private String callOpenAI(String prompt) {
@@ -290,16 +400,45 @@ public class OpenAIProviderService implements AIProvider {
         prompt.append(String.format("Timeframe: %s\n", input.getTimeframe()));
         prompt.append(String.format("Pattern Claimed: %s\n", patternType.getDisplayName()));
 
-        // Drawing context
+        // Drawing coordinates
         if (input.getDrawings() != null && !input.getDrawings().isEmpty()) {
-            prompt.append(String.format("Chart Drawings: %d elements (trendlines, shapes, annotations)\n",
-                input.getDrawings().size()));
+            prompt.append(String.format("Chart Drawings: %d element(s)\n", input.getDrawings().size()));
+            for (int i = 0; i < input.getDrawings().size(); i++) {
+                ValidationInput.Drawing d = input.getDrawings().get(i);
+                prompt.append(String.format("  [%d] type=%s", i + 1, d.getType()));
+                if (d.getProperties() != null && d.getProperties().getLabel() != null) {
+                    prompt.append(String.format(" label=\"%s\"", d.getProperties().getLabel()));
+                }
+                if (d.getPoints() != null && !d.getPoints().isEmpty()) {
+                    prompt.append(" points=");
+                    for (ValidationInput.Point pt : d.getPoints()) {
+                        prompt.append(String.format("[t=%d,p=%.2f]", pt.getTimestamp(), pt.getPrice()));
+                    }
+                }
+                prompt.append("\n");
+            }
         }
         prompt.append("\n");
 
         // Trader's analysis
         prompt.append("=== TRADER'S ANALYSIS ===\n");
         prompt.append(String.format("\"%s\"\n\n", input.getUserComment()));
+
+        // OHLC candlestick data
+        if (input.getPriceData() != null && !input.getPriceData().isEmpty()) {
+            int maxCandles = Math.min(input.getPriceData().size(), 200);
+            int startIdx = input.getPriceData().size() - maxCandles;
+            prompt.append(String.format("=== PRICE DATA (last %d candles of %d total) ===\n",
+                maxCandles, input.getPriceData().size()));
+            prompt.append("timestamp,open,high,low,close,volume\n");
+            for (int i = startIdx; i < input.getPriceData().size(); i++) {
+                ValidationInput.OHLCData bar = input.getPriceData().get(i);
+                prompt.append(String.format("%d,%.2f,%.2f,%.2f,%.2f,%d\n",
+                    bar.getTimestamp(), bar.getOpen(), bar.getHigh(), bar.getLow(),
+                    bar.getClose(), bar.getVolume() != null ? bar.getVolume() : 0));
+            }
+            prompt.append("\n");
+        }
 
         // Programmatic validation results
         if (programmaticResult != null) {

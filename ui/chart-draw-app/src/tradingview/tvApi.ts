@@ -68,6 +68,21 @@ export async function fetchIntervalMapping(): Promise<Record<string, string>> {
   return await res.json();
 }
 
+export async function subscribeSymbol(symbol: string): Promise<void> {
+  try {
+    const url = getApiUrl('/api/kite/subscribe');
+    const res = await apiFetch(url.toString(), {
+      ...withAuth(),
+      method: 'POST',
+      headers: { ...withAuth().headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify([symbol]),
+    });
+    if (!res.ok) console.warn(`[subscribeSymbol] server returned ${res.status} for ${symbol}`);
+  } catch (e) {
+    console.warn('[subscribeSymbol] failed (non-fatal):', e);
+  }
+}
+
 export async function fetchOHLC(symbol: string, interval: string): Promise<OhlcRow[]> {
   const url = getApiUrl('/api/ohlc');
   url.searchParams.set('symbol', symbol);

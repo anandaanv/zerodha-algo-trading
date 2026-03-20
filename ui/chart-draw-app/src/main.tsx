@@ -50,7 +50,7 @@ root.render(
         <Route
           path="/chart-legacy"
           element={
-            <ProtectedRoute requiredRole="MODERATOR">
+            <ProtectedRoute requiredRole="USER">
               <LegacyChartApp />
             </ProtectedRoute>
           }
@@ -58,7 +58,7 @@ root.render(
         <Route
           path="/chart"
           element={
-            <ProtectedRoute requiredRole="MODERATOR">
+            <ProtectedRoute requiredRole="USER">
               <TVChartApp />
             </ProtectedRoute>
           }

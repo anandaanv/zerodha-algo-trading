@@ -5,7 +5,6 @@ import TVMultiPanelChart from './TVMultiPanelChart';
 import { mapTimeframeToInterval, intervalToPeriod } from './intervalUtils';
 import { createSaveLoadAdapter } from './saveLoadAdapter';
 import AnalysisPanel from './AnalysisPanel';
-import SnapshotDialog from './SnapshotDialog';
 
 // TradingView types (loaded globally via script tag)
 declare const TradingView: any;
@@ -15,7 +14,6 @@ export default function TVChartApp() {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
   const [isAnalysisPanelOpen, setIsAnalysisPanelOpen] = useState(false);
-  const [isSnapshotDialogOpen, setIsSnapshotDialogOpen] = useState(false);
 
   // Storage keys
   const STORAGE_SYMBOL_KEY = 'lastSymbol';
@@ -154,16 +152,16 @@ export default function TVChartApp() {
         timestamp: new Date().toISOString()
       };
 
-      // Extract drawings from the state
+      // Each source is { id, state: { type, state: {...visualProps}, points: [...], zorder } }
       if (lineToolsState && lineToolsState.sources) {
         lineToolsState.sources.forEach((source: any) => {
+          const inner = source.state ?? {};
           stateObj.drawings.push({
             id: source.id,
-            type: source.toolname || source.type,
-            points: source.points,
-            properties: source.properties,
-            zorder: source.zorder,
-            state: source.state
+            type: inner.type,                 // e.g. "LineToolTrendLine"
+            points: inner.points,             // [{ time_t, offset, price, interval }]
+            properties: inner.state,          // { linecolor, linewidth, text, title, ... }
+            zorder: inner.zorder,
           });
         });
       }
@@ -215,30 +213,6 @@ export default function TVChartApp() {
           <span>Analyse</span>
         </button>
 
-        {/* Snapshot & Reason Button */}
-        <button
-          onClick={() => setIsSnapshotDialogOpen(true)}
-          style={{
-            width: '180px',
-            height: '40px',
-            backgroundColor: '#f57c00',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: 600,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-          }}
-          title="Capture chart snapshot with your analysis"
-        >
-          <span style={{ fontSize: '18px' }}>📸</span>
-          <span>Snapshot & Reason</span>
-        </button>
       </div>
 
       {/* Analysis Panel */}
@@ -247,20 +221,9 @@ export default function TVChartApp() {
         symbol={defaultSymbol}
         timeframe={rawTimeframe}
         onClose={() => setIsAnalysisPanelOpen(false)}
+        getChartState={getChartState}
       />
 
-      {/* Snapshot Dialog */}
-      <SnapshotDialog
-        open={isSnapshotDialogOpen}
-        symbol={defaultSymbol}
-        timeframe={rawTimeframe}
-        onClose={() => setIsSnapshotDialogOpen(false)}
-        getChartState={getChartState}
-        onSuccess={(result) => {
-          console.log('Snapshot created:', result);
-          alert(`Snapshot created successfully! ID: ${result.snapshotId}`);
-        }}
-      />
     </div>
   );
 }

@@ -1,7 +1,10 @@
 package com.dtech.kitecon.web;
 
 import com.dtech.kitecon.service.StockAnalysisService;
+import com.dtech.kitecon.service.TechnicalChatService;
 import com.dtech.kitecon.service.model.StockAnalysisResponse;
+import com.dtech.kitecon.service.model.TechnicalChatRequest;
+import com.dtech.kitecon.service.model.TechnicalChatResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +25,7 @@ import java.util.Map;
 public class StockAnalysisController {
 
     private final StockAnalysisService analysisService;
+    private final TechnicalChatService technicalChatService;
 
     /**
      * Get comprehensive stock analysis
@@ -137,6 +141,31 @@ public class StockAnalysisController {
             return ResponseEntity.ok(analysis.getSocialSentiment());
         } catch (Exception e) {
             log.error("Error fetching social sentiment", e);
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
+     * Technical AI chat — REASON or VALIDATE mode
+     * POST /api/analysis/technical-chat
+     */
+    @PostMapping("/technical-chat")
+    public ResponseEntity<TechnicalChatResponse> technicalChat(
+        @RequestBody TechnicalChatRequest req,
+        Authentication auth
+    ) {
+        if (req.getSymbol() == null || req.getMode() == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        if ("VALIDATE".equals(req.getMode())
+            && (req.getUserMessage() == null || req.getUserMessage().isBlank())) {
+            return ResponseEntity.badRequest().build();
+        }
+        try {
+            log.info("User {} technical-chat: symbol={}, mode={}", auth.getName(), req.getSymbol(), req.getMode());
+            return ResponseEntity.ok(technicalChatService.chat(req));
+        } catch (Exception e) {
+            log.error("Error in technical-chat", e);
             return ResponseEntity.status(500).build();
         }
     }

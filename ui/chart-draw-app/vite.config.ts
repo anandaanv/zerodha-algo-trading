@@ -10,7 +10,8 @@ export default defineConfig(({ mode }) => ({
     allowedHosts: ['tradeapp.dheemantech.in'],
     proxy: mode === 'development' ? {
       // "/api": "https://tradeapi.dheemantech.in/kitecon"
-      "/api": "http://localhost:8080"
+      "/api": "http://localhost:8080",
+      "/ws": { target: "http://localhost:8080", ws: true }
     } : undefined
   },
   build: {

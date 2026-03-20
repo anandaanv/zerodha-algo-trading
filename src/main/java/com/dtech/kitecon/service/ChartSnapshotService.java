@@ -1,5 +1,7 @@
 package com.dtech.kitecon.service;
 
+import com.dtech.chartdata.model.OhlcBarDTO;
+import com.dtech.chartdata.service.ChartDataService;
 import com.dtech.kitecon.data.ChartSnapshot;
 import com.dtech.kitecon.data.UserSubscriptionPlan;
 import com.dtech.kitecon.repository.ChartSnapshotRepository;
@@ -16,8 +18,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * ChartSnapshotService - Main service for chart snapshot management
@@ -33,6 +38,7 @@ public class ChartSnapshotService {
     private final AIValidationOrchestrator validationOrchestrator;
     private final DrawingExtractorService drawingExtractor;
     private final TagValidationService tagValidationService;
+    private final ChartDataService chartDataService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -110,14 +116,22 @@ public class ChartSnapshotService {
                 // TradingView format can change, let AI handle it
                 JsonNode chartStateNode = objectMapper.readTree(request.getChartStateJson());
 
+                // Extract drawings from chart state
+                List<ValidationInput.Drawing> extractedDrawings =
+                    drawingExtractor.extractDrawings(request.getChartStateJson());
+
+                // Fetch OHLC data for the visible range
+                List<ValidationInput.OHLCData> ohlcData =
+                    fetchOhlcData(request.getSymbol(), request.getTimeframe(),
+                        request.getStartDate(), request.getEndDate());
+
                 // Build validation input
-                // Pass empty drawings list - AI will read from chartStateJson directly
                 ValidationInput validationInput = ValidationInput.builder()
                     .symbol(request.getSymbol())
                     .timeframe(request.getTimeframe())
                     .patternType(patternType)
-                    .drawings(List.of()) // Empty - AI reads raw chartStateJson
-                    .priceData(List.of()) // TODO: Fetch OHLC data from database
+                    .drawings(extractedDrawings)
+                    .priceData(ohlcData)
                     .userComment(request.getUserComment())
                     .chartStateJson(chartStateNode)
                     .build();
@@ -217,14 +231,20 @@ public class ChartSnapshotService {
             // Parse chart state - pass raw JSON to AI
             JsonNode chartStateJson = objectMapper.readTree(request.getChartStateJson());
 
+            // Extract drawings and fetch OHLC data
+            List<ValidationInput.Drawing> extractedDrawings =
+                drawingExtractor.extractDrawings(request.getChartStateJson());
+            List<ValidationInput.OHLCData> ohlcData =
+                fetchOhlcData(request.getSymbol(), request.getTimeframe(),
+                    request.getStartDate(), request.getEndDate());
+
             // Build validation input
-            // Pass empty drawings list - AI will read from chartStateJson directly
             ValidationInput validationInput = ValidationInput.builder()
                 .symbol(request.getSymbol())
                 .timeframe(request.getTimeframe())
                 .patternType(patternType)
-                .drawings(List.of()) // Empty - AI reads raw chartStateJson
-                .priceData(List.of()) // TODO: Fetch OHLC data
+                .drawings(extractedDrawings)
+                .priceData(ohlcData)
                 .userComment(request.getUserComment())
                 .chartStateJson(chartStateJson)
                 .build();
@@ -371,6 +391,34 @@ public class ChartSnapshotService {
         snapshotRepository.save(snapshot);
         log.info("Updated snapshot {} visibility to {}", id, newVisibility);
         return true;
+    }
+
+    /**
+     * Fetch OHLC data for the given symbol/timeframe/range and convert to ValidationInput format
+     */
+    private List<ValidationInput.OHLCData> fetchOhlcData(
+            String symbol, String timeframe, LocalDate startDate, LocalDate endDate) {
+        try {
+            Long from = startDate != null
+                ? startDate.atStartOfDay().toEpochSecond(ZoneOffset.UTC) : null;
+            Long to = endDate != null
+                ? endDate.atTime(23, 59, 59).toEpochSecond(ZoneOffset.UTC) : null;
+
+            List<OhlcBarDTO> bars = chartDataService.getBars(symbol, timeframe, from, to);
+            return bars.stream()
+                .map(b -> ValidationInput.OHLCData.builder()
+                    .timestamp(b.getTime())
+                    .open(b.getOpen())
+                    .high(b.getHigh())
+                    .low(b.getLow())
+                    .close(b.getClose())
+                    .volume((long) b.getVolume())
+                    .build())
+                .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Could not fetch OHLC data for {} {}: {}", symbol, timeframe, e.getMessage());
+            return List.of();
+        }
     }
 
     /**
