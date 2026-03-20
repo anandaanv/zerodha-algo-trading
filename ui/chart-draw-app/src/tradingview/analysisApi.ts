@@ -73,6 +73,7 @@ export interface TechnicalChatRequest {
   mode: ChatMode;
   visibleFrom?: number;   // epoch seconds, from chart's visible range
   visibleTo?: number;
+  customSystemPrompt?: string;  // null/undefined = use default REASON/VALIDATE logic
 }
 
 export interface MultiChartContext {

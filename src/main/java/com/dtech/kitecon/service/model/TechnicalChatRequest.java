@@ -17,4 +17,5 @@ public class TechnicalChatRequest {
     private String mode;            // "REASON" or "VALIDATE"
     private Long visibleFrom;       // epoch seconds — visible range start (nullable)
     private Long visibleTo;         // epoch seconds — visible range end (nullable)
+    private String customSystemPrompt; // null = use default REASON/VALIDATE logic
 }
