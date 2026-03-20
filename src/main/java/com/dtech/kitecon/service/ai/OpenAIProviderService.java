@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -235,6 +236,83 @@ public class OpenAIProviderService implements AIProvider {
         }
     }
 
+    /** Resolved chart context passed from MultiChartChatService. */
+    public record ResolvedChart(
+        String label,
+        String symbol,
+        String timeframe,
+        List<ValidationInput.Drawing> drawings,
+        List<OhlcBarDTO> bars
+    ) {}
+
+    /**
+     * Multi-chart analysis — reasons across 2+ chart contexts.
+     */
+    public String multiChartAnalysis(
+        List<ResolvedChart> charts, String userMessage, String mode
+    ) {
+        try {
+            if (openAIClient == null) return "AI analysis unavailable — OpenAI not configured.";
+            return callOpenAI(buildMultiChartPrompt(charts, userMessage, mode));
+        } catch (Exception e) {
+            log.error("Error in multiChartAnalysis", e);
+            return "Unable to provide multi-chart analysis at this time.";
+        }
+    }
+
+    private String buildMultiChartPrompt(
+        List<ResolvedChart> charts, String userMessage, String mode
+    ) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a senior technical analyst reviewing multiple chart perspectives from the same trader.\n\n");
+
+        // Detect cross-chart relationship to tailor the preamble
+        Set<String> symbols = charts.stream().map(ResolvedChart::symbol).collect(Collectors.toSet());
+        Set<String> timeframes = charts.stream().map(ResolvedChart::timeframe).collect(Collectors.toSet());
+        if (symbols.size() > 1) {
+            sb.append("These charts show DIFFERENT SYMBOLS — focus on correlation, divergence, and relative strength.\n\n");
+        } else if (timeframes.size() > 1) {
+            sb.append("These charts show THE SAME SYMBOL across DIFFERENT TIMEFRAMES — use higher timeframes for context, lower for entry precision.\n\n");
+        } else {
+            sb.append("These charts show THE SAME SYMBOL and TIMEFRAME with DIFFERENT DRAWING THESES — evaluate each thesis independently then give a verdict.\n\n");
+        }
+
+        for (int i = 0; i < charts.size(); i++) {
+            ResolvedChart c = charts.get(i);
+            sb.append(String.format("=== CHART %d: \"%s\" — %s / %s ===\n",
+                i + 1, c.label(), c.symbol(), c.timeframe()));
+            sb.append("DRAWINGS:\n");
+            appendDrawings(sb, c.drawings());
+            appendOhlcCsv(sb, c.bars());
+            sb.append("\n");
+        }
+
+        sb.append(CHAT_SYSTEM_RULES);
+
+        boolean verdictRequested = userMessage != null && userMessage.toLowerCase().matches(
+            ".*(verdict|confirm|validate|valid\\?|is this|reject|right\\?|correct\\?).*"
+        );
+
+        if ("VALIDATE".equalsIgnoreCase(mode) && userMessage != null && !userMessage.isBlank()) {
+            sb.append("Trader's message: \"").append(userMessage).append("\"\n\n");
+            if (verdictRequested) {
+                sb.append("The trader wants a verdict. Evaluate the claim across ALL charts with geometry and price data. ");
+                sb.append("Give a clear **CONFIRMED / PARTIALLY CONFIRMED / REJECTED** with reasoning per chart.\n");
+            } else {
+                sb.append("Engage conversationally with the trader's observation across these charts. ");
+                sb.append("Do NOT give a verdict unless asked. Keep it under 200 words.\n");
+            }
+        } else {
+            sb.append("The trader wants a first read across all these charts. Briefly comment on:\n");
+            sb.append("- What each chart is showing independently\n");
+            sb.append("- Where they **agree** or **conflict**\n");
+            sb.append("- Any interesting observation\n");
+            sb.append("Keep it conversational, under 200 words. No verdict.\n");
+        }
+
+        return sb.toString();
+    }
+
     /**
      * Technical chat analysis — REASON or VALIDATE mode
      */
@@ -261,27 +339,35 @@ public class OpenAIProviderService implements AIProvider {
         }
     }
 
+    private static final String CHAT_SYSTEM_RULES = """
+
+=== HOW TO RESPOND ===
+- You are in a **live chat** with a trader. This is a discussion, not a report.
+- **Never give a verdict (CONFIRMED / REJECTED / PARTIALLY CONFIRMED) unless the trader explicitly asks for one** — e.g., they say "validate", "is this valid?", "verdict?", "confirm this", etc.
+- Keep answers **under 200 words** for normal discussion. Use short paragraphs or bullet points.
+- When the trader's intent is unclear, ask a focused question.
+- Use **Markdown formatting**: bold key levels, *italics for emphasis*, `code` for exact values.
+- If a verdict IS requested, you may go longer — be thorough.
+- Be conversational and direct. No preamble. No "Great question!"
+""";
+
     private String buildReasonPrompt(
         String symbol, String timeframe,
         List<ValidationInput.Drawing> drawings,
         List<OhlcBarDTO> bars
     ) {
         StringBuilder sb = new StringBuilder();
-        sb.append("You are a senior technical analyst with 20+ years experience.\n");
-        sb.append("A trader is viewing ").append(symbol).append(" on a ").append(timeframe)
-          .append(" chart and has drawn:\n\n");
+        sb.append("You are a senior technical analyst chatting with a trader about their chart.\n");
+        sb.append("Chart: **").append(symbol).append("** / ").append(timeframe).append("\n\n");
 
-        sb.append("=== DRAWINGS ===\n");
+        sb.append("=== DRAWINGS ON CHART ===\n");
         appendDrawings(sb, drawings);
         appendOhlcCsv(sb, bars);
 
-        sb.append("\nReason about these drawings professionally. Address:\n");
-        sb.append("1. What structure/pattern is being identified?\n");
-        sb.append("2. Is the geometry valid against the price data?\n");
-        sb.append("3. Current trading bias implied?\n");
-        sb.append("4. Key price levels (targets, supports, invalidation)?\n");
-        sb.append("5. Any missing elements the trader should consider?\n");
-        sb.append("Use exact price numbers from the data.");
+        sb.append(CHAT_SYSTEM_RULES);
+        sb.append("\nThe trader clicked \"Reason my drawings\" — they want your first read on what they've drawn. ");
+        sb.append("Comment on what you see: what structure it suggests, whether the geometry makes sense against recent price. ");
+        sb.append("Keep it conversational. Do NOT give a verdict or trading recommendation unless they ask.");
 
         return sb.toString();
     }
@@ -292,28 +378,33 @@ public class OpenAIProviderService implements AIProvider {
         List<OhlcBarDTO> bars,
         String userMessage
     ) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("You are a senior technical analyst in a conversation with a trader.\n");
-        sb.append("Trader's claim: \"").append(userMessage).append("\"\n\n");
-        sb.append("Chart: ").append(symbol).append(" / ").append(timeframe).append("\n");
-        sb.append("Drawings currently on the chart:\n");
+        boolean verdictRequested = userMessage != null && userMessage.toLowerCase().matches(
+            ".*(verdict|confirm|validate|valid\\?|is this|reject|right\\?|correct\\?).*"
+        );
 
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are a senior technical analyst in a chat with a trader.\n");
+        sb.append("Chart: **").append(symbol).append("** / ").append(timeframe).append("\n");
+        sb.append("Trader says: \"").append(userMessage).append("\"\n\n");
+
+        sb.append("=== DRAWINGS ON CHART ===\n");
         appendDrawings(sb, drawings);
         appendOhlcCsv(sb, bars);
 
-        sb.append("\nRULES:\n");
-        sb.append("- If the claim references a specific drawing or structure that is NOT in the drawings ");
-        sb.append("list (e.g., claim mentions \"wave 3\" or \"the trendline\" but no Elliott Wave or ");
-        sb.append("trendline is drawn), respond with a natural conversational question asking them ");
-        sb.append("to clarify or draw it. Example: \"You mentioned the 3rd wave — I don't see any ");
-        sb.append("wave count marked on the chart. Which waves are you counting? Could you draw ");
-        sb.append("them so I can validate your analysis?\"\n");
-        sb.append("- If all referenced drawings are present, validate the claim:\n");
-        sb.append("  1. Does the geometry support it?\n");
-        sb.append("  2. What does price data confirm/contradict?\n");
-        sb.append("  3. Verdict: CONFIRMED / PARTIALLY CONFIRMED / REJECTED\n");
-        sb.append("  4. Trading implication.\n");
-        sb.append("Be objective. Disagree if warranted. Keep it conversational.");
+        sb.append(CHAT_SYSTEM_RULES);
+
+        if (!verdictRequested) {
+            sb.append("\nThe trader has made a statement/observation. Engage with it conversationally — ");
+            sb.append("ask a follow-up question, point out something interesting, or note if a referenced ");
+            sb.append("drawing is missing from the chart. **Do NOT give a verdict.** Keep it under 200 words.");
+        } else {
+            sb.append("\nThe trader is explicitly asking for a verdict. Evaluate fully:\n");
+            sb.append("1. Are the referenced drawings present on the chart?\n");
+            sb.append("2. Does the geometry support the claim?\n");
+            sb.append("3. What does the price data confirm or contradict?\n");
+            sb.append("4. **Verdict: CONFIRMED / PARTIALLY CONFIRMED / REJECTED** — with clear reasoning.\n");
+            sb.append("You may go longer here since a full assessment was asked for.");
+        }
 
         return sb.toString();
     }
@@ -329,17 +420,17 @@ public class OpenAIProviderService implements AIProvider {
     }
 
     private void appendOhlcCsv(StringBuilder sb, List<OhlcBarDTO> bars) {
-        if (bars != null && !bars.isEmpty()) {
-            int maxCandles = Math.min(bars.size(), 200);
-            int startIdx = bars.size() - maxCandles;
-            sb.append(String.format("\n=== PRICE DATA (last %d candles, CSV) ===\n", maxCandles));
-            sb.append("datetime,open,high,low,close,volume\n");
-            for (int i = startIdx; i < bars.size(); i++) {
-                OhlcBarDTO bar = bars.get(i);
-                sb.append(String.format("%s,%.2f,%.2f,%.2f,%.2f,%.0f\n",
-                    DrawingDescriber.ts(bar.getTime()), bar.getOpen(), bar.getHigh(),
-                    bar.getLow(), bar.getClose(), bar.getVolume()));
-            }
+        if (bars == null || bars.isEmpty()) return;
+        String rangeNote = String.format("visible range: %s – %s, %d candles",
+            DrawingDescriber.ts(bars.get(0).getTime()),
+            DrawingDescriber.ts(bars.get(bars.size() - 1).getTime()),
+            bars.size());
+        sb.append(String.format("\n=== PRICE DATA (%s) ===\n", rangeNote));
+        sb.append("datetime,open,high,low,close,volume\n");
+        for (OhlcBarDTO bar : bars) {
+            sb.append(String.format("%s,%.2f,%.2f,%.2f,%.2f,%.0f\n",
+                DrawingDescriber.ts(bar.getTime()), bar.getOpen(), bar.getHigh(),
+                bar.getLow(), bar.getClose(), bar.getVolume()));
         }
     }
 

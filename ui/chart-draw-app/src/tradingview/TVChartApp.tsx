@@ -1,10 +1,27 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import datafeed from './datafeed';
 import TVMultiPanelChart from './TVMultiPanelChart';
 import { mapTimeframeToInterval, intervalToPeriod } from './intervalUtils';
-import { createSaveLoadAdapter } from './saveLoadAdapter';
+import { createSaveLoadAdapter, mapToObject } from './saveLoadAdapter';
 import AnalysisPanel from './AnalysisPanel';
+import ChartTabBar from './ChartTabBar';
+import AIChatOverlay from './AIChatOverlay';
+import {
+  WorkspaceTab,
+  WorkspaceLayout,
+  newTab,
+  loadTabsFromStorage,
+  saveTabsToStorage,
+  loadActiveTabIdFromStorage,
+  saveActiveTabToStorage,
+  loadWorkspaceName,
+  saveWorkspaceName,
+  loadWorkspaceLayouts,
+  getLastLayoutIdForSymbol,
+  setLastLayoutIdForSymbol,
+} from './workspaceTypes';
+import WorkspaceLayoutModal from './WorkspaceLayoutModal';
 
 // TradingView types (loaded globally via script tag)
 declare const TradingView: any;
@@ -13,59 +30,273 @@ export default function TVChartApp() {
   const [searchParams, setSearchParams] = useSearchParams();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
+  const widgetReadyRef = useRef(false);
   const [isAnalysisPanelOpen, setIsAnalysisPanelOpen] = useState(false);
+  const [isAiOverlayOpen, setIsAiOverlayOpen] = useState(false);
+  const [layoutModalMode, setLayoutModalMode] = useState<'save' | 'load' | null>(null);
 
-  // Storage keys
-  const STORAGE_SYMBOL_KEY = 'lastSymbol';
-  const STORAGE_TIMEFRAME_KEY = 'lastTimeframe';
-
-  // Parse URL parameters
+  // Parse URL parameters for initial defaults only
   const urlSymbol = searchParams.get('script') || searchParams.get('symbol');
   const urlTimeframe = searchParams.get('timeframe') || searchParams.get('period');
-
-  // Get from localStorage if not in URL
-  const savedSymbol = localStorage.getItem(STORAGE_SYMBOL_KEY);
-  const savedTimeframe = localStorage.getItem(STORAGE_TIMEFRAME_KEY);
-
-  // Determine actual values (URL > localStorage > defaults)
+  const savedSymbol = localStorage.getItem('lastSymbol');
+  const savedTimeframe = localStorage.getItem('lastTimeframe');
   const defaultSymbol = urlSymbol || savedSymbol || 'TCS';
   const rawTimeframe = urlTimeframe || savedTimeframe || '1h';
 
-  // Check if multiple timeframes are requested (comma-separated)
-  const timeframes = rawTimeframe ? rawTimeframe.split(',').map((tf) => tf.trim()) : [];
-
-  // If multiple timeframes, render multi-panel view
+  // Multi-timeframe special case (legacy feature)
+  const timeframes = rawTimeframe ? rawTimeframe.split(',').map(tf => tf.trim()) : [];
   if (timeframes.length > 1) {
     return <TVMultiPanelChart symbol={defaultSymbol} timeframes={timeframes} />;
   }
 
-  const defaultInterval = mapTimeframeToInterval(rawTimeframe) || '60';
+  // ─── Tab State ────────────────────────────────────────────────────────────
 
-  // Save to localStorage and update URL if needed
-  useEffect(() => {
-    localStorage.setItem(STORAGE_SYMBOL_KEY, defaultSymbol);
-    localStorage.setItem(STORAGE_TIMEFRAME_KEY, rawTimeframe);
+  const [tabs, setTabs] = useState<WorkspaceTab[]>(() =>
+    loadTabsFromStorage(defaultSymbol, rawTimeframe)
+  );
+  const [activeTabId, setActiveTabId] = useState<string>(() =>
+    loadActiveTabIdFromStorage(loadTabsFromStorage(defaultSymbol, rawTimeframe))
+  );
+  const [workspaceName, setWorkspaceName] = useState<string>(() =>
+    loadWorkspaceName(defaultSymbol)
+  );
 
-    // Update URL if parameters are missing
-    if (!urlSymbol || !urlTimeframe) {
-      setSearchParams({ symbol: defaultSymbol, timeframe: rawTimeframe }, { replace: true });
+  const handleWorkspaceNameChange = useCallback((name: string) => {
+    setWorkspaceName(name);
+    saveWorkspaceName(name);
+    // Auto-apply last used layout is done via applyLayoutRef below
+    applyLayoutRef.current(name);
+  }, []);
+
+  // Refs so widget callbacks always see latest state without stale closures
+  const tabsRef = useRef<WorkspaceTab[]>(tabs);
+  const activeTabIdRef = useRef<string>(activeTabId);
+
+  // Keep refs in sync with state
+  useEffect(() => { tabsRef.current = tabs; }, [tabs]);
+  useEffect(() => { activeTabIdRef.current = activeTabId; }, [activeTabId]);
+
+  // ─── Helper: update a tab in both state and ref immediately ───────────────
+
+  const updateTabInState = useCallback((tabId: string, patch: Partial<WorkspaceTab>) => {
+    setTabs(prev => {
+      const updated = prev.map(t => t.id === tabId ? { ...t, ...patch } : t);
+      tabsRef.current = updated;
+      saveTabsToStorage(updated);
+      return updated;
+    });
+  }, []);
+
+  // ─── Helper: save current chart state into the active tab ─────────────────
+
+  const saveCurrentTabState = useCallback(() => {
+    if (!widgetReadyRef.current || !widgetRef.current) return;
+    try {
+      const chart = widgetRef.current.activeChart();
+      const lineState = chart.getLineToolsState();
+      const visRange = chart.getVisibleRange();
+      const serialized = JSON.stringify(mapToObject(lineState));
+      const currentTabId = activeTabIdRef.current;
+      const updated = tabsRef.current.map(t =>
+        t.id === currentTabId
+          ? { ...t, drawingsState: serialized, visibleFrom: visRange?.from, visibleTo: visRange?.to }
+          : t
+      );
+      tabsRef.current = updated;
+      // Don't call setTabs here — we're in an event handler, avoid triggering renders mid-switch
+    } catch (e) {
+      console.error('Failed to save tab state:', e);
     }
-  }, [defaultSymbol, rawTimeframe, urlSymbol, urlTimeframe, setSearchParams]);
+  }, []);
+
+  // ─── Helper: apply a tab's saved drawings to the current chart ────────────
+
+  const applyTabDrawings = useCallback((chart: any, tab: WorkspaceTab) => {
+    if (!tab.drawingsState) return;
+    try {
+      const parsed = JSON.parse(tab.drawingsState);
+      const stateWithMaps = {
+        sources: new Map(Object.entries(parsed.sources || {})),
+        groups: new Map(Object.entries(parsed.groups || {})),
+      };
+      chart.applyLineToolsState(stateWithMaps);
+    } catch (e) {
+      console.error('Failed to apply tab drawings:', e);
+    }
+  }, []);
+
+  // ─── Switch to a different tab ────────────────────────────────────────────
+
+  const switchToTab = useCallback((newTabId: string) => {
+    if (!widgetReadyRef.current || newTabId === activeTabIdRef.current) return;
+
+    // 1. Save current tab's state into ref (not React state to avoid render)
+    saveCurrentTabState();
+
+    // 2. Update active tab tracking
+    activeTabIdRef.current = newTabId;
+    setActiveTabId(newTabId);
+    saveActiveTabToStorage(newTabId);
+
+    const chart = widgetRef.current.activeChart();
+    const newTab = tabsRef.current.find(t => t.id === newTabId);
+    if (!newTab) return;
+
+    const newInterval = mapTimeframeToInterval(newTab.timeframe) || '60';
+    const currentInterval = chart.resolution();
+
+    // 3. Switch symbol → then interval (if different) → then apply drawings
+    if (chart.symbol() !== newTab.symbol) {
+      chart.setSymbol(newTab.symbol, () => {
+        if (currentInterval !== newInterval) {
+          chart.setResolution(newInterval, () => applyTabDrawings(chart, newTab));
+        } else {
+          applyTabDrawings(chart, newTab);
+        }
+      });
+    } else if (currentInterval !== newInterval) {
+      chart.setResolution(newInterval, () => applyTabDrawings(chart, newTab));
+    } else {
+      applyTabDrawings(chart, newTab);
+    }
+  }, [saveCurrentTabState, applyTabDrawings]);
+
+  // ─── Apply a saved layout ────────────────────────────────────────────────
+
+  const applyLayout = useCallback((layout: WorkspaceLayout, targetSymbol: string) => {
+    const newTabs: WorkspaceTab[] = layout.tabs.map(t => ({
+      ...newTab(
+        layout.scope === 'ALL' ? targetSymbol : t.symbol,
+        t.timeframe,
+      ),
+      label: t.label,
+    }));
+    tabsRef.current = newTabs;
+    setTabs(newTabs);
+    saveTabsToStorage(newTabs);
+    setLastLayoutIdForSymbol(targetSymbol, layout.id);
+    setTimeout(() => switchToTab(newTabs[0].id), 0);
+  }, [switchToTab]);
+
+  // ─── Switch all tabs to a new workspace symbol ───────────────────────────
+
+  const switchWorkspaceSymbol = useCallback((name: string) => {
+    // Try last-used layout first
+    const lastId = getLastLayoutIdForSymbol(name);
+    if (lastId) {
+      const layout = loadWorkspaceLayouts().find(l => l.id === lastId);
+      if (layout) { applyLayout(layout, name); return; }
+    }
+    // No layout: replace all tab symbols with the new workspace symbol, keep timeframes/labels
+    const updated = tabsRef.current.map(t => ({
+      ...t,
+      symbol: name,
+      label: t.label === t.symbol ? name : t.label,  // update label if it mirrored the symbol
+    }));
+    tabsRef.current = updated;
+    setTabs(updated);
+    saveTabsToStorage(updated);
+    // Switch to active tab to trigger chart symbol change
+    const activeId = activeTabIdRef.current;
+    activeTabIdRef.current = '';  // force switchToTab to treat it as a different tab
+    setTimeout(() => switchToTab(activeId), 0);
+  }, [applyLayout, switchToTab]);
+
+  // Stable ref so handleWorkspaceNameChange (defined earlier) can call switchWorkspaceSymbol
+  const applyLayoutRef = useRef<(symbol: string) => void>(() => {});
+  applyLayoutRef.current = switchWorkspaceSymbol;
+
+  // ─── Add a new tab ────────────────────────────────────────────────────────
+
+  const addTab = useCallback(() => {
+    const activeTab = tabsRef.current.find(t => t.id === activeTabIdRef.current);
+    const tab = newTab(activeTab?.symbol || defaultSymbol, activeTab?.timeframe || rawTimeframe);
+    const updated = [...tabsRef.current, tab];
+    tabsRef.current = updated;
+    setTabs(updated);
+    saveTabsToStorage(updated);
+    // Switch to it (this will also save current tab state)
+    setTimeout(() => switchToTab(tab.id), 0);
+  }, [switchToTab, defaultSymbol, rawTimeframe]);
+
+  // ─── Close a tab ─────────────────────────────────────────────────────────
+
+  const closeTab = useCallback((tabId: string) => {
+    const current = tabsRef.current;
+    if (current.length <= 1) return;
+
+    const idx = current.findIndex(t => t.id === tabId);
+    const updated = current.filter(t => t.id !== tabId);
+    tabsRef.current = updated;
+    setTabs(updated);
+    saveTabsToStorage(updated);
+
+    if (tabId === activeTabIdRef.current) {
+      // Switch to the nearest tab
+      const nextTab = updated[Math.min(idx, updated.length - 1)];
+      if (nextTab) switchToTab(nextTab.id);
+    }
+  }, [switchToTab]);
+
+  // ─── Rename a tab ────────────────────────────────────────────────────────
+
+  const renameTab = useCallback((tabId: string, newLabel: string) => {
+    updateTabInState(tabId, { label: newLabel });
+  }, [updateTabInState]);
+
+  // ─── Keyboard shortcut: backtick toggles AI overlay ─────────────────────
+  // F4 toggles AI overlay — function keys work even when chart iframe has focus.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F4' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        setIsAiOverlayOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // ─── Restore window focus after chart clicks so Ctrl+` keeps working ──────
+  // Only steals focus back if nothing in the main document is actively focused
+  // (e.g. a TradingView dialog rendered outside the iframe will have document.activeElement
+  //  set to its own input — in that case we leave focus alone so TV typing works).
+  useEffect(() => {
+    const onBlur = () => {
+      setTimeout(() => {
+        const active = document.activeElement;
+        if (active && active !== document.body && active !== document.documentElement) return;
+        window.focus();
+      }, 100);
+    };
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, []);
+
+// ─── Widget Initialization (runs once) ────────────────────────────────────
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const saveLoadAdapter = createSaveLoadAdapter(defaultSymbol, defaultInterval);
+    const activeTab = tabsRef.current.find(t => t.id === activeTabIdRef.current)
+      || tabsRef.current[0];
+    const initSymbol = activeTab?.symbol || defaultSymbol;
+    const initInterval = mapTimeframeToInterval(activeTab?.timeframe || rawTimeframe) || '60';
+
+    const saveLoadAdapter = createSaveLoadAdapter(() => {
+      const tab = tabsRef.current.find(t => t.id === activeTabIdRef.current);
+      return { symbol: tab?.symbol || initSymbol, tabId: activeTabIdRef.current };
+    });
 
     const widgetOptions = {
-      symbol: defaultSymbol,
+      symbol: initSymbol,
       datafeed: datafeed,
-      interval: defaultInterval,
+      interval: initInterval,
       container: chartContainerRef.current,
       library_path: '/charting_library/charting_library/',
       locale: 'en',
       disabled_features: ['use_localstorage_for_settings'],
-      enabled_features: ['saveload_separate_drawings_storage'],
+      enabled_features: ['saveload_separate_drawings_storage', 'items_favoriting'],
       save_load_adapter: saveLoadAdapter,
       auto_save_delay: 5,
       load_last_chart: true,
@@ -80,87 +311,101 @@ export default function TVChartApp() {
     widgetRef.current = tvWidget;
 
     tvWidget.onChartReady(() => {
+      widgetReadyRef.current = true;
       console.log('TradingView Chart is ready');
 
       const chart = tvWidget.activeChart();
       let saveTimeout: number | null = null;
 
-      const saveDrawings = async () => {
+      const triggerDrawingSave = async () => {
         if (saveTimeout) clearTimeout(saveTimeout);
         saveTimeout = window.setTimeout(async () => {
           try {
-            // Get current drawings state from chart (contains Maps)
             const state = chart.getLineToolsState();
-            // Save via adapter (adapter handles Map-to-object conversion)
             await saveLoadAdapter.saveLineToolsAndGroups(undefined, chart.id(), state);
+            // Also update in-memory tab state
+            const serialized = JSON.stringify(mapToObject(state));
+            const visRange = chart.getVisibleRange();
+            const currentTabId = activeTabIdRef.current;
+            tabsRef.current = tabsRef.current.map(t =>
+              t.id === currentTabId
+                ? { ...t, drawingsState: serialized, visibleFrom: visRange?.from, visibleTo: visRange?.to }
+                : t
+            );
           } catch (e) {
             console.error('Failed to auto-save drawings:', e);
           }
-        }, 2000); // Debounce 2 seconds
+        }, 2000);
       };
 
-      // Subscribe to drawing events to trigger auto-save
-      tvWidget.subscribe('drawing_event', () => {
-        saveDrawings();
-      });
+      tvWidget.subscribe('drawing_event', triggerDrawingSave);
 
-      // Subscribe to auto-save events for chart layout (indicators, settings)
-      tvWidget.subscribe('onAutoSaveNeeded', () => {
-        // TradingView will automatically call saveChart via save_load_adapter
-      });
-
-      // Subscribe to symbol changes to update localStorage and URL
+      // Track symbol changes (user typed in TV search bar)
       chart.onSymbolChanged().subscribe(null, () => {
         const newSymbol = chart.symbol();
-        localStorage.setItem(STORAGE_SYMBOL_KEY, newSymbol);
+        localStorage.setItem('lastSymbol', newSymbol);
+        const currentTabId = activeTabIdRef.current;
+        const updated = tabsRef.current.map(t =>
+          t.id === currentTabId
+            ? { ...t, symbol: newSymbol, label: t.label === t.symbol ? newSymbol : t.label }
+            : t
+        );
+        tabsRef.current = updated;
+        setTabs([...updated]);
+        saveTabsToStorage(updated);
         setSearchParams({ symbol: newSymbol, timeframe: rawTimeframe }, { replace: true });
       });
 
-      // Subscribe to interval changes to update localStorage and URL
+      // Track interval changes
       chart.onIntervalChanged().subscribe(null, () => {
         const newInterval = chart.resolution();
-        // Convert TradingView resolution back to timeframe format
         const newTimeframe = intervalToPeriod(newInterval);
-        localStorage.setItem(STORAGE_TIMEFRAME_KEY, newTimeframe);
-        setSearchParams({ symbol: defaultSymbol, timeframe: newTimeframe }, { replace: true });
+        localStorage.setItem('lastTimeframe', newTimeframe);
+        const currentTabId = activeTabIdRef.current;
+        const updated = tabsRef.current.map(t =>
+          t.id === currentTabId ? { ...t, timeframe: newTimeframe } : t
+        );
+        tabsRef.current = updated;
+        setTabs([...updated]);
+        saveTabsToStorage(updated);
       });
     });
 
     return () => {
+      widgetReadyRef.current = false;
       if (widgetRef.current) {
         widgetRef.current.remove();
         widgetRef.current = null;
       }
     };
-  }, [defaultSymbol, defaultInterval]);
+  }, []); // Run once — tab switching is handled imperatively
 
-  // Function to get current chart state as JSON
+  // ─── getChartState: for AI analysis (active chart, live) ─────────────────
+
   const getChartState = (): string => {
-    if (!widgetRef.current) {
-      throw new Error('Chart widget is not initialized');
-    }
-
+    if (!widgetRef.current) throw new Error('Chart widget is not initialized');
     try {
       const chart = widgetRef.current.activeChart();
       const lineToolsState = chart.getLineToolsState();
+      const visRange = chart.getVisibleRange();
 
-      // Convert the state to a plain object (handle Maps)
       const stateObj: any = {
         drawings: [],
         symbol: chart.symbol(),
         resolution: chart.resolution(),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        visibleFrom: visRange?.from,
+        visibleTo: visRange?.to,
       };
 
-      // Each source is { id, state: { type, state: {...visualProps}, points: [...], zorder } }
-      if (lineToolsState && lineToolsState.sources) {
+      if (lineToolsState?.sources) {
         lineToolsState.sources.forEach((source: any) => {
           const inner = source.state ?? {};
           stateObj.drawings.push({
             id: source.id,
-            type: inner.type,                 // e.g. "LineToolTrendLine"
-            points: inner.points,             // [{ time_t, offset, price, interval }]
-            properties: inner.state,          // { linecolor, linewidth, text, title, ... }
+            type: inner.type,
+            points: inner.points,
+            properties: inner.state,
             zorder: inner.zorder,
           });
         });
@@ -174,56 +419,128 @@ export default function TVChartApp() {
     }
   };
 
+  // ─── Derived: active tab for display ─────────────────────────────────────
+
+  const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
+
   return (
-    <div style={{ width: '100%', height: '100vh', position: 'relative' }}>
-      <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
+    <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+
+      {/* Tab Bar */}
+      <ChartTabBar
+        tabs={tabs}
+        activeTabId={activeTabId}
+        workspaceName={workspaceName}
+        onWorkspaceNameChange={handleWorkspaceNameChange}
+        onSwitch={switchToTab}
+        onAdd={addTab}
+        onClose={closeTab}
+        onRename={renameTab}
+        onSaveLayout={() => setLayoutModalMode('save')}
+        onLoadLayout={() => setLayoutModalMode('load')}
+      />
+
+      {/* Chart Container */}
+      <div ref={chartContainerRef} style={{ flex: 1 }} />
+
+      {/* Workspace Layout Modal */}
+      {layoutModalMode && (
+        <WorkspaceLayoutModal
+          mode={layoutModalMode}
+          workspaceName={workspaceName}
+          currentTabs={tabs}
+          onSave={layout => {
+            setLastLayoutIdForSymbol(workspaceName, layout.id);
+            setLayoutModalMode(null);
+          }}
+          onLoad={layout => {
+            applyLayout(layout, workspaceName);
+            setLayoutModalMode(null);
+          }}
+          onClose={() => setLayoutModalMode(null)}
+        />
+      )}
 
       {/* Floating Action Buttons */}
       <div style={{
         position: 'fixed',
-        top: '20px',
+        top: '48px',
         right: isAnalysisPanelOpen ? '470px' : '20px',
         display: 'flex',
-        gap: '12px',
+        gap: '10px',
         zIndex: 9999,
-        transition: 'all 0.3s ease',
+        transition: 'right 0.3s ease',
       }}>
-        {/* Analyse Button */}
+        {/* AI Chat toggle */}
+        <button
+          onClick={() => setIsAiOverlayOpen(prev => !prev)}
+          style={{
+            height: '40px',
+            padding: '0 14px',
+            backgroundColor: isAiOverlayOpen ? 'rgba(15,15,25,0.85)' : 'rgba(100,181,246,0.15)',
+            color: isAiOverlayOpen ? '#90caf9' : '#1565c0',
+            border: `1px solid ${isAiOverlayOpen ? 'rgba(100,181,246,0.4)' : 'rgba(25,118,210,0.3)'}`,
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 600,
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+          title="AI Chat overlay (F4)"
+        >
+          <span style={{ fontSize: '16px' }}>🤖</span>
+          <span>AI</span>
+        </button>
+
+        {/* Analyse sidebar toggle */}
         <button
           onClick={() => setIsAnalysisPanelOpen(!isAnalysisPanelOpen)}
           style={{
-            width: '120px',
             height: '40px',
+            padding: '0 14px',
             backgroundColor: '#1976d2',
             color: 'white',
             border: 'none',
             borderRadius: '8px',
             cursor: 'pointer',
-            fontSize: '14px',
+            fontSize: '13px',
             fontWeight: 600,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
+            gap: '6px',
           }}
-          title="Analyze stock fundamentals, news, and social sentiment"
+          title="Fundamentals, news, snapshots"
         >
-          <span style={{ fontSize: '18px' }}>📊</span>
+          <span style={{ fontSize: '16px' }}>📊</span>
           <span>Analyse</span>
         </button>
-
       </div>
 
-      {/* Analysis Panel */}
-      <AnalysisPanel
-        open={isAnalysisPanelOpen}
-        symbol={defaultSymbol}
-        timeframe={rawTimeframe}
-        onClose={() => setIsAnalysisPanelOpen(false)}
+      {/* AI Chat Overlay */}
+      <AIChatOverlay
+        open={isAiOverlayOpen}
+        onToggle={() => setIsAiOverlayOpen(prev => !prev)}
+        symbol={activeTab?.symbol || defaultSymbol}
+        timeframe={activeTab?.timeframe || rawTimeframe}
         getChartState={getChartState}
+        tabs={tabs}
+        activeTabId={activeTabId}
       />
 
+      {/* Analysis Panel (sidebar — fundamentals, news, snapshots) */}
+      <AnalysisPanel
+        open={isAnalysisPanelOpen}
+        symbol={activeTab?.symbol || defaultSymbol}
+        timeframe={activeTab?.timeframe || rawTimeframe}
+        onClose={() => setIsAnalysisPanelOpen(false)}
+        getChartState={getChartState}
+        tabs={tabs}
+        activeTabId={activeTabId}
+      />
     </div>
   );
 }

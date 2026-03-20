@@ -1,7 +1,10 @@
 package com.dtech.kitecon.web;
 
+import com.dtech.kitecon.service.MultiChartChatService;
 import com.dtech.kitecon.service.StockAnalysisService;
 import com.dtech.kitecon.service.TechnicalChatService;
+import com.dtech.kitecon.service.model.MultiChartChatRequest;
+import com.dtech.kitecon.service.model.MultiChartChatResponse;
 import com.dtech.kitecon.service.model.StockAnalysisResponse;
 import com.dtech.kitecon.service.model.TechnicalChatRequest;
 import com.dtech.kitecon.service.model.TechnicalChatResponse;
@@ -26,6 +29,7 @@ public class StockAnalysisController {
 
     private final StockAnalysisService analysisService;
     private final TechnicalChatService technicalChatService;
+    private final MultiChartChatService multiChartChatService;
 
     /**
      * Get comprehensive stock analysis
@@ -166,6 +170,29 @@ public class StockAnalysisController {
             return ResponseEntity.ok(technicalChatService.chat(req));
         } catch (Exception e) {
             log.error("Error in technical-chat", e);
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    /**
+     * Multi-chart AI analysis — reason/validate across 2+ chart contexts
+     * POST /api/analysis/multi-chart-chat
+     */
+    @PostMapping("/multi-chart-chat")
+    public ResponseEntity<MultiChartChatResponse> multiChartChat(
+        @RequestBody MultiChartChatRequest req,
+        Authentication auth
+    ) {
+        if (req.getCharts() == null || req.getCharts().size() < 2) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (req.getMode() == null) return ResponseEntity.badRequest().build();
+        try {
+            log.info("User {} multi-chart-chat: {} charts, mode={}",
+                auth.getName(), req.getCharts().size(), req.getMode());
+            return ResponseEntity.ok(multiChartChatService.chat(req));
+        } catch (Exception e) {
+            log.error("Error in multi-chart-chat", e);
             return ResponseEntity.status(500).build();
         }
     }

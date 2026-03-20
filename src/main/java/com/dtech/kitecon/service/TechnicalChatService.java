@@ -28,7 +28,7 @@ public class TechnicalChatService {
 
         String intervalName = Interval.fromUiKey(req.getTimeframe()).name();
         List<OhlcBarDTO> bars = chartDataService.getBars(
-            req.getSymbol(), intervalName, null, null);
+            req.getSymbol(), intervalName, req.getVisibleFrom(), req.getVisibleTo());
 
         log.info("Technical chat: symbol={}, timeframe={}, drawings={}, bars={}, mode={}",
             req.getSymbol(), req.getTimeframe(), drawings.size(), bars.size(), req.getMode());

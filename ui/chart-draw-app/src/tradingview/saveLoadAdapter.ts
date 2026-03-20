@@ -4,7 +4,7 @@ import { apiFetch, getApiUrl } from '../config/api';
 import { withAuth } from '../utils/apiHelper';
 
 // Helper function to recursively convert Maps and Map-like objects to plain objects
-function mapToObject(obj: any): any {
+export function mapToObject(obj: any): any {
   // Handle native Map
   if (obj instanceof Map) {
     const result: any = {};
@@ -65,7 +65,18 @@ function mapToObject(obj: any): any {
 
 const STORAGE_LAST_LAYOUT_KEY = 'lastLayoutId';
 
-export function createSaveLoadAdapter(symbol: string, interval: string) {
+export interface AdapterContext {
+  symbol: string;
+  tabId: string;
+}
+
+// Maps a (tabId, symbol) pair to a scoped key for the drawings backend API.
+// This isolates each tab's drawings from other tabs with the same symbol.
+function scopedSymbol(ctx: AdapterContext): string {
+  return `${ctx.tabId}:${ctx.symbol}`;
+}
+
+export function createSaveLoadAdapter(getContext: () => AdapterContext) {
 
   const getLastLayoutId = (): number | null => {
     const stored = localStorage.getItem(STORAGE_LAST_LAYOUT_KEY);
@@ -183,12 +194,13 @@ export function createSaveLoadAdapter(symbol: string, interval: string) {
         // Recursively convert all Maps to plain objects
         const serializableState = mapToObject(state);
 
+        const ctx = getContext();
         const url = getApiUrl('/api/chart-state/drawings');
         await apiFetch(url.toString(), withAuth({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            symbol: symbol,
+            symbol: scopedSymbol(ctx),
             layoutId: numericLayoutId,
             drawings: serializableState,
           })
@@ -210,8 +222,9 @@ export function createSaveLoadAdapter(symbol: string, interval: string) {
           ? parseInt(actualLayoutId, 10)
           : actualLayoutId;
 
+        const ctx = getContext();
         const url = getApiUrl('/api/chart-state/drawings');
-        url.searchParams.set('symbol', symbol);
+        url.searchParams.set('symbol', scopedSymbol(ctx));
         url.searchParams.set('layoutId', String(numericLayoutId));
 
         const response = await apiFetch(url.toString(), withAuth());

@@ -4,6 +4,9 @@ import com.dtech.kitecon.config.KiteConnectConfig;
 import com.dtech.kitecon.config.KiteConnectPool;
 import com.dtech.kitecon.controller.BarSeriesHelper;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.data.Subscription;
+import com.dtech.kitecon.repository.InstrumentRepository;
+import com.dtech.kitecon.repository.SubscriptionRepository;
 import com.dtech.kitecon.service.MarketHoursService;
 import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
@@ -38,6 +41,8 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
     private final KiteConnectConfig kiteConnectConfig;   // kept for backward compat init path
     private final KiteConnectPool kiteConnectPool;
     private final MarketHoursService marketHoursService;
+    private final SubscriptionRepository subscriptionRepository;
+    private final InstrumentRepository instrumentRepository;
 
     private KiteTicker kiteTicker;
     private final AtomicBoolean connected = new AtomicBoolean(false);
@@ -215,6 +220,36 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
             } catch (Exception e) {
                 log.error("Error resubscribing after connect", e);
             }
+        } else {
+            // First connect on startup — auto-subscribe all ACTIVE subscriptions from DB
+            autoSubscribeFromDatabase();
+        }
+    }
+
+    private void autoSubscribeFromDatabase() {
+        try {
+            List<Subscription> active = subscriptionRepository.findAllByStatus("ACTIVE");
+            if (active.isEmpty()) {
+                log.info("No active subscriptions found in DB — skipping auto-subscribe");
+                return;
+            }
+
+            List<Instrument> instruments = new ArrayList<>();
+            for (Subscription sub : active) {
+                String symbol = sub.getTradingSymbol();
+                if (symbol == null || symbol.startsWith("INDEX-")) continue;
+                instrumentRepository.findAllByTradingsymbol(symbol).stream()
+                        .filter(i -> "NSE".equals(i.getExchange()))
+                        .findFirst()
+                        .ifPresent(instruments::add);
+            }
+
+            if (!instruments.isEmpty()) {
+                log.info("Auto-subscribing to {} instruments from DB on startup", instruments.size());
+                subscribe(instruments);
+            }
+        } catch (Exception e) {
+            log.error("Error auto-subscribing from database on startup", e);
         }
     }
 
