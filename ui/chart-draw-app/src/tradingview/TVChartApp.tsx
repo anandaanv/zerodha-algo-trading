@@ -20,6 +20,7 @@ import {
   loadWorkspaceLayouts,
   getLastLayoutIdForSymbol,
   setLastLayoutIdForSymbol,
+  updateWorkspaceLayout,
 } from './workspaceTypes';
 import WorkspaceLayoutModal from './WorkspaceLayoutModal';
 
@@ -42,6 +43,10 @@ export default function TVChartApp() {
   const savedTimeframe = localStorage.getItem('lastTimeframe');
   const defaultSymbol = urlSymbol || savedSymbol || 'TCS';
   const rawTimeframe = urlTimeframe || savedTimeframe || '1h';
+
+  const [currentLayoutId, setCurrentLayoutId] = useState<string | null>(() =>
+    getLastLayoutIdForSymbol(loadWorkspaceName(defaultSymbol))
+  );
 
   // Multi-timeframe special case (legacy feature)
   const timeframes = rawTimeframe ? rawTimeframe.split(',').map(tf => tf.trim()) : [];
@@ -175,6 +180,7 @@ export default function TVChartApp() {
     setTabs(newTabs);
     saveTabsToStorage(newTabs);
     setLastLayoutIdForSymbol(targetSymbol, layout.id);
+    setCurrentLayoutId(layout.id);
     setTimeout(() => switchToTab(newTabs[0].id), 0);
   }, [switchToTab]);
 
@@ -187,7 +193,9 @@ export default function TVChartApp() {
       const layout = loadWorkspaceLayouts().find(l => l.id === lastId);
       if (layout) { applyLayout(layout, name); return; }
     }
-    // No layout: replace all tab symbols with the new workspace symbol, keep timeframes/labels
+    // No layout for this symbol — clear current layout so 💾 opens Save As dialog
+    setCurrentLayoutId(null);
+    // Replace all tab symbols with the new workspace symbol, keep timeframes/labels
     const updated = tabsRef.current.map(t => ({
       ...t,
       symbol: name,
@@ -295,7 +303,7 @@ export default function TVChartApp() {
       container: chartContainerRef.current,
       library_path: '/charting_library/charting_library/',
       locale: 'en',
-      disabled_features: ['use_localstorage_for_settings'],
+      disabled_features: [],
       enabled_features: ['saveload_separate_drawings_storage', 'items_favoriting'],
       save_load_adapter: saveLoadAdapter,
       auto_save_delay: 5,
@@ -436,7 +444,16 @@ export default function TVChartApp() {
         onAdd={addTab}
         onClose={closeTab}
         onRename={renameTab}
-        onSaveLayout={() => setLayoutModalMode('save')}
+        onSaveLayout={() => {
+          if (currentLayoutId) {
+            // Overwrite current layout in place
+            const layoutTabs = tabs.map(t => ({ label: t.label, symbol: t.symbol, timeframe: t.timeframe }));
+            updateWorkspaceLayout(currentLayoutId, layoutTabs);
+          } else {
+            setLayoutModalMode('save');
+          }
+        }}
+        onSaveAsLayout={() => setLayoutModalMode('save')}
         onLoadLayout={() => setLayoutModalMode('load')}
       />
 
@@ -451,6 +468,7 @@ export default function TVChartApp() {
           currentTabs={tabs}
           onSave={layout => {
             setLastLayoutIdForSymbol(workspaceName, layout.id);
+            setCurrentLayoutId(layout.id);
             setLayoutModalMode(null);
           }}
           onLoad={layout => {
@@ -461,41 +479,14 @@ export default function TVChartApp() {
         />
       )}
 
-      {/* Floating Action Buttons */}
+      {/* Floating Action Buttons — Analyse only (AI chat is now the bottom-left bar) */}
       <div style={{
         position: 'fixed',
         top: '48px',
         right: isAnalysisPanelOpen ? '470px' : '20px',
-        display: 'flex',
-        gap: '10px',
         zIndex: 9999,
         transition: 'right 0.3s ease',
       }}>
-        {/* AI Chat toggle */}
-        <button
-          onClick={() => setIsAiOverlayOpen(prev => !prev)}
-          style={{
-            height: '40px',
-            padding: '0 14px',
-            backgroundColor: isAiOverlayOpen ? 'rgba(15,15,25,0.85)' : 'rgba(100,181,246,0.15)',
-            color: isAiOverlayOpen ? '#90caf9' : '#1565c0',
-            border: `1px solid ${isAiOverlayOpen ? 'rgba(100,181,246,0.4)' : 'rgba(25,118,210,0.3)'}`,
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: 600,
-            backdropFilter: 'blur(8px)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
-          title="AI Chat overlay (F4)"
-        >
-          <span style={{ fontSize: '16px' }}>🤖</span>
-          <span>AI</span>
-        </button>
-
-        {/* Analyse sidebar toggle */}
         <button
           onClick={() => setIsAnalysisPanelOpen(!isAnalysisPanelOpen)}
           style={{

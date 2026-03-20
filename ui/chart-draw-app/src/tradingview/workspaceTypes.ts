@@ -53,6 +53,11 @@ export function saveWorkspaceLayouts(layouts: WorkspaceLayout[]) {
   try { localStorage.setItem(LAYOUTS_KEY, JSON.stringify(layouts)); } catch { /* ignore */ }
 }
 
+export function updateWorkspaceLayout(id: string, tabs: WorkspaceLayoutTab[]) {
+  const layouts = loadWorkspaceLayouts();
+  saveWorkspaceLayouts(layouts.map(l => l.id === id ? { ...l, tabs } : l));
+}
+
 export function getLayoutsForSymbol(symbol: string): { symbolSpecific: WorkspaceLayout[]; global: WorkspaceLayout[] } {
   const all = loadWorkspaceLayouts();
   return {

@@ -12,12 +12,13 @@ interface ChartTabBarProps {
   onClose: (tabId: string) => void;
   onRename: (tabId: string, newLabel: string) => void;
   onSaveLayout: () => void;
+  onSaveAsLayout: () => void;
   onLoadLayout: () => void;
 }
 
 export default function ChartTabBar({
   tabs, activeTabId, workspaceName, onWorkspaceNameChange,
-  onSwitch, onAdd, onClose, onRename, onSaveLayout, onLoadLayout,
+  onSwitch, onAdd, onClose, onRename, onSaveLayout, onSaveAsLayout, onLoadLayout,
 }: ChartTabBarProps) {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -54,7 +55,7 @@ export default function ChartTabBar({
       <WorkspaceSelector name={workspaceName} onChange={onWorkspaceNameChange} />
 
       {/* Layout buttons — between pill and divider */}
-      <button style={styles.layoutBtn} onClick={onSaveLayout} title="Save workspace layout">💾</button>
+      <SaveButton onSave={onSaveLayout} onSaveAs={onSaveAsLayout} />
       <button style={styles.layoutBtn} onClick={onLoadLayout} title="Load workspace layout">📂</button>
 
       <div style={styles.divider} />
@@ -244,6 +245,62 @@ function WorkspaceSelector({ name, onChange }: { name: string; onChange: (v: str
     </div>
   );
 }
+
+// ─── Save split button ────────────────────────────────────────────────────────
+
+function SaveButton({ onSave, onSaveAs }: { onSave: () => void; onSaveAs: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [menuOpen]);
+
+  const handleSave = () => {
+    onSave();
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  return (
+    <div ref={ref} style={{ display: 'flex', alignItems: 'stretch', position: 'relative', backgroundColor: '#131722' }}>
+      <button
+        style={{ ...styles.layoutBtn, minWidth: 36, fontSize: saved ? 11 : 16, color: saved ? '#4caf50' : 'rgba(255,255,255,0.8)', transition: 'color 0.2s' }}
+        onClick={handleSave}
+        title="Save layout (overwrites current; ▾ for Save As)"
+      >
+        {saved ? '✓' : '💾'}
+      </button>
+      <button
+        style={{ ...styles.layoutBtn, padding: '0 4px', fontSize: 9, borderLeft: '1px solid rgba(255,255,255,0.15)' }}
+        onClick={() => setMenuOpen(o => !o)}
+        title="Save As…"
+      >▾</button>
+      {menuOpen && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0,
+          backgroundColor: '#1e222d', border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          zIndex: 10002, minWidth: 130, overflow: 'hidden',
+        }}>
+          <div style={saveMenuItem} onMouseDown={() => { handleSave(); setMenuOpen(false); }}>💾 Save</div>
+          <div style={saveMenuItem} onMouseDown={() => { onSaveAs(); setMenuOpen(false); }}>📋 Save As…</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const saveMenuItem: React.CSSProperties = {
+  padding: '8px 14px', fontSize: 12, color: 'rgba(255,255,255,0.85)',
+  cursor: 'pointer', whiteSpace: 'nowrap',
+};
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
