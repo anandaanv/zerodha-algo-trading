@@ -148,13 +148,18 @@ export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getCh
         const res: MultiChartChatResponse = await multiChartChatAnalysis({ charts, userMessage, mode });
         aiMessage = res.message;
       } else {
-        const selectedPrompt = customPromptId
-          ? loadCustomPrompts().find(p => p.id === customPromptId)
-          : null;
+        const prompts = loadCustomPrompts();
+        const selectedPrompt = customPromptId ? prompts.find(pr => pr.id === customPromptId) : undefined;
+        // Stale ID (prompt was deleted) — clear it so the dropdown shows Default
+        if (customPromptId && !selectedPrompt) {
+          setCustomPromptId('');
+          setLastUsedPromptId(null);
+        }
         const res = await technicalChatAnalysis({
           symbol, timeframe, chartStateJson, userMessage, mode,
           visibleFrom: p?.visibleFrom, visibleTo: p?.visibleTo,
-          customSystemPrompt: selectedPrompt?.promptText,
+          // Pass undefined (not null/empty) so JSON.stringify omits it → backend uses default logic
+          customSystemPrompt: selectedPrompt?.promptText || undefined,
         });
         aiMessage = res.message;
       }
