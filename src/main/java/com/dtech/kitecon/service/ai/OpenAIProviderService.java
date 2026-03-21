@@ -480,6 +480,10 @@ public class OpenAIProviderService implements AIProvider {
      * Public alias so services outside this class can call OpenAI with a raw prompt.
      */
     public String callOpenAIRaw(String prompt) {
+        if (openAIClient == null) {
+            log.warn("OpenAI client not initialized");
+            return "AI analysis unavailable — OpenAI not configured.";
+        }
         return callOpenAI(prompt);
     }
 
