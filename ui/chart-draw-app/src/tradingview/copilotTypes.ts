@@ -100,6 +100,7 @@ export interface TriggerAnalysisResponse {
   investigationId: number;
   status: 'created' | 'existing';
   message?: string;
+  warning?: string;
   hypotheses: CopilotHypothesis[];
   flags: CopilotAnomalyFlag[];
 }

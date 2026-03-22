@@ -98,7 +98,11 @@ public class CopilotAnalysisController {
         // Run orchestrator to determine which skills to invoke
         List<CopilotSkill> availableSkills = skillService.getAllSkillsForUser(userId);
 
-        if (!availableSkills.isEmpty()) {
+        String orchestratorWarning = null;
+
+        if (availableSkills.isEmpty()) {
+            orchestratorWarning = "No skills configured. Go to /skills to create or seed skills.";
+        } else {
             try {
                 String orchestratorPrompt = orchestratorService.buildOrchestratorPrompt(
                         availableSkills, investigation, previous);
@@ -109,7 +113,6 @@ public class CopilotAnalysisController {
                 AIResponse response = responseParser.parse(rawResponse);
 
                 if (response instanceof OrchestratorResponse orchResponse) {
-                    // Run the first skill immediately (async would be better but keep simple for Phase 1)
                     List<String> skillsToRun = orchestratorService.filterCycleSkills(
                             orchResponse.getSkillsToInvoke(), investigation);
 
@@ -118,6 +121,7 @@ public class CopilotAnalysisController {
                     }
                 }
             } catch (Exception e) {
+                orchestratorWarning = e.getMessage();
                 log.warn("Orchestrator call failed: {}. Investigation created without AI run.", e.getMessage());
             }
         }
@@ -125,12 +129,13 @@ public class CopilotAnalysisController {
         // Reload investigation after skill runs
         investigation = investigationService.getOrThrow(investigation.getId());
 
-        return ResponseEntity.ok(Map.of(
-                "investigationId", investigation.getId(),
-                "status", "created",
-                "hypotheses", hypothesisService.getAllHypotheses(investigation.getId()),
-                "flags", hypothesisService.getUnacknowledgedFlags(investigation.getId())
-        ));
+        var result = new java.util.HashMap<String, Object>();
+        result.put("investigationId", investigation.getId());
+        result.put("status", "created");
+        result.put("hypotheses", hypothesisService.getAllHypotheses(investigation.getId()));
+        result.put("flags", hypothesisService.getUnacknowledgedFlags(investigation.getId()));
+        if (orchestratorWarning != null) result.put("warning", orchestratorWarning);
+        return ResponseEntity.ok(result);
     }
 
     /**
