@@ -14,11 +14,19 @@ interface ChartTabBarProps {
   onSaveLayout: () => void;
   onSaveAsLayout: () => void;
   onLoadLayout: () => void;
+  // Action panel buttons
+  isCopilotOpen?: boolean;
+  isAnalysisOpen?: boolean;
+  copilotCount?: number;
+  onToggleCopilot?: () => void;
+  onToggleAnalysis?: () => void;
+  onCopilotSettings?: () => void;
 }
 
 export default function ChartTabBar({
   tabs, activeTabId, workspaceName, onWorkspaceNameChange,
   onSwitch, onAdd, onClose, onRename, onSaveLayout, onSaveAsLayout, onLoadLayout,
+  isCopilotOpen, isAnalysisOpen, copilotCount, onToggleCopilot, onToggleAnalysis, onCopilotSettings,
 }: ChartTabBarProps) {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -107,6 +115,36 @@ export default function ChartTabBar({
       </div>
 
       <button style={styles.addBtn} onClick={onAdd} title="New chart tab">+</button>
+
+      {/* Right-side action buttons */}
+      {(onToggleCopilot || onToggleAnalysis || onCopilotSettings) && (
+        <>
+          <div style={styles.divider} />
+          {onCopilotSettings && (
+            <button
+              style={{ ...styles.actionBtn }}
+              onClick={onCopilotSettings}
+              title="Co-Pilot AI Settings"
+            >⚙</button>
+          )}
+          {onToggleCopilot && (
+            <button
+              style={{ ...styles.actionBtn, background: isCopilotOpen ? '#283593' : undefined, color: isCopilotOpen ? '#fff' : undefined }}
+              onClick={onToggleCopilot}
+              title="Co-Pilot: hypothesis tracking and trade management"
+            >
+              🧠{(copilotCount ?? 0) > 0 ? ` (${copilotCount})` : ''}
+            </button>
+          )}
+          {onToggleAnalysis && (
+            <button
+              style={{ ...styles.actionBtn, background: isAnalysisOpen ? '#1565c0' : undefined, color: isAnalysisOpen ? '#fff' : undefined }}
+              onClick={onToggleAnalysis}
+              title="Fundamentals, news, snapshots"
+            >📊</button>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -376,6 +414,19 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '20px',
     color: '#555',
     flexShrink: 0,
+  },
+  actionBtn: {
+    padding: '0 10px',
+    background: 'none',
+    border: 'none',
+    borderLeft: '1px solid #d0d0d0',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: '#333',
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    borderRadius: 0,
   },
   layoutBtn: {
     padding: '0 8px',

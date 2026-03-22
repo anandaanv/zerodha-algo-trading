@@ -162,6 +162,102 @@ public class CopilotSkillController {
         }
     }
 
+    /**
+     * Test a skill against a real or hypothetical chart scenario.
+     *
+     * Body: { symbol, timeframe, patternPresent, description }
+     * Returns: { matched, verdict, analysis, failedRules[], suggestedChanges{} }
+     */
+    @PostMapping("/{id}/test")
+    public ResponseEntity<Map<String, Object>> testSkill(
+            Authentication auth,
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+
+        Long userId = resolveUserId(auth);
+        CopilotSkill skill = skillService.getSkillById(id).orElse(null);
+        if (skill == null) return ResponseEntity.notFound().build();
+
+        String skillPrompt = skillService.buildSkillPrompt(skill);
+        String symbol = (String) body.getOrDefault("symbol", "");
+        String timeframe = (String) body.getOrDefault("timeframe", "");
+        boolean patternPresent = Boolean.parseBoolean(body.getOrDefault("patternPresent", "true").toString());
+        String description = (String) body.getOrDefault("description", "");
+
+        String systemPrompt = """
+                You are a strict validator for a trading skill used in an Elliott Wave analysis system.
+
+                A skill has 7 rule fields. You must evaluate EACH field individually against the described
+                chart scenario and give a clear pass/fail verdict per rule with specific reasoning.
+
+                Format your `analysis` field as Markdown with this exact structure:
+
+                ## Rule-by-Rule Evaluation
+
+                ### 1. Identification Rules — ✅ PASS / ❌ FAIL
+                **What the rule says:** (quote or summarise the key condition)
+                **What the chart showed:** (what was actually described)
+                **Verdict:** Pass because... / Fail because... (be specific — quote exact words from the rule that were not met)
+
+                ### 2. Stage Detection — ✅ PASS / ❌ FAIL
+                ... (same format)
+
+                (repeat for all 7 rules)
+
+                ## Summary
+                Overall matched: YES/NO. Root cause of failure: ... (if failed)
+
+                Return ONLY a valid JSON object with no markdown fences:
+                {
+                  "matched": true or false,
+                  "verdict": "one-sentence summary",
+                  "analysis": "the full Markdown analysis as described above",
+                  "failedRules": ["identificationRules", "stageDetection"],
+                  "suggestedChanges": {
+                    "fieldName": "complete rewritten text for this field that would have caught this case"
+                  }
+                }
+
+                Field names must exactly match: identificationRules, stageDetection, entryRules,
+                indicatorRules, invalidationRules, ambiguityQuestions, crossVerificationRules.
+                Only include fields in suggestedChanges if they failed. Be very specific — the user
+                needs to know EXACTLY which sentence in which rule caused the failure.
+                """;
+
+        String userMessage = String.format("""
+                SKILL PROMPT:
+                %s
+
+                CHART CONTEXT:
+                Symbol: %s
+                Timeframe: %s
+                Pattern actually present on this chart: %s
+
+                WHAT WAS VISIBLE / HAPPENED:
+                %s
+                """, skillPrompt, symbol, timeframe, patternPresent ? "YES" : "NO", description);
+
+        try {
+            String raw = aiService.call(userId, systemPrompt, userMessage);
+            String json = raw.trim();
+            if (json.startsWith("```")) {
+                int start = json.indexOf('\n');
+                int end = json.lastIndexOf("```");
+                if (start > 0 && end > start) json = json.substring(start + 1, end).trim();
+            }
+            Map<String, Object> result = objectMapper.readValue(json, new TypeReference<>() {});
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                    "matched", false,
+                    "verdict", "Test could not be completed: " + e.getMessage(),
+                    "analysis", "",
+                    "failedRules", List.of(),
+                    "suggestedChanges", Map.of()
+            ));
+        }
+    }
+
     private Long resolveUserId(Authentication auth) {
         return userRepository.findByUsername(auth.getName())
                 .map(User::getId)

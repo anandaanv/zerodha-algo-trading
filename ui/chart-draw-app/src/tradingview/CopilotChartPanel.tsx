@@ -115,19 +115,13 @@ export default function CopilotChartPanel({
 
   return (
     <>
-      {/* Sliding panel */}
+      {/* Inline panel — parent wrapper controls width + open/close transition */}
       <div style={{
-        position: 'fixed',
-        top: 0,
-        right: open ? 0 : '-420px',
         width: 400,
-        height: '100vh',
+        height: '100%',
         background: '#fff',
-        boxShadow: '-4px 0 20px rgba(0,0,0,0.12)',
-        zIndex: 9997,
         display: 'flex',
         flexDirection: 'column',
-        transition: 'right 0.3s ease',
         overflow: 'hidden',
       }}>
         {/* Header */}
