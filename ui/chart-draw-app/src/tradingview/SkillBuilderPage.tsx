@@ -46,7 +46,7 @@ const EMPTY_SKILL: Partial<CopilotSkill> = {
 type NavSelection = { type: 'orchestrator' } | { type: 'skill'; id: number | 'new' };
 type PageMode = 'view' | 'edit';
 
-interface ChatMessage { role: 'user' | 'assistant'; content: string; suggestedFields?: Record<string, string> }
+interface ChatMessage { role: 'user' | 'assistant'; content: string; appliedFields?: string[] }
 interface AttachedFile { name: string; content: string }
 
 // ─── Prompt compile / decompile ───────────────────────────────────────────────
@@ -307,9 +307,17 @@ export default function SkillBuilderPage() {
     setChatLoading(true);
     try {
       const res: AiAssistResponse = await aiAssistSkill(fullMsg, form);
+      const hasFields = res.suggestedFields && Object.keys(res.suggestedFields).length > 0;
+
+      // Auto-apply fields immediately — no manual button needed
+      if (hasFields) {
+        setForm(prev => ({ ...prev, ...res.suggestedFields }));
+        if (mode === 'view') setMode('edit');
+      }
+
       setChat(prev => [...prev, {
         role: 'assistant', content: res.reply,
-        suggestedFields: res.suggestedFields && Object.keys(res.suggestedFields).length > 0 ? res.suggestedFields : undefined,
+        appliedFields: hasFields ? Object.keys(res.suggestedFields!) : undefined,
       }]);
     } catch (e) {
       setChat(prev => [...prev, { role: 'assistant', content: `Error: ${e}` }]);
@@ -319,7 +327,6 @@ export default function SkillBuilderPage() {
   const applyFields = (fields: Record<string, string>) => {
     setForm(prev => ({ ...prev, ...fields }));
     if (mode === 'view') setMode('edit');
-    setSuccess('AI suggestions applied — review and save when ready.');
   };
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -549,10 +556,13 @@ export default function SkillBuilderPage() {
                         }}>
                           {msg.content}
                         </div>
-                        {msg.suggestedFields && (
-                          <button onClick={() => applyFields(msg.suggestedFields!)} style={{ marginTop: 4, fontSize: 11, padding: '3px 10px', background: '#43a047', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
-                            ✓ Apply {Object.keys(msg.suggestedFields).length} suggestion(s) to fields
-                          </button>
+                        {msg.appliedFields && (
+                          <div style={{ marginTop: 4, fontSize: 11, color: '#43a047', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            <span style={{ fontWeight: 700 }}>✓ Applied:</span>
+                            {msg.appliedFields.map(f => (
+                              <span key={f} style={{ background: '#e8f5e9', color: '#2e7d32', padding: '1px 6px', borderRadius: 8 }}>{f}</span>
+                            ))}
+                          </div>
                         )}
                       </div>
                     ))}
