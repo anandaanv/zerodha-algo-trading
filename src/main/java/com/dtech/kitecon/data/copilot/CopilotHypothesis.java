@@ -39,7 +39,7 @@ public class CopilotHypothesis {
     private String description;
 
     /** wave_1 | wave_2 | wave_3 | wave_4 | wave_5 | wave_a | wave_b | wave_c */
-    @Column(name = "wave_context", length = 50)
+    @Column(name = "wave_context", length = 500)
     private String waveContext;
 
     /** triangle | double_bottom | double_top | flat_abc | zigzag | flag | wedge | complex_wxyz */

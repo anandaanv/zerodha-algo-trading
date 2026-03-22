@@ -140,7 +140,63 @@ export interface OrchestratorTestResult {
   suggestedChanges: string;
 }
 
+// ─── Observation Types (Phase 1: Scan) ────────────────────────────────────────
+
+export interface KeyLevel {
+  price: number;
+  label: string;
+}
+
+export interface DrawingPoint {
+  time: number;  // unix timestamp in seconds
+  price: number;
+  label: string;
+}
+
+export interface CopilotObservation {
+  id: number;
+  investigationId: number;
+  skillKey: string;
+  patternDetected: boolean;
+  patternType: string | null;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  structuralDetails: string | null;
+  stage: string | null;
+  keyLevels: string | null;     // JSON string of KeyLevel[]
+  drawingPoints: string | null; // JSON string of DrawingPoint[]
+  drawingType: string | null;
+  timeframe: string | null;
+  contradictions: string | null; // JSON string of string[]
+  reasoning: string | null;
+  createdAt: string;
+}
+
+export interface ReasoningRequest {
+  investigationId: number;
+  observationIds?: number[];
+  drawingsJson?: string;
+  scenarioText?: string;
+  priorHypothesisIds?: number[];
+  reasoningSkillKeys?: string[];
+}
+
 // ─── API Response Shapes ──────────────────────────────────────────────────────
+
+export interface ScanResponse {
+  investigationId: number;
+  status: 'scanned';
+  observations: CopilotObservation[];
+  warning?: string;
+}
+
+export interface ReasonResponse {
+  investigationId: number;
+  status: 'reasoned';
+  hypotheses: CopilotHypothesis[];
+  flags: CopilotAnomalyFlag[];
+  observations: CopilotObservation[];
+  warning?: string;
+}
 
 export interface TriggerAnalysisResponse {
   investigationId: number;
@@ -149,6 +205,7 @@ export interface TriggerAnalysisResponse {
   warning?: string;
   hypotheses: CopilotHypothesis[];
   flags: CopilotAnomalyFlag[];
+  observations?: CopilotObservation[];
 }
 
 export interface DashboardResponse {

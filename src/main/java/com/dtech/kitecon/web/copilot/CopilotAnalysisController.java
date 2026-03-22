@@ -8,6 +8,7 @@ import com.dtech.kitecon.auth.UserRepository;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.data.ChartLayout;
 import com.dtech.kitecon.data.copilot.CopilotInvestigation;
+import com.dtech.kitecon.data.copilot.CopilotObservation;
 import com.dtech.kitecon.data.copilot.CopilotSkill;
 import com.dtech.kitecon.repository.ChartLayoutRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
@@ -19,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -26,8 +28,11 @@ import java.util.Optional;
 /**
  * REST API for triggering and managing Co-Pilot investigations.
  *
- * POST /api/analysis/trigger   — start an investigation when layout opens
- * POST /api/analysis/respond   — submit expert response to a NEEDS_EXPERT question
+ * POST /api/analysis/scan       — Phase 1: run all scan skills, return observations
+ * POST /api/analysis/reason     — Phase 2: cross-correlate observations, return hypotheses
+ * POST /api/analysis/trigger    — convenience: runs scan then reason sequentially
+ * GET  /api/analysis/observations — get observations for an investigation
+ * POST /api/analysis/respond    — submit expert response to a NEEDS_EXPERT question
  * POST /api/analysis/confirm-wave — expert confirms or rejects system-proposed wave count
  */
 @Slf4j
@@ -40,6 +45,7 @@ public class CopilotAnalysisController {
     private final CopilotSkillService skillService;
     private final CopilotOrchestratorService orchestratorService;
     private final CopilotHypothesisService hypothesisService;
+    private final CopilotObservationService observationService;
     private final CopilotAIService aiService;
     private final AIResponseParser responseParser;
     private final MarketStructureService marketStructureService;
@@ -48,120 +54,150 @@ public class CopilotAnalysisController {
     private final UserRepository userRepository;
     private final ChartLayoutRepository chartLayoutRepository;
 
+    // ─── Phase 1: Scan ─────────────────────────────────────────────────────────
+
     /**
-     * Trigger an investigation when a layout opens or expert annotates.
+     * Phase 1: Run all active scan skills to detect patterns/waves.
+     * Returns observations (not hypotheses).
      *
-     * Body: { layoutId, symbol, drawingsJson, zigzagData (optional), timeframes[] }
-     * Returns: { investigationId, hypotheses[], flags[] }
+     * Body: { layoutId, symbol, drawingsJson, timeframes[], force }
+     */
+    @PostMapping("/scan")
+    public ResponseEntity<?> scanAnalysis(Authentication auth,
+                                           @RequestBody Map<String, Object> body) {
+        Long userId = resolveUserId(auth);
+        CopilotInvestigation investigation = createOrReuseInvestigation(userId, body);
+
+        String warning = null;
+        List<CopilotObservation> observations = new ArrayList<>();
+
+        try {
+            observations = runScanPhase(investigation, userId);
+        } catch (Exception e) {
+            warning = e.getMessage();
+            log.error("[Copilot] Scan failed for investigation #{}: {}", investigation.getId(), e.getMessage(), e);
+        }
+
+        var result = new java.util.HashMap<String, Object>();
+        result.put("investigationId", investigation.getId());
+        result.put("status", "scanned");
+        result.put("observations", observations);
+        if (warning != null) result.put("warning", warning);
+        return ResponseEntity.ok(result);
+    }
+
+    // ─── Phase 2: Reason ─────────────────────────────────────────────────────
+
+    /**
+     * Phase 2: Cross-correlate observations to find confluence.
+     * Can be invoked independently with observations, drawings, scenarios, or prior hypotheses.
+     *
+     * Body: ReasoningRequest JSON
+     */
+    @PostMapping("/reason")
+    public ResponseEntity<?> reasonAnalysis(Authentication auth,
+                                             @RequestBody ReasoningRequest request) {
+        Long userId = resolveUserId(auth);
+        CopilotInvestigation investigation = investigationService.getOrThrow(request.getInvestigationId());
+
+        String warning = null;
+
+        try {
+            runReasonPhase(investigation, userId, request);
+        } catch (Exception e) {
+            warning = e.getMessage();
+            log.error("[Copilot] Reasoning failed for investigation #{}: {}", investigation.getId(), e.getMessage(), e);
+        }
+
+        investigation = investigationService.getOrThrow(investigation.getId());
+
+        var result = new java.util.HashMap<String, Object>();
+        result.put("investigationId", investigation.getId());
+        result.put("status", "reasoned");
+        result.put("hypotheses", hypothesisService.getAllHypotheses(investigation.getId()));
+        result.put("flags", hypothesisService.getUnacknowledgedFlags(investigation.getId()));
+        result.put("observations", observationService.getObservationsForInvestigation(investigation.getId()));
+        if (warning != null) result.put("warning", warning);
+        return ResponseEntity.ok(result);
+    }
+
+    // ─── Combined: Scan + Reason ─────────────────────────────────────────────
+
+    /**
+     * Convenience endpoint: runs scan then reason sequentially.
+     * Backward-compatible with the old trigger endpoint, now enhanced with observations.
+     *
+     * Body: { layoutId, symbol, drawingsJson, timeframes[], force }
      */
     @PostMapping("/trigger")
     public ResponseEntity<?> triggerAnalysis(Authentication auth,
                                               @RequestBody Map<String, Object> body) {
         Long userId = resolveUserId(auth);
-        Long layoutId = Long.valueOf(body.get("layoutId").toString());
-        String symbol = (String) body.get("symbol");
-        String drawingsJson = (String) body.getOrDefault("drawingsJson", null);
-        String initiatedBy = (String) body.getOrDefault("initiatedBy", "LAYOUT_OPEN");
-        boolean force = Boolean.parseBoolean(body.getOrDefault("force", "false").toString());
-
-        @SuppressWarnings("unchecked")
-        List<String> timeframes = (List<String>) body.getOrDefault("timeframes",
-                List.of("daily", "1h", "15min"));
-
-        // Get layout validity window
-        int validityMinutes = chartLayoutRepository.findById(layoutId)
-                .map(layout -> layout.getCopilotValidityMinutes() != null
-                        ? layout.getCopilotValidityMinutes() : 60)
-                .orElse(60);
-
-        // Return existing active investigation unless force=true (manual re-trigger)
-        if (!force) {
-            Optional<CopilotInvestigation> existing = investigationService.getActiveInvestigation(layoutId, userId);
-            if (existing.isPresent()) {
-                return ResponseEntity.ok(Map.of(
-                        "investigationId", existing.get().getId(),
-                        "status", "existing",
-                        "message", "Active investigation found. Use existing or wait for expiry.",
-                        "hypotheses", hypothesisService.getAllHypotheses(existing.get().getId()),
-                        "flags", hypothesisService.getUnacknowledgedFlags(existing.get().getId())
-                ));
-            }
-        }
-
-        // Start new investigation
-        CopilotInvestigation investigation = investigationService.startInvestigation(
-                layoutId, userId, symbol, String.join(",", timeframes), validityMinutes, initiatedBy);
-
-        // Store drawings data
-        if (drawingsJson != null) {
-            investigationService.updateData(investigation.getId(), null, null, drawingsJson);
-        }
-
-        // Fetch ZigZag pivots and compute market structure for each requested timeframe
-        fetchAndStoreMarketStructure(investigation.getId(), symbol, timeframes);
-
-        // Reload investigation to pick up freshly stored zigzag + market structure data
-        investigation = investigationService.getOrThrow(investigation.getId());
-
-        // Get previous investigation for context
-        Optional<CopilotInvestigation> previous = investigationService.getLatestInvestigation(layoutId, userId);
-
-        // Run orchestrator to determine which skills to invoke
-        List<CopilotSkill> availableSkills = skillService.getAllSkillsForUser(userId);
-
-        String orchestratorWarning = null;
-
-        if (availableSkills.isEmpty()) {
-            orchestratorWarning = "No skills configured. Go to /skills to create or seed skills.";
-            log.warn("[Copilot] Investigation #{} — no skills for user {}", investigation.getId(), userId);
-        } else {
-            log.info("[Copilot] Investigation #{} — {} skill(s) available: {}", investigation.getId(),
-                    availableSkills.size(),
-                    availableSkills.stream().map(s -> s.getSkillKey()).toList());
-            try {
-                String orchestratorPrompt = orchestratorService.buildOrchestratorPrompt(
-                        userId, availableSkills, investigation, previous);
-                log.info("[Copilot] Calling orchestrator AI for investigation #{}", investigation.getId());
-
-                String rawResponse = aiService.call(userId, orchestratorPrompt,
-                        "Determine which skills to invoke for this investigation.");
-                log.info("[Copilot] Orchestrator raw response: {}", rawResponse);
-
-                AIResponse response = responseParser.parse(rawResponse);
-
-                if (response instanceof OrchestratorResponse orchResponse) {
-                    log.info("[Copilot] Orchestrator selected skills: {} | rationale: {}",
-                            orchResponse.getSkillsToInvoke(), orchResponse.getSelectionRationale());
-                    List<String> skillsToRun = orchestratorService.filterCycleSkills(
-                            orchResponse.getSkillsToInvoke(), investigation);
-                    log.info("[Copilot] Skills to run after cycle filter: {}", skillsToRun);
-
-                    if (!skillsToRun.isEmpty()) {
-                        runSkillsSequentially(investigation, userId, skillsToRun);
-                    } else {
-                        log.warn("[Copilot] No skills to run — all already invoked or list empty");
-                    }
-                } else {
-                    log.warn("[Copilot] Orchestrator did not return OrchestratorResponse, got: {}",
-                            response.getClass().getSimpleName());
+        CopilotInvestigation investigation = createOrReuseInvestigation(userId, body);
+        if (investigation == null) {
+            // Returned existing investigation in createOrReuseInvestigation — need to handle
+            Long layoutId = Long.valueOf(body.get("layoutId").toString());
+            boolean force = Boolean.parseBoolean(body.getOrDefault("force", "false").toString());
+            if (!force) {
+                Optional<CopilotInvestigation> existing = investigationService.getActiveInvestigation(layoutId, userId);
+                if (existing.isPresent()) {
+                    return ResponseEntity.ok(Map.of(
+                            "investigationId", existing.get().getId(),
+                            "status", "existing",
+                            "message", "Active investigation found. Use existing or wait for expiry.",
+                            "hypotheses", hypothesisService.getAllHypotheses(existing.get().getId()),
+                            "flags", hypothesisService.getUnacknowledgedFlags(existing.get().getId()),
+                            "observations", observationService.getObservationsForInvestigation(existing.get().getId())
+                    ));
                 }
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", "Failed to create investigation"));
+        }
+
+        String warning = null;
+        List<CopilotObservation> observations = new ArrayList<>();
+
+        // Phase 1: Scan
+        try {
+            observations = runScanPhase(investigation, userId);
+        } catch (Exception e) {
+            warning = "Scan: " + e.getMessage();
+            log.error("[Copilot] Scan failed for investigation #{}: {}", investigation.getId(), e.getMessage(), e);
+        }
+
+        // Phase 2: Reason (only if scan produced positive observations)
+        boolean hasPositive = observations.stream().anyMatch(CopilotObservation::getPatternDetected);
+        if (hasPositive) {
+            try {
+                ReasoningRequest reasonRequest = ReasoningRequest.builder()
+                        .investigationId(investigation.getId())
+                        .drawingsJson((String) body.getOrDefault("drawingsJson", null))
+                        .build();
+                runReasonPhase(investigation, userId, reasonRequest);
             } catch (Exception e) {
-                orchestratorWarning = e.getMessage();
-                log.error("[Copilot] Orchestrator call failed for investigation #{}: {}",
-                        investigation.getId(), e.getMessage(), e);
+                String reasonWarning = "Reason: " + e.getMessage();
+                warning = warning != null ? warning + "; " + reasonWarning : reasonWarning;
+                log.error("[Copilot] Reasoning failed for investigation #{}: {}", investigation.getId(), e.getMessage(), e);
             }
         }
 
-        // Reload investigation after skill runs
         investigation = investigationService.getOrThrow(investigation.getId());
 
         var result = new java.util.HashMap<String, Object>();
         result.put("investigationId", investigation.getId());
         result.put("status", "created");
+        result.put("observations", observationService.getObservationsForInvestigation(investigation.getId()));
         result.put("hypotheses", hypothesisService.getAllHypotheses(investigation.getId()));
         result.put("flags", hypothesisService.getUnacknowledgedFlags(investigation.getId()));
-        if (orchestratorWarning != null) result.put("warning", orchestratorWarning);
+        if (warning != null) result.put("warning", warning);
         return ResponseEntity.ok(result);
+    }
+
+    // ─── Observations query ──────────────────────────────────────────────────
+
+    @GetMapping("/observations")
+    public ResponseEntity<?> getObservations(@RequestParam Long investigationId) {
+        return ResponseEntity.ok(observationService.getObservationsForInvestigation(investigationId));
     }
 
     /**
@@ -219,6 +255,162 @@ public class CopilotAnalysisController {
         ));
     }
 
+    // ─── Phase execution helpers ─────────────────────────────────────────────
+
+    /**
+     * Create or reuse an investigation from request body params.
+     * Returns null if an existing active investigation was found and force=false.
+     */
+    private CopilotInvestigation createOrReuseInvestigation(Long userId, Map<String, Object> body) {
+        Long layoutId = Long.valueOf(body.get("layoutId").toString());
+        String symbol = (String) body.get("symbol");
+        String drawingsJson = (String) body.getOrDefault("drawingsJson", null);
+        String initiatedBy = (String) body.getOrDefault("initiatedBy", "LAYOUT_OPEN");
+        boolean force = Boolean.parseBoolean(body.getOrDefault("force", "false").toString());
+
+        @SuppressWarnings("unchecked")
+        List<String> timeframes = (List<String>) body.getOrDefault("timeframes",
+                List.of("daily", "1h", "15min"));
+
+        int validityMinutes = chartLayoutRepository.findById(layoutId)
+                .map(layout -> layout.getCopilotValidityMinutes() != null
+                        ? layout.getCopilotValidityMinutes() : 60)
+                .orElse(60);
+
+        if (!force) {
+            Optional<CopilotInvestigation> existing = investigationService.getActiveInvestigation(layoutId, userId);
+            if (existing.isPresent()) return null;
+        }
+
+        CopilotInvestigation investigation = investigationService.startInvestigation(
+                layoutId, userId, symbol, String.join(",", timeframes), validityMinutes, initiatedBy);
+
+        if (drawingsJson != null) {
+            investigationService.updateData(investigation.getId(), null, null, drawingsJson);
+        }
+
+        fetchAndStoreMarketStructure(investigation.getId(), symbol, timeframes);
+        return investigationService.getOrThrow(investigation.getId());
+    }
+
+    /**
+     * Run Phase 1: all active scan skills, returning observations.
+     */
+    private List<CopilotObservation> runScanPhase(CopilotInvestigation investigation, Long userId) {
+        List<CopilotSkill> scanSkills = skillService.getScanSkillsForUser(userId);
+        List<CopilotObservation> observations = new ArrayList<>();
+
+        if (scanSkills.isEmpty()) {
+            log.warn("[Copilot] No scan skills for user {} — skipping Phase 1", userId);
+            return observations;
+        }
+
+        log.info("[Copilot] Phase 1 SCAN: running {} skills for investigation #{}",
+                scanSkills.size(), investigation.getId());
+
+        for (CopilotSkill skill : scanSkills) {
+            try {
+                String skillPrompt = skillService.buildScanSkillPrompt(skill);
+                String context = orchestratorService.buildScanPrompt(skillPrompt, investigation);
+                log.info("[Copilot] Scan skill '{}' (prompt {}chars)", skill.getSkillKey(), context.length());
+
+                String rawResponse = aiService.call(userId, skillPrompt, context);
+                log.info("[Copilot] Scan skill '{}' raw response: {}", skill.getSkillKey(), rawResponse);
+
+                AIResponse response = responseParser.parse(rawResponse);
+
+                if (response instanceof ObservationResponse obsResponse) {
+                    CopilotObservation obs = observationService.createFromScan(
+                            investigation.getId(), skill.getSkillKey(), obsResponse, rawResponse);
+                    observations.add(obs);
+                    log.info("[Copilot] OBSERVATION: {} — detected={}, confidence={}, pattern={}",
+                            skill.getSkillKey(), obsResponse.getPatternDetected(),
+                            obsResponse.getConfidence(), obsResponse.getPatternType());
+                } else {
+                    log.warn("[Copilot] Scan skill '{}' returned {} instead of OBSERVATION",
+                            skill.getSkillKey(), response.getClass().getSimpleName());
+                }
+
+                investigationService.recordSkillInvoked(investigation.getId(), skill.getSkillKey(), rawResponse);
+            } catch (Exception e) {
+                log.error("[Copilot] Error running scan skill '{}': {}", skill.getSkillKey(), e.getMessage(), e);
+            }
+        }
+
+        investigationService.updatePhase(investigation.getId(), "SCANNED");
+        return observations;
+    }
+
+    /**
+     * Run Phase 2: reasoning skills to cross-correlate observations.
+     */
+    private void runReasonPhase(CopilotInvestigation investigation, Long userId,
+                                 ReasoningRequest request) {
+        String observationsSummary = observationService.buildObservationsSummary(investigation.getId());
+
+        // Early exit if no observations and no other inputs
+        if (observationsSummary.isBlank()
+                && (request.getDrawingsJson() == null || request.getDrawingsJson().isBlank())
+                && (request.getScenarioText() == null || request.getScenarioText().isBlank())
+                && (request.getPriorHypothesisIds() == null || request.getPriorHypothesisIds().isEmpty())) {
+            log.info("[Copilot] No observations or inputs for reasoning — skipping Phase 2");
+            return;
+        }
+
+        List<CopilotSkill> reasoningSkills;
+        if (request.getReasoningSkillKeys() != null && !request.getReasoningSkillKeys().isEmpty()) {
+            // Force specific reasoning skills
+            reasoningSkills = new ArrayList<>();
+            for (String key : request.getReasoningSkillKeys()) {
+                skillService.getSkillByKey(userId, key).ifPresent(reasoningSkills::add);
+            }
+        } else {
+            reasoningSkills = skillService.getReasoningSkillsForUser(userId);
+        }
+
+        if (reasoningSkills.isEmpty()) {
+            // Auto-seed reasoning skills if none exist
+            skillService.seedReasoningSkillsForUser(userId);
+            reasoningSkills = skillService.getReasoningSkillsForUser(userId);
+        }
+
+        if (reasoningSkills.isEmpty()) {
+            log.warn("[Copilot] No reasoning skills available — skipping Phase 2");
+            return;
+        }
+
+        log.info("[Copilot] Phase 2 REASON: running {} skills for investigation #{}",
+                reasoningSkills.size(), investigation.getId());
+
+        // Build prior hypotheses JSON if requested
+        String priorHypothesesJson = null;
+        if (request.getPriorHypothesisIds() != null && !request.getPriorHypothesisIds().isEmpty()) {
+            priorHypothesesJson = hypothesisService.getHypothesesSummary(request.getPriorHypothesisIds());
+        }
+
+        for (CopilotSkill skill : reasoningSkills) {
+            try {
+                String skillPrompt = skillService.buildSkillPrompt(skill);
+                String context = orchestratorService.buildReasoningPrompt(
+                        skillPrompt, investigation, observationsSummary,
+                        request.getDrawingsJson(), request.getScenarioText(), priorHypothesesJson);
+                log.info("[Copilot] Reasoning skill '{}' (prompt {}chars)", skill.getSkillKey(), context.length());
+
+                String rawResponse = aiService.call(userId, skillPrompt, context);
+                log.info("[Copilot] Reasoning skill '{}' raw response: {}", skill.getSkillKey(), rawResponse);
+
+                AIResponse response = responseParser.parse(rawResponse);
+                handleSkillResponse(response, investigation, userId);
+                investigation = investigationService.getOrThrow(investigation.getId());
+
+            } catch (Exception e) {
+                log.error("[Copilot] Error running reasoning skill '{}': {}", skill.getSkillKey(), e.getMessage(), e);
+            }
+        }
+
+        investigationService.updatePhase(investigation.getId(), "REASONED");
+    }
+
     // ─── Internal helpers ─────────────────────────────────────────────────────
 
     /**
@@ -249,13 +441,16 @@ public class CopilotAnalysisController {
                 MarketStructureData msd = marketStructureService.analyse(pivots, tf);
                 msdSummary.append(msd.toPromptSummary()).append("\n");
 
-                // Compact zigzag summary: last 10 pivots
+                // Zigzag summary: last 30 pivots (enough to see recently completed patterns)
                 if (!pivots.isEmpty()) {
                     zigzagSummary.append("=== ").append(tf).append(" ===\n");
-                    int start = Math.max(0, pivots.size() - 10);
-                    for (ZigZagPoint p : pivots.subList(start, pivots.size())) {
-                        zigzagSummary.append(String.format("  %s %.2f @ %s retr=%.1f%% ext=%.1f%%%n",
-                                p.isHigh() ? "HIGH" : "LOW", p.getValue(), p.getTimestamp(),
+                    zigzagSummary.append(String.format("  Total pivots: %d (showing last %d)%n",
+                            pivots.size(), Math.min(30, pivots.size())));
+                    int start = Math.max(0, pivots.size() - 30);
+                    for (int i = start; i < pivots.size(); i++) {
+                        ZigZagPoint p = pivots.get(i);
+                        zigzagSummary.append(String.format("  [%d] %s %.2f @ %s retr=%.1f%% ext=%.1f%%%n",
+                                i, p.isHigh() ? "HIGH" : "LOW", p.getValue(), p.getTimestamp(),
                                 p.getRetracementPct() != null ? p.getRetracementPct() : 0.0,
                                 p.getExtensionPct() != null ? p.getExtensionPct() : 0.0));
                     }

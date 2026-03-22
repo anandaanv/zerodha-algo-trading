@@ -103,6 +103,14 @@ public class CopilotInvestigationService {
         return investigationRepository.save(inv);
     }
 
+    /** Update the investigation phase (PENDING → SCANNED → REASONED). */
+    @Transactional
+    public CopilotInvestigation updatePhase(Long investigationId, String phase) {
+        CopilotInvestigation inv = getOrThrow(investigationId);
+        inv.setPhase(phase);
+        return investigationRepository.save(inv);
+    }
+
     /** Expire an investigation. */
     @Transactional
     public void expireInvestigation(Long investigationId) {

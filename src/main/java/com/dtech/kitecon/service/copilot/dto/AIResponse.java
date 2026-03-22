@@ -25,7 +25,8 @@ import lombok.experimental.SuperBuilder;
     @JsonSubTypes.Type(value = EntrySignalResponse.class, name = "ENTRY_SIGNAL"),
     @JsonSubTypes.Type(value = MonitoringResponse.class,  name = "MONITORING"),
     @JsonSubTypes.Type(value = InvalidatedResponse.class, name = "INVALIDATED"),
-    @JsonSubTypes.Type(value = OrchestratorResponse.class, name = "ORCHESTRATOR")
+    @JsonSubTypes.Type(value = OrchestratorResponse.class, name = "ORCHESTRATOR"),
+    @JsonSubTypes.Type(value = ObservationResponse.class, name = "OBSERVATION")
 })
 public abstract class AIResponse {
     private AIResponseType type;

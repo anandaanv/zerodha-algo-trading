@@ -108,6 +108,24 @@ public class CopilotHypothesisService {
         return hypothesisRepository.findByInvestigationId(investigationId);
     }
 
+    /** Build a prompt-ready summary of specific hypotheses for reasoning input. */
+    public String getHypothesesSummary(List<Long> hypothesisIds) {
+        StringBuilder sb = new StringBuilder();
+        for (Long id : hypothesisIds) {
+            hypothesisRepository.findById(id).ifPresent(h -> {
+                sb.append(String.format("- %s [%s] pattern=%s stage=%s\n",
+                        h.getLabel(), h.getState(), h.getPattern(), h.getStage()));
+                if (h.getConfidenceLayers() != null) {
+                    sb.append("  Confidence: ").append(h.getConfidenceLayers()).append("\n");
+                }
+                if (h.getInvalidationConditions() != null) {
+                    sb.append("  Invalidation: ").append(h.getInvalidationConditions()).append("\n");
+                }
+            });
+        }
+        return sb.toString();
+    }
+
     /**
      * Evaluate and record relationships between all active hypotheses for a symbol.
      * Called whenever a new hypothesis is created.
