@@ -19,5 +19,7 @@ public enum AIResponseType {
     /** Entry conditions not yet fully met — monitoring continues */
     MONITORING,
     /** A hypothesis invalidation condition has been triggered */
-    INVALIDATED
+    INVALIDATED,
+    /** Phase 1 scan observation — pattern/wave detected (or not) on the chart */
+    OBSERVATION
 }
