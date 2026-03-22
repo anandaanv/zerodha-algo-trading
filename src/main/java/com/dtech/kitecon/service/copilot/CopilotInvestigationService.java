@@ -127,7 +127,8 @@ public class CopilotInvestigationService {
 
     private String mergeIntoJsonMap(String jsonMap, String key, String value) {
         String entry = "\"" + key + "\":" + (value != null ? value : "null");
-        if (jsonMap == null || jsonMap.isBlank() || jsonMap.equals("{}")) {
+        // Treat null, blank, "{}", or "[]" (wrong init) all as empty map
+        if (jsonMap == null || jsonMap.isBlank() || jsonMap.equals("{}") || !jsonMap.contains("{")) {
             return "{" + entry + "}";
         }
         return jsonMap.substring(0, jsonMap.lastIndexOf('}')) + "," + entry + "}";

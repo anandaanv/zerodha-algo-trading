@@ -43,6 +43,7 @@ public class CopilotSkillController {
                                                       @RequestBody CopilotSkill skill) {
         skill.setUserId(resolveUserId(auth));
         skill.setIsSystemSeed(false);
+        skill.setIsActive(true);
         return ResponseEntity.ok(skillService.saveSkill(skill));
     }
 
@@ -53,6 +54,8 @@ public class CopilotSkillController {
                 .map(existing -> {
                     skill.setId(id);
                     skill.setUserId(existing.getUserId());
+                    skill.setIsActive(existing.getIsActive() != null ? existing.getIsActive() : true);
+                    skill.setIsSystemSeed(existing.getIsSystemSeed());
                     return ResponseEntity.ok(skillService.saveSkill(skill));
                 })
                 .orElse(ResponseEntity.notFound().build());

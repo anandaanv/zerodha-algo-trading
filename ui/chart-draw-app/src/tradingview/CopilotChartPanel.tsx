@@ -45,6 +45,7 @@ export default function CopilotChartPanel({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const refresh = useCallback(async (investigationId: number) => {
@@ -64,11 +65,12 @@ export default function CopilotChartPanel({
 
   const trigger = useCallback(async (force = false) => {
     if (!layoutId) { setError('No layout ID available. Save the layout first.'); return; }
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setWarning(null);
     try {
       let drawingsJson: string | undefined;
       try { drawingsJson = getChartState?.(); } catch { /* ignore */ }
       const res = await triggerAnalysis(layoutId, symbol, drawingsJson, [timeframe], force);
+      if (res.warning) setWarning(res.warning);
       await refresh(res.investigationId);
     } catch (e) {
       setError(String(e));
@@ -184,6 +186,11 @@ export default function CopilotChartPanel({
         {error && (
           <div style={{ margin: '10px 14px', padding: '8px 12px', background: '#ffebee', border: '1px solid #ef9a9a', borderRadius: 6, color: '#c62828', fontSize: 12, flexShrink: 0 }}>
             {error}
+          </div>
+        )}
+        {warning && (
+          <div style={{ margin: '10px 14px', padding: '8px 12px', background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 6, color: '#e65100', fontSize: 12, flexShrink: 0 }}>
+            ⚠ {warning}
           </div>
         )}
 

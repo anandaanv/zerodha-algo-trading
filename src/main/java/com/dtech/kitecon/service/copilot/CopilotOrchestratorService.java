@@ -138,9 +138,10 @@ public class CopilotOrchestratorService {
             sb.append(investigation.getZigzagData()).append("\n");
         }
 
-        if (!investigation.getSkillResults().equals("{}")) {
+        String skillResults = investigation.getSkillResults();
+        if (skillResults != null && !skillResults.isBlank() && !skillResults.equals("{}") && !skillResults.equals("[]")) {
             sb.append("\n--- PREVIOUS SKILL RESULTS THIS SESSION ---\n");
-            sb.append(investigation.getSkillResults()).append("\n");
+            sb.append(skillResults).append("\n");
         }
 
         return sb.toString();
