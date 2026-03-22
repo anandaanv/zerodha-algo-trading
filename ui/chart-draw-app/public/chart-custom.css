@@ -1,0 +1,10 @@
+/* Hide the TradingView "Charts powered by TradingView" attribution link
+   inside the chart iframe — our Layout footer already shows this attribution. */
+a[href*="tradingview.com"][href*="utm_medium=widget"],
+a[href*="tradingview.com"][href*="utm_campaign=chart"],
+[class*="attribution"],
+[class*="chart-link"],
+[class*="tv-logo"],
+[class*="logo-wrapper"] {
+  display: none !important;
+}
