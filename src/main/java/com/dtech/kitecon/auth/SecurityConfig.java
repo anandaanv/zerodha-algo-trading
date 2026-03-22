@@ -48,8 +48,11 @@ public class SecurityConfig {
                         // Kite OAuth callbacks — no JWT present (redirected from Kite servers)
                         .requestMatchers("/kite-login", "/app", "/app/**", "/update-token").permitAll()
 
-                        // SPA frontend routes — served as index.html, React Router handles them
+                        // SPA frontend routes — served as index.html, React Router handles them.
+                        // ALL non-API GET paths must be permitAll so the browser can load index.html
+                        // even when unauthenticated; the React app itself enforces auth via ProtectedRoute.
                         .requestMatchers(
+                                "/login",
                                 "/dashboard", "/chart", "/chart-legacy", "/prompt-builder",
                                 "/screener", "/screener/**", "/trades", "/trades/**",
                                 "/copilot", "/skills", "/kite-success"
@@ -65,16 +68,14 @@ public class SecurityConfig {
                               .hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        // Kite token update (admin only, called with JWT unlike OAuth flow)
-                        .requestMatchers("/api/trades").permitAll()
-
                         // Snapshot and analysis endpoints - allow USER role
                         .requestMatchers("/api/snapshots/**", "/api/analysis/**", "/api/tags/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // Co-Pilot endpoints — USER role
                         .requestMatchers(
                                 "/api/hypotheses/**", "/api/monitor/**",
-                                "/api/skills/**", "/api/copilot/**"
+                                "/api/copilot/skills/**", "/api/copilot/**",
+                                "/api/trades/**"
                         ).hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // All other endpoints require authentication
