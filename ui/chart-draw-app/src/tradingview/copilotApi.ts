@@ -6,7 +6,7 @@ import type {
 const BASE = '/api';
 
 async function request<T>(path: string, opts?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('auth_token');
   const res = await fetch(`${BASE}${path}`, {
     ...opts,
     headers: {
@@ -30,10 +30,11 @@ export async function triggerAnalysis(
   symbol: string,
   drawingsJson?: string,
   timeframes?: string[],
+  force = false,
 ): Promise<TriggerAnalysisResponse> {
   return request('/analysis/trigger', {
     method: 'POST',
-    body: JSON.stringify({ layoutId, symbol, drawingsJson, timeframes }),
+    body: JSON.stringify({ layoutId, symbol, drawingsJson, timeframes, force }),
   });
 }
 
@@ -106,31 +107,31 @@ export async function closeTrade(
 // ─── Skills ───────────────────────────────────────────────────────────────────
 
 export async function getSkills(): Promise<CopilotSkill[]> {
-  return request('/skills');
+  return request('/copilot/skills');
 }
 
 export async function getSkill(id: number): Promise<CopilotSkill> {
-  return request(`/skills/${id}`);
+  return request(`/copilot/skills/${id}`);
 }
 
 export async function createSkill(skill: Partial<CopilotSkill>): Promise<CopilotSkill> {
-  return request('/skills', { method: 'POST', body: JSON.stringify(skill) });
+  return request('/copilot/skills', { method: 'POST', body: JSON.stringify(skill) });
 }
 
 export async function updateSkill(id: number, skill: Partial<CopilotSkill>): Promise<CopilotSkill> {
-  return request(`/skills/${id}`, { method: 'PUT', body: JSON.stringify(skill) });
+  return request(`/copilot/skills/${id}`, { method: 'PUT', body: JSON.stringify(skill) });
 }
 
 export async function deleteSkill(id: number): Promise<void> {
-  return request(`/skills/${id}`, { method: 'DELETE' });
+  return request(`/copilot/skills/${id}`, { method: 'DELETE' });
 }
 
 export async function seedDemoSkills(): Promise<any> {
-  return request('/skills/seed', { method: 'POST' });
+  return request('/copilot/skills/seed', { method: 'POST' });
 }
 
 export async function previewSkillPrompt(id: number): Promise<{ prompt: string }> {
-  return request(`/skills/${id}/preview`);
+  return request(`/copilot/skills/${id}/preview`);
 }
 
 // ─── OpenAI Credentials ───────────────────────────────────────────────────────
@@ -142,7 +143,7 @@ export async function saveOpenAiKey(apiKey: string, model?: string): Promise<voi
   });
 }
 
-export async function getOpenAiKeyStatus(): Promise<{ hasKey: boolean; model: string | null }> {
+export async function getOpenAiKeyStatus(): Promise<{ configured: boolean; model?: string; baseUrl?: string }> {
   return request('/copilot/credentials/status');
 }
 

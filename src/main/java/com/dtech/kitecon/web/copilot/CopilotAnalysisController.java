@@ -57,6 +57,7 @@ public class CopilotAnalysisController {
         String symbol = (String) body.get("symbol");
         String drawingsJson = (String) body.getOrDefault("drawingsJson", null);
         String initiatedBy = (String) body.getOrDefault("initiatedBy", "LAYOUT_OPEN");
+        boolean force = Boolean.parseBoolean(body.getOrDefault("force", "false").toString());
 
         @SuppressWarnings("unchecked")
         List<String> timeframes = (List<String>) body.getOrDefault("timeframes",
@@ -68,16 +69,18 @@ public class CopilotAnalysisController {
                         ? layout.getCopilotValidityMinutes() : 60)
                 .orElse(60);
 
-        // Check if a valid active investigation already exists
-        Optional<CopilotInvestigation> existing = investigationService.getActiveInvestigation(layoutId, userId);
-        if (existing.isPresent()) {
-            return ResponseEntity.ok(Map.of(
-                    "investigationId", existing.get().getId(),
-                    "status", "existing",
-                    "message", "Active investigation found. Use existing or wait for expiry.",
-                    "hypotheses", hypothesisService.getAllHypotheses(existing.get().getId()),
-                    "flags", hypothesisService.getUnacknowledgedFlags(existing.get().getId())
-            ));
+        // Return existing active investigation unless force=true (manual re-trigger)
+        if (!force) {
+            Optional<CopilotInvestigation> existing = investigationService.getActiveInvestigation(layoutId, userId);
+            if (existing.isPresent()) {
+                return ResponseEntity.ok(Map.of(
+                        "investigationId", existing.get().getId(),
+                        "status", "existing",
+                        "message", "Active investigation found. Use existing or wait for expiry.",
+                        "hypotheses", hypothesisService.getAllHypotheses(existing.get().getId()),
+                        "flags", hypothesisService.getUnacknowledgedFlags(existing.get().getId())
+                ));
+            }
         }
 
         // Start new investigation

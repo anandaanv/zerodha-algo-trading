@@ -18,7 +18,7 @@ export default function CopilotSettingsModal({ onClose }: Props) {
 
   useEffect(() => {
     getOpenAiKeyStatus()
-      .then(s => { setHasKey(s.hasKey); setCurrentModel(s.model); if (s.model) setModel(s.model); })
+      .then(s => { setHasKey(s.configured); setCurrentModel(s.model ?? null); if (s.model) setModel(s.model); })
       .catch(() => setHasKey(false));
   }, []);
 

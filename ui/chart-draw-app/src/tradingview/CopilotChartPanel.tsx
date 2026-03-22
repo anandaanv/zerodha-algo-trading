@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { CopilotHypothesis, CopilotAnomalyFlag, CopilotActiveTrade } from './copilotTypes';
 import {
@@ -62,20 +62,27 @@ export default function CopilotChartPanel({
     onHypothesesLoaded?.(board.hypotheses, investigationId);
   }, [onHypothesesLoaded]);
 
-  const trigger = async () => {
+  const trigger = useCallback(async (force = false) => {
     if (!layoutId) { setError('No layout ID available. Save the layout first.'); return; }
     setLoading(true); setError(null);
     try {
       let drawingsJson: string | undefined;
       try { drawingsJson = getChartState?.(); } catch { /* ignore */ }
-      const res = await triggerAnalysis(layoutId, symbol, drawingsJson, [timeframe]);
+      const res = await triggerAnalysis(layoutId, symbol, drawingsJson, [timeframe], force);
       await refresh(res.investigationId);
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
-  };
+  }, [layoutId, symbol, timeframe, getChartState, refresh]);
+
+  // Auto-trigger when panel opens — reuse existing investigation if within validity window
+  useEffect(() => {
+    if (open && layoutId && !loading) {
+      trigger(false);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleConfirm = async (id: number, entryType: string) => {
     try {
@@ -148,7 +155,7 @@ export default function CopilotChartPanel({
           display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0,
         }}>
           <button
-            onClick={trigger}
+            onClick={() => trigger(true)}
             disabled={loading}
             style={{
               flex: 1, padding: '8px 14px', background: loading ? '#9fa8da' : '#3f51b5',
@@ -185,8 +192,7 @@ export default function CopilotChartPanel({
 
           {!state.investigationId && !loading && (
             <div style={{ textAlign: 'center', color: '#bbb', padding: '40px 10px', fontSize: 13 }}>
-              Click "Trigger Analysis" to start.<br />
-              <span style={{ fontSize: 11, color: '#ccc' }}>Draws on chart + active layout will be sent to AI.</span>
+              {layoutId ? 'Starting analysis…' : 'No layout saved. Save the layout first, then re-open Co-Pilot.'}
             </div>
           )}
 
