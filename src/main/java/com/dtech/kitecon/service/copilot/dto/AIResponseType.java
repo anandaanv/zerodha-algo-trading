@@ -6,6 +6,8 @@ package com.dtech.kitecon.service.copilot.dto;
  * AI never takes action — it only declares findings and needs.
  */
 public enum AIResponseType {
+    /** Orchestrator response — lists which skills to invoke */
+    ORCHESTRATOR,
     /** AI requires additional data before it can continue reasoning */
     NEEDS_DATA,
     /** AI has reached a decision point requiring human input */

@@ -102,27 +102,42 @@ public class CopilotAnalysisController {
 
         if (availableSkills.isEmpty()) {
             orchestratorWarning = "No skills configured. Go to /skills to create or seed skills.";
+            log.warn("[Copilot] Investigation #{} — no skills for user {}", investigation.getId(), userId);
         } else {
+            log.info("[Copilot] Investigation #{} — {} skill(s) available: {}", investigation.getId(),
+                    availableSkills.size(),
+                    availableSkills.stream().map(s -> s.getSkillKey()).toList());
             try {
                 String orchestratorPrompt = orchestratorService.buildOrchestratorPrompt(
                         availableSkills, investigation, previous);
+                log.info("[Copilot] Calling orchestrator AI for investigation #{}", investigation.getId());
 
                 String rawResponse = aiService.call(userId, orchestratorPrompt,
                         "Determine which skills to invoke for this investigation.");
+                log.info("[Copilot] Orchestrator raw response: {}", rawResponse);
 
                 AIResponse response = responseParser.parse(rawResponse);
 
                 if (response instanceof OrchestratorResponse orchResponse) {
+                    log.info("[Copilot] Orchestrator selected skills: {} | rationale: {}",
+                            orchResponse.getSkillsToInvoke(), orchResponse.getSelectionRationale());
                     List<String> skillsToRun = orchestratorService.filterCycleSkills(
                             orchResponse.getSkillsToInvoke(), investigation);
+                    log.info("[Copilot] Skills to run after cycle filter: {}", skillsToRun);
 
                     if (!skillsToRun.isEmpty()) {
                         runSkillsSequentially(investigation, userId, skillsToRun);
+                    } else {
+                        log.warn("[Copilot] No skills to run — all already invoked or list empty");
                     }
+                } else {
+                    log.warn("[Copilot] Orchestrator did not return OrchestratorResponse, got: {}",
+                            response.getClass().getSimpleName());
                 }
             } catch (Exception e) {
                 orchestratorWarning = e.getMessage();
-                log.warn("Orchestrator call failed: {}. Investigation created without AI run.", e.getMessage());
+                log.error("[Copilot] Orchestrator call failed for investigation #{}: {}",
+                        investigation.getId(), e.getMessage(), e);
             }
         }
 
@@ -199,34 +214,33 @@ public class CopilotAnalysisController {
                                         List<String> skillKeys) {
         for (String skillKey : skillKeys) {
             try {
+                log.info("[Copilot] Running skill '{}' for investigation #{}", skillKey, investigation.getId());
                 var skillOpt = skillService.getSkillByKey(userId, skillKey);
                 if (skillOpt.isEmpty()) {
-                    log.warn("Skill '{}' not found for user {}", skillKey, userId);
+                    log.warn("[Copilot] Skill '{}' not found for user {} — skipping", skillKey, userId);
                     continue;
                 }
 
-                // Check cycle prevention
                 if (orchestratorService.isSkillAlreadyInvoked(investigation, skillKey)) {
-                    log.debug("Skipping already-invoked skill: {}", skillKey);
+                    log.debug("[Copilot] Skipping already-invoked skill: {}", skillKey);
                     continue;
                 }
 
                 String skillPrompt = skillService.buildSkillPrompt(skillOpt.get());
                 String context = orchestratorService.buildSkillPrompt(skillPrompt, investigation);
+                log.info("[Copilot] Calling AI for skill '{}' (prompt {}chars)", skillKey, context.length());
                 String rawResponse = aiService.call(userId, skillPrompt, context);
+                log.info("[Copilot] Skill '{}' raw response: {}", skillKey, rawResponse);
+
                 AIResponse response = responseParser.parse(rawResponse);
+                log.info("[Copilot] Skill '{}' parsed response type: {}", skillKey, response.getType());
 
-                // Record that this skill was invoked
                 investigationService.recordSkillInvoked(investigation.getId(), skillKey, rawResponse);
-
-                // Route the response
                 handleSkillResponse(response, investigation, userId);
-
-                // Reload investigation to get updated state
                 investigation = investigationService.getOrThrow(investigation.getId());
 
             } catch (Exception e) {
-                log.error("Error running skill '{}': {}", skillKey, e.getMessage());
+                log.error("[Copilot] Error running skill '{}': {}", skillKey, e.getMessage(), e);
             }
         }
     }
