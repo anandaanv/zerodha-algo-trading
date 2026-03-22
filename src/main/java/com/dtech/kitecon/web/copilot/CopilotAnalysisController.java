@@ -1,13 +1,16 @@
 package com.dtech.kitecon.web.copilot;
 
+import com.dtech.algo.series.Interval;
 import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import com.dtech.chartpattern.zigzag.ZigZagService;
 import com.dtech.kitecon.auth.User;
 import com.dtech.kitecon.auth.UserRepository;
+import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.data.ChartLayout;
 import com.dtech.kitecon.data.copilot.CopilotInvestigation;
 import com.dtech.kitecon.data.copilot.CopilotSkill;
 import com.dtech.kitecon.repository.ChartLayoutRepository;
+import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.service.copilot.*;
 import com.dtech.kitecon.service.copilot.dto.*;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +43,8 @@ public class CopilotAnalysisController {
     private final CopilotAIService aiService;
     private final AIResponseParser responseParser;
     private final MarketStructureService marketStructureService;
+    private final ZigZagService zigzagService;
+    private final InstrumentRepository instrumentRepository;
     private final UserRepository userRepository;
     private final ChartLayoutRepository chartLayoutRepository;
 
@@ -91,6 +96,9 @@ public class CopilotAnalysisController {
         if (drawingsJson != null) {
             investigationService.updateData(investigation.getId(), null, null, drawingsJson);
         }
+
+        // Fetch ZigZag pivots and compute market structure for each requested timeframe
+        fetchAndStoreMarketStructure(investigation.getId(), symbol, timeframes);
 
         // Get previous investigation for context
         Optional<CopilotInvestigation> previous = investigationService.getLatestInvestigation(layoutId, userId);
@@ -209,6 +217,73 @@ public class CopilotAnalysisController {
     }
 
     // ─── Internal helpers ─────────────────────────────────────────────────────
+
+    /**
+     * Fetch ZigZag pivots for each requested timeframe, compute market structure,
+     * and store the prompt-ready summary in the investigation.
+     */
+    private void fetchAndStoreMarketStructure(Long investigationId, String symbol, List<String> timeframes) {
+        Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+        if (instrument == null) {
+            log.warn("[Copilot] Instrument not found for symbol '{}' — skipping market structure fetch", symbol);
+            return;
+        }
+
+        StringBuilder msdSummary = new StringBuilder();
+        StringBuilder zigzagSummary = new StringBuilder();
+
+        for (String tf : timeframes) {
+            Interval interval = mapTimeframeToInterval(tf);
+            if (interval == null) {
+                log.warn("[Copilot] Unknown timeframe '{}' — skipping", tf);
+                continue;
+            }
+            try {
+                log.info("[Copilot] Fetching ZigZag for {} {}", symbol, tf);
+                List<ZigZagPoint> pivots = zigzagService.getOrComputePivots(symbol, instrument, interval);
+                log.info("[Copilot] Got {} ZigZag pivots for {} {}", pivots.size(), symbol, tf);
+
+                MarketStructureData msd = marketStructureService.analyse(pivots, tf);
+                msdSummary.append(msd.toPromptSummary()).append("\n");
+
+                // Compact zigzag summary: last 10 pivots
+                if (!pivots.isEmpty()) {
+                    zigzagSummary.append("=== ").append(tf).append(" ===\n");
+                    int start = Math.max(0, pivots.size() - 10);
+                    for (ZigZagPoint p : pivots.subList(start, pivots.size())) {
+                        zigzagSummary.append(String.format("  %s %.2f @ %s retr=%.1f%% ext=%.1f%%%n",
+                                p.isHigh() ? "HIGH" : "LOW", p.getValue(), p.getTimestamp(),
+                                p.getRetracementPct() != null ? p.getRetracementPct() : 0.0,
+                                p.getExtensionPct() != null ? p.getExtensionPct() : 0.0));
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("[Copilot] Failed to fetch market structure for {} {}: {}", symbol, tf, e.getMessage());
+            }
+        }
+
+        String msdText = msdSummary.toString();
+        String zzText = zigzagSummary.toString();
+        if (!msdText.isBlank() || !zzText.isBlank()) {
+            investigationService.updateData(investigationId,
+                    zzText.isBlank() ? null : zzText,
+                    msdText.isBlank() ? null : msdText,
+                    null);
+            log.info("[Copilot] Stored market structure + zigzag data for investigation #{}", investigationId);
+        }
+    }
+
+    private Interval mapTimeframeToInterval(String tf) {
+        if (tf == null) return null;
+        return switch (tf.toLowerCase().trim()) {
+            case "daily", "1d", "day" -> Interval.Day;
+            case "1h", "60min", "60minute" -> Interval.OneHour;
+            case "15min", "15m", "15minute" -> Interval.FifteenMinute;
+            case "30min", "30m", "30minute" -> Interval.ThirtyMinute;
+            case "5min", "5m", "5minute" -> Interval.FiveMinute;
+            default -> null;
+        };
+    }
 
     private void runSkillsSequentially(CopilotInvestigation investigation, Long userId,
                                         List<String> skillKeys) {
