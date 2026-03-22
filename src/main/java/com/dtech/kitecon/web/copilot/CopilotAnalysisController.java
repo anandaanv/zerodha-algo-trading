@@ -100,6 +100,9 @@ public class CopilotAnalysisController {
         // Fetch ZigZag pivots and compute market structure for each requested timeframe
         fetchAndStoreMarketStructure(investigation.getId(), symbol, timeframes);
 
+        // Reload investigation to pick up freshly stored zigzag + market structure data
+        investigation = investigationService.getOrThrow(investigation.getId());
+
         // Get previous investigation for context
         Optional<CopilotInvestigation> previous = investigationService.getLatestInvestigation(layoutId, userId);
 
