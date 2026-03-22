@@ -246,37 +246,31 @@ public class CopilotAnalysisController {
     }
 
     private void handleSkillResponse(AIResponse response, CopilotInvestigation investigation, Long userId) {
-        switch (response.getType()) {
-            case FINDING -> {
-                FindingResponse finding = (FindingResponse) response;
-                var hypothesis = hypothesisService.createFromFinding(investigation.getId(), finding);
-                if (finding.getRelationships() != null) {
-                    hypothesisService.evaluateRelationships(investigation.getId(),
-                            hypothesis.getId(), finding.getRelationships());
-                }
-                log.info("FINDING: hypothesis '{}' created for investigation {}",
-                        finding.getHypothesisLabel(), investigation.getId());
+        // Use instanceof — @JsonTypeInfo consumes 'type' as a discriminator and doesn't populate the field
+        if (response instanceof FindingResponse finding) {
+            var hypothesis = hypothesisService.createFromFinding(investigation.getId(), finding);
+            if (finding.getRelationships() != null) {
+                hypothesisService.evaluateRelationships(investigation.getId(),
+                        hypothesis.getId(), finding.getRelationships());
             }
-            case NEEDS_EXPERT -> {
-                NeedsExpertResponse q = (NeedsExpertResponse) response;
-                hypothesisService.createAnomalyFlag(investigation.getId(), null,
-                        q.getQuestionText(), "WARNING");
-                log.info("NEEDS_EXPERT: question queued for investigation {}", investigation.getId());
+            log.info("[Copilot] FINDING: hypothesis '{}' created for investigation {}",
+                    finding.getHypothesisLabel(), investigation.getId());
+        } else if (response instanceof NeedsExpertResponse q) {
+            hypothesisService.createAnomalyFlag(investigation.getId(), null,
+                    q.getQuestionText(), "WARNING");
+            log.info("[Copilot] NEEDS_EXPERT: question queued for investigation {}", investigation.getId());
+        } else if (response instanceof NeedsDataResponse nd) {
+            log.info("[Copilot] NEEDS_DATA: {} on {} needed for investigation {}",
+                    nd.getDataType(), nd.getTimeframe(), investigation.getId());
+            // TODO: fetch tier 2/3 data and retry skill
+        } else if (response instanceof InvalidatedResponse inv) {
+            if (inv.getHypothesisId() != null) {
+                hypothesisService.transitionState(inv.getHypothesisId(), "INVALIDATED",
+                        inv.getInvalidationReason());
             }
-            case NEEDS_DATA -> {
-                NeedsDataResponse nd = (NeedsDataResponse) response;
-                log.info("NEEDS_DATA: {} on {} needed for investigation {}",
-                        nd.getDataType(), nd.getTimeframe(), investigation.getId());
-                // TODO: fetch tier 2/3 data and retry skill
-            }
-            case INVALIDATED -> {
-                InvalidatedResponse inv = (InvalidatedResponse) response;
-                if (inv.getHypothesisId() != null) {
-                    hypothesisService.transitionState(inv.getHypothesisId(), "INVALIDATED",
-                            inv.getInvalidationReason());
-                }
-            }
-            default -> log.debug("Skill returned {}: {}", response.getType(), response.getReasoning());
+            log.info("[Copilot] INVALIDATED: hypothesis {} — {}", inv.getHypothesisId(), inv.getInvalidationReason());
+        } else {
+            log.info("[Copilot] Skill returned unhandled type {}: {}", response.getClass().getSimpleName(), response.getReasoning());
         }
     }
 
