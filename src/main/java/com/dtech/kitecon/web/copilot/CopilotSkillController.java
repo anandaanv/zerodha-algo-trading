@@ -162,6 +162,94 @@ public class CopilotSkillController {
         }
     }
 
+    /**
+     * Test a skill against a real or hypothetical chart scenario.
+     *
+     * Body: { symbol, timeframe, patternPresent, description }
+     * Returns: { matched, verdict, analysis, failedRules[], suggestedChanges{} }
+     */
+    @PostMapping("/{id}/test")
+    public ResponseEntity<Map<String, Object>> testSkill(
+            Authentication auth,
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+
+        Long userId = resolveUserId(auth);
+        CopilotSkill skill = skillService.getSkillById(id).orElse(null);
+        if (skill == null) return ResponseEntity.notFound().build();
+
+        String skillPrompt = skillService.buildSkillPrompt(skill);
+        String symbol = (String) body.getOrDefault("symbol", "");
+        String timeframe = (String) body.getOrDefault("timeframe", "");
+        boolean patternPresent = Boolean.parseBoolean(body.getOrDefault("patternPresent", "true").toString());
+        String description = (String) body.getOrDefault("description", "");
+
+        String systemPrompt = """
+                You are a strict validator for a trading skill used in an Elliott Wave analysis system.
+
+                A skill is a set of rules an AI analyst uses to identify chart patterns, detect stages,
+                and make trade decisions. You will evaluate whether this skill would have correctly handled
+                a given real-world chart scenario.
+
+                You will receive:
+                  1. The compiled skill prompt (all 7 rule fields)
+                  2. A chart context: symbol, timeframe, and a description of what was visible
+                  3. Whether the pattern was actually present on that chart (YES or NO)
+
+                Your job: evaluate each rule field against the described chart and determine whether
+                the skill would have CORRECTLY identified (or correctly ignored) the pattern.
+
+                Return ONLY a valid JSON object with no markdown fences:
+                {
+                  "matched": true or false,
+                  "verdict": "one-sentence summary of pass or fail",
+                  "analysis": "thorough rule-by-rule analysis — what each rule says vs what the chart showed",
+                  "failedRules": ["identificationRules", "stageDetection"],
+                  "suggestedChanges": {
+                    "fieldName": "improved text that would have handled this case correctly"
+                  }
+                }
+
+                Field names must exactly match: identificationRules, stageDetection, entryRules,
+                indicatorRules, invalidationRules, ambiguityQuestions, crossVerificationRules.
+                Only include fields in suggestedChanges if they need improvement.
+                If matched is true, suggestedChanges should be empty.
+                """;
+
+        String userMessage = String.format("""
+                SKILL PROMPT:
+                %s
+
+                CHART CONTEXT:
+                Symbol: %s
+                Timeframe: %s
+                Pattern actually present on this chart: %s
+
+                WHAT WAS VISIBLE / HAPPENED:
+                %s
+                """, skillPrompt, symbol, timeframe, patternPresent ? "YES" : "NO", description);
+
+        try {
+            String raw = aiService.call(userId, systemPrompt, userMessage);
+            String json = raw.trim();
+            if (json.startsWith("```")) {
+                int start = json.indexOf('\n');
+                int end = json.lastIndexOf("```");
+                if (start > 0 && end > start) json = json.substring(start + 1, end).trim();
+            }
+            Map<String, Object> result = objectMapper.readValue(json, new TypeReference<>() {});
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                    "matched", false,
+                    "verdict", "Test could not be completed: " + e.getMessage(),
+                    "analysis", "",
+                    "failedRules", List.of(),
+                    "suggestedChanges", Map.of()
+            ));
+        }
+    }
+
     private Long resolveUserId(Authentication auth) {
         return userRepository.findByUsername(auth.getName())
                 .map(User::getId)
