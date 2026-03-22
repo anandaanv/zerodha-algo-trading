@@ -57,6 +57,14 @@ public class ChartLayout {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    /**
+     * Co-Pilot: investigation validity window in minutes (default 60).
+     * A new investigation for this layout will expire after this many minutes.
+     */
+    @Column(name = "copilot_validity_minutes")
+    @Builder.Default
+    private Integer copilotValidityMinutes = 60;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

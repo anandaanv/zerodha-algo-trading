@@ -45,12 +45,20 @@ public class SecurityConfig {
                         .requestMatchers("/privacy-policy", "/privacy-policy.html", "/privacy").permitAll()
                         .requestMatchers("/terms-of-service", "/terms-of-service.html", "/terms").permitAll()
 
-                        // Kite login and app config pages (public for now)
-                        .requestMatchers("/kite-login", "/api/trades").permitAll()
+                        // Kite OAuth callbacks — no JWT present (redirected from Kite servers)
+                        .requestMatchers("/kite-login", "/app", "/app/**", "/update-token").permitAll()
+
+                        // SPA frontend routes — served as index.html, React Router handles them.
+                        // ALL non-API GET paths must be permitAll so the browser can load index.html
+                        // even when unauthenticated; the React app itself enforces auth via ProtectedRoute.
+                        .requestMatchers(
+                                "/login",
+                                "/dashboard", "/chart", "/chart-legacy", "/prompt-builder",
+                                "/screener", "/screener/**", "/trades", "/trades/**",
+                                "/copilot", "/skills", "/kite-success"
+                        ).permitAll()
 
                         // Role-based access control
-//                        .requestMatchers("/api/trades")
-//                              .hasAnyRole("USER", "MODERATOR", "ADMIN")
                         // DELETE operations require MODERATOR/ADMIN
                         .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/chart-state", "/api/layouts/**").hasAnyRole("MODERATOR", "ADMIN")
                         // Chart operations allow USER
@@ -59,10 +67,16 @@ public class SecurityConfig {
                         .requestMatchers("/api/chart/**", "/api/screener/**", "/api/overlays/**")
                               .hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
-                        .requestMatchers("/api/admin/**", "/app", "/update-token").hasRole("ADMIN")
-
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Snapshot and analysis endpoints - allow USER role
                         .requestMatchers("/api/snapshots/**", "/api/analysis/**", "/api/tags/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
+
+                        // Co-Pilot endpoints — USER role
+                        .requestMatchers(
+                                "/api/hypotheses/**", "/api/monitor/**",
+                                "/api/copilot/skills/**", "/api/copilot/**",
+                                "/api/trades/**"
+                        ).hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // All other endpoints require authentication
                         .anyRequest().authenticated()
