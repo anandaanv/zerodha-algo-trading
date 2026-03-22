@@ -544,10 +544,37 @@ export default function TVChartApp() {
         }}
         onSaveAsLayout={() => setLayoutModalMode('save')}
         onLoadLayout={() => setLayoutModalMode('load')}
+        isCopilotOpen={isCopilotPanelOpen}
+        isAnalysisOpen={isAnalysisPanelOpen}
+        copilotCount={copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length}
+        onToggleCopilot={() => setIsCopilotPanelOpen(prev => !prev)}
+        onToggleAnalysis={() => setIsAnalysisPanelOpen(prev => !prev)}
+        onCopilotSettings={() => setShowCopilotSettings(true)}
       />
 
-      {/* Chart Container */}
-      <div ref={chartContainerRef} style={{ flex: 1 }} />
+      {/* Chart + Copilot panel row */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div ref={chartContainerRef} style={{ flex: 1, minWidth: 0 }} />
+
+        {/* Copilot inline panel — shrinks the chart rather than overlaying it */}
+        <div style={{
+          width: isCopilotPanelOpen ? 400 : 0,
+          overflow: 'hidden',
+          transition: 'width 0.3s ease',
+          flexShrink: 0,
+          borderLeft: isCopilotPanelOpen ? '1px solid #e0e0e0' : 'none',
+        }}>
+          <CopilotChartPanel
+            open={isCopilotPanelOpen}
+            onClose={() => setIsCopilotPanelOpen(false)}
+            symbol={activeTab?.symbol || defaultSymbol}
+            timeframe={activeTab?.timeframe || rawTimeframe}
+            layoutId={Number(localStorage.getItem('lastLayoutId')) || null}
+            getChartState={getChartState}
+            onHypothesesLoaded={handleHypothesesLoaded}
+          />
+        </div>
+      </div>
 
       {/* Workspace Layout Modal */}
       {layoutModalMode && (
@@ -568,70 +595,14 @@ export default function TVChartApp() {
         />
       )}
 
-      {/* Floating Action Buttons */}
-      <div style={{
-        position: 'fixed',
-        top: '42px',
-        right: isAnalysisPanelOpen ? '470px' : isCopilotPanelOpen ? '408px' : '20px',
-        zIndex: 9999,
-        transition: 'right 0.3s ease',
-        display: 'flex',
-        gap: '8px',
-        alignItems: 'center',
-      }}>
-        {/* Co-Pilot settings gear */}
-        <button
-          onClick={() => setShowCopilotSettings(true)}
-          title="Co-Pilot AI Settings"
-          style={{
-            height: '36px', width: '36px',
-            backgroundColor: 'rgba(26,35,126,0.85)',
-            color: 'white', border: 'none', borderRadius: '8px',
-            cursor: 'pointer', fontSize: '16px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >⚙</button>
-        <button
-          onClick={() => setIsCopilotPanelOpen(prev => !prev)}
-          style={{
-            height: '40px', padding: '0 14px',
-            backgroundColor: isCopilotPanelOpen ? '#283593' : '#1a237e',
-            color: 'white', border: 'none', borderRadius: '8px',
-            cursor: 'pointer', fontSize: '13px', fontWeight: 600,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'center', gap: '6px',
-          }}
-          title="Co-Pilot: hypothesis tracking and trade management"
-        >
-          <span style={{ fontSize: '16px' }}>🧠</span>
-          <span>Co-Pilot{copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length > 0 ? ` (${copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length})` : ''}</span>
-        </button>
-        <button
-          onClick={() => setIsAnalysisPanelOpen(!isAnalysisPanelOpen)}
-          style={{
-            height: '40px', padding: '0 14px',
-            backgroundColor: '#1976d2', color: 'white',
-            border: 'none', borderRadius: '8px', cursor: 'pointer',
-            fontSize: '13px', fontWeight: 600,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex', alignItems: 'center', gap: '6px',
-          }}
-          title="Fundamentals, news, snapshots"
-        >
-          <span style={{ fontSize: '16px' }}>📊</span>
-          <span>Analyse</span>
-        </button>
-      </div>
 
       {/* Yellow hypothesis annotation badges — float over chart at bottom-right */}
       {copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length > 0 && (
         <div style={{
           position: 'fixed',
           bottom: 80,
-          right: isCopilotPanelOpen ? 420 : 20,
+          right: 20,
           zIndex: 9996,
-          transition: 'right 0.3s ease',
           display: 'flex',
           flexDirection: 'column',
           gap: 4,
@@ -664,16 +635,6 @@ export default function TVChartApp() {
         </div>
       )}
 
-      {/* Co-Pilot sliding panel */}
-      <CopilotChartPanel
-        open={isCopilotPanelOpen}
-        onClose={() => setIsCopilotPanelOpen(false)}
-        symbol={activeTab?.symbol || defaultSymbol}
-        timeframe={activeTab?.timeframe || rawTimeframe}
-        layoutId={Number(localStorage.getItem('lastLayoutId')) || null}
-        getChartState={getChartState}
-        onHypothesesLoaded={handleHypothesesLoaded}
-      />
 
       {/* Co-Pilot settings modal */}
       {showCopilotSettings && (
