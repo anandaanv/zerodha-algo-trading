@@ -772,7 +772,7 @@ function getSentimentStyle(sentiment: string): React.CSSProperties {
 // ============ Styles — AnalysisPanel ============
 
 const styles: Record<string, React.CSSProperties> = {
-  overlay: { position: 'fixed', top: 0, right: 0, bottom: 0, width: '450px', backgroundColor: 'white', boxShadow: '-2px 0 10px rgba(0,0,0,0.1)', zIndex: 10000, display: 'flex', flexDirection: 'column' },
+  overlay: { position: 'fixed', top: 38, right: 0, bottom: 0, width: '450px', backgroundColor: 'white', boxShadow: '-2px 0 10px rgba(0,0,0,0.1)', zIndex: 9998, display: 'flex', flexDirection: 'column' },
   panel: { display: 'flex', flexDirection: 'column', height: '100%' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', borderBottom: '1px solid #e0e0e0' },
   title: { margin: 0, fontSize: '18px', fontWeight: 600 },

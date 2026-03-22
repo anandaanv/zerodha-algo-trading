@@ -571,7 +571,7 @@ export default function TVChartApp() {
       {/* Floating Action Buttons */}
       <div style={{
         position: 'fixed',
-        top: '48px',
+        top: '42px',
         right: isAnalysisPanelOpen ? '470px' : isCopilotPanelOpen ? '408px' : '20px',
         zIndex: 9999,
         transition: 'right 0.3s ease',
