@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { CopilotSkill, AiAssistResponse, OrchestratorConfig, OrchestratorValidateResult } from './copilotTypes';
+import ReactMarkdown from 'react-markdown';
+
+const TEST_CACHE_KEY = 'skill_test_last';
+import type {
+  CopilotSkill, AiAssistResponse, OrchestratorConfig, OrchestratorValidateResult,
+  SkillTestResult, OrchestratorTestResult,
+} from './copilotTypes';
 import {
   getSkills, getSkill, createSkill, updateSkill, deleteSkill,
   seedDemoSkills, aiAssistSkill,
   getOrchestratorConfig, getOrchestratorDefault, saveOrchestratorConfig,
   validateOrchestratorConfig, resetOrchestratorConfig,
+  testSkill, testOrchestrator,
 } from './copilotApi';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -122,6 +129,16 @@ export default function SkillBuilderPage() {
   const [showPrompt, setShowPrompt] = useState(false);
   const [promptDraft, setPromptDraft] = useState('');
 
+  // Test modal
+  const [showTest, setShowTest] = useState(false);
+  const [testSymbol, setTestSymbol] = useState('');
+  const [testTimeframe, setTestTimeframe] = useState('1D');
+  const [testPatternPresent, setTestPatternPresent] = useState(true);
+  const [testDescription, setTestDescription] = useState('');
+  const [testExpectedSkills, setTestExpectedSkills] = useState('');
+  const [testRunning, setTestRunning] = useState(false);
+  const [testResult, setTestResult] = useState<SkillTestResult | OrchestratorTestResult | null>(null);
+
   // AI chat
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -160,6 +177,76 @@ export default function SkillBuilderPage() {
     if (mode === 'view') setMode('edit');
     setShowPrompt(false);
     setSuccess('Prompt applied — fields updated. Review and save when ready.');
+  };
+
+  // ─── Test ────────────────────────────────────────────────────────────────────
+
+  const openTest = () => {
+    setTestResult(null);
+    // Restore last values from localStorage
+    try {
+      const cached = JSON.parse(localStorage.getItem(TEST_CACHE_KEY) || '{}');
+      setTestSymbol(cached.symbol ?? '');
+      setTestTimeframe(cached.timeframe ?? '1D');
+      setTestPatternPresent(cached.patternPresent ?? true);
+      setTestDescription(cached.description ?? '');
+      setTestExpectedSkills(cached.expectedSkills ?? '');
+    } catch {
+      setTestSymbol(''); setTestTimeframe('1D');
+      setTestPatternPresent(true); setTestDescription(''); setTestExpectedSkills('');
+    }
+    setShowTest(true);
+  };
+
+  const runTest = async () => {
+    if (!testDescription.trim() || !testSymbol.trim()) return;
+    // Persist form values for next time
+    localStorage.setItem(TEST_CACHE_KEY, JSON.stringify({
+      symbol: testSymbol.trim(), timeframe: testTimeframe,
+      patternPresent: testPatternPresent,
+      description: testDescription.trim(),
+      expectedSkills: testExpectedSkills,
+    }));
+    setTestRunning(true);
+    setTestResult(null);
+    try {
+      if (nav?.type === 'skill' && typeof nav.id === 'number') {
+        const result = await testSkill(nav.id, {
+          symbol: testSymbol.trim(),
+          timeframe: testTimeframe,
+          patternPresent: testPatternPresent,
+          description: testDescription.trim(),
+        });
+        setTestResult(result);
+      } else if (nav?.type === 'orchestrator') {
+        const expectedList = testExpectedSkills.split(',').map(s => s.trim()).filter(Boolean);
+        const result = await testOrchestrator({
+          symbol: testSymbol.trim(),
+          timeframe: testTimeframe,
+          description: testDescription.trim(),
+          expectedSkills: expectedList,
+        });
+        setTestResult(result);
+      }
+    } catch (e) {
+      setError(String(e));
+      setShowTest(false);
+    } finally {
+      setTestRunning(false);
+    }
+  };
+
+  const applyTestSuggestions = () => {
+    if (!testResult) return;
+    if ('suggestedChanges' in testResult && typeof testResult.suggestedChanges === 'object') {
+      const changes = testResult.suggestedChanges as Record<string, string>;
+      if (Object.keys(changes).length > 0) {
+        setForm(prev => ({ ...prev, ...changes }));
+        if (mode === 'view') setMode('edit');
+        setShowTest(false);
+        setSuccess('Test suggestions applied — review and save when ready.');
+      }
+    }
   };
 
   // ─── File attachment ─────────────────────────────────────────────────────────
@@ -435,6 +522,7 @@ export default function SkillBuilderPage() {
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                   {orchMode === 'view' ? (
                     <>
+                      <button onClick={openTest} style={{ ...toolbarBtn, color: '#6a1b9a', borderColor: '#6a1b9a' }}>🧪 Test</button>
                       <button onClick={startEditOrchestrator} style={toolbarBtn}>✏ Edit</button>
                       {orchConfig?.isCustomized && <button onClick={resetOrchestrator} style={{ ...toolbarBtn, color: '#c62828', borderColor: '#c62828' }}>↺ Reset</button>}
                     </>
@@ -510,6 +598,7 @@ export default function SkillBuilderPage() {
                     {currentSkill.isSystemSeed && <span style={{ background: '#e8f5e9', color: '#388e3c', padding: '1px 8px', borderRadius: 10, fontSize: 11 }}>⚡ system</span>}
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                       <button onClick={openPrompt} style={{ ...toolbarBtn, color: '#1565c0', borderColor: '#1565c0' }}>📄 Prompt</button>
+                      <button onClick={openTest} style={{ ...toolbarBtn, color: '#6a1b9a', borderColor: '#6a1b9a' }}>🧪 Test</button>
                       <button onClick={() => setMode('edit')} style={toolbarBtn}>✏ Edit</button>
                       <button onClick={remove} style={{ ...toolbarBtn, color: '#c62828', borderColor: '#c62828' }}>🗑 Delete</button>
                     </div>
@@ -519,6 +608,7 @@ export default function SkillBuilderPage() {
                     <span style={{ fontWeight: 700, fontSize: 14, color: '#222' }}>{nav.id === 'new' ? 'New Skill' : (form.name || 'Editing…')}</span>
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                       <button onClick={openPrompt} style={{ ...toolbarBtn, color: '#1565c0', borderColor: '#1565c0' }}>📄 Prompt</button>
+                      {nav.id !== 'new' && <button onClick={openTest} style={{ ...toolbarBtn, color: '#6a1b9a', borderColor: '#6a1b9a' }}>🧪 Test</button>}
                       <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : nav.id === 'new' ? '+ Create' : '💾 Save'}</button>
                       {nav.id !== 'new' && <button onClick={() => setMode('view')} style={toolbarBtn}>Cancel</button>}
                     </div>
@@ -717,6 +807,191 @@ export default function SkillBuilderPage() {
         </div>
       )}
 
+      {/* ── Test Modal ── */}
+      {showTest && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget && !testRunning) setShowTest(false); }}
+        >
+          <div style={{ width: '64%', maxHeight: '88vh', background: '#fff', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+
+            {/* Header */}
+            <div style={{ padding: '14px 20px', borderBottom: '1px solid #e0e0e0', background: '#4a148c', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <span style={{ fontWeight: 700, fontSize: 14, color: '#fff' }}>
+                🧪 {nav?.type === 'orchestrator' ? 'Test Orchestrator' : `Test Skill: ${form.name || 'Skill'}`}
+              </span>
+              <span style={{ fontSize: 12, color: '#ce93d8', flex: 1 }}>
+                {nav?.type === 'orchestrator'
+                  ? 'Describe a market situation — AI will check if the orchestrator selects the right skills.'
+                  : 'Describe a chart scenario — AI will check if this skill\'s rules correctly identify the pattern.'}
+              </span>
+              {!testRunning && (
+                <button onClick={() => setShowTest(false)} style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: 6, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}>✕</button>
+              )}
+            </div>
+
+            {/* Form / Results */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 20px' }}>
+              {!testResult ? (
+                /* ── Input form ── */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div>
+                      <label style={formLabel}>Stock / Symbol *</label>
+                      <input value={testSymbol} onChange={e => setTestSymbol(e.target.value)} placeholder="e.g. NIFTY, RELIANCE, BANKNIFTY" style={formInput} />
+                    </div>
+                    <div>
+                      <label style={formLabel}>Timeframe</label>
+                      <select value={testTimeframe} onChange={e => setTestTimeframe(e.target.value)} style={formInput}>
+                        {['1m','5m','15m','30m','1H','2H','4H','1D','1W'].map(tf => <option key={tf} value={tf}>{tf}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {nav?.type === 'skill' && (
+                    <div>
+                      <label style={formLabel}>Was this pattern present on the chart?</label>
+                      <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', fontWeight: testPatternPresent ? 700 : 400, color: testPatternPresent ? '#2e7d32' : '#555' }}>
+                          <input type="radio" checked={testPatternPresent} onChange={() => setTestPatternPresent(true)} /> ✓ Yes — pattern was visible
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', fontWeight: !testPatternPresent ? 700 : 400, color: !testPatternPresent ? '#c62828' : '#555' }}>
+                          <input type="radio" checked={!testPatternPresent} onChange={() => setTestPatternPresent(false)} /> ✗ No — pattern was NOT present
+                        </label>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>
+                        {testPatternPresent ? 'Test: would the skill have correctly identified the pattern?' : 'Test: would the skill have correctly ignored / not triggered?'}
+                      </div>
+                    </div>
+                  )}
+
+                  {nav?.type === 'orchestrator' && (
+                    <div>
+                      <label style={formLabel}>Expected skills to be selected (optional, comma-separated skill keys)</label>
+                      <input value={testExpectedSkills} onChange={e => setTestExpectedSkills(e.target.value)} placeholder="e.g. wave_4, ascending_triangle" style={formInput} />
+                      <div style={{ fontSize: 11, color: '#aaa', marginTop: 3 }}>Leave blank to just see what the orchestrator would pick.</div>
+                    </div>
+                  )}
+
+                  <div>
+                    <label style={formLabel}>
+                      Describe what was visible on the chart / market context *
+                    </label>
+                    <textarea
+                      rows={7}
+                      value={testDescription}
+                      onChange={e => setTestDescription(e.target.value)}
+                      placeholder={nav?.type === 'orchestrator'
+                        ? 'e.g. NIFTY daily chart showing a potential wave 4 correction after an extended wave 3 rally. MACD showing bearish divergence. Price near 0.382 fib retracement.'
+                        : 'e.g. NIFTY daily chart — price made 5 clear higher highs and higher lows forming an ascending triangle. Volume declining. MACD flat. Breakout occurred above resistance at 22400.'
+                      }
+                      style={{ ...formInput, fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.6 }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* ── Results ── */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* Verdict banner */}
+                  {(() => {
+                    const passed = 'matched' in testResult ? testResult.matched : testResult.correct;
+                    return (
+                      <div style={{ padding: '14px 18px', borderRadius: 10, background: passed ? '#e8f5e9' : '#ffebee', border: `2px solid ${passed ? '#43a047' : '#c62828'}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <span style={{ fontSize: 28 }}>{passed ? '✅' : '❌'}</span>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: passed ? '#2e7d32' : '#c62828' }}>{testResult.verdict}</div>
+                          {'failedRules' in testResult && testResult.failedRules.length > 0 && (
+                            <div style={{ fontSize: 12, color: '#c62828', marginTop: 4 }}>
+                              Failed rules: {testResult.failedRules.join(', ')}
+                            </div>
+                          )}
+                          {'selectedSkills' in testResult && (
+                            <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>
+                              Would select: {testResult.selectedSkills.length > 0 ? testResult.selectedSkills.join(', ') : '(none)'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Analysis — rendered as Markdown */}
+                  <div style={{ background: '#f8f9fa', borderRadius: 8, padding: '14px 16px', border: '1px solid #e0e0e0' }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: '#333', marginBottom: 8 }}>AI Analysis</div>
+                    <div style={mdStyles}>
+                      <ReactMarkdown>{testResult.analysis}</ReactMarkdown>
+                    </div>
+                  </div>
+
+                  {/* Suggested changes */}
+                  {(() => {
+                    if ('suggestedChanges' in testResult) {
+                      if (typeof testResult.suggestedChanges === 'string' && testResult.suggestedChanges) {
+                        return (
+                          <div style={{ background: '#f3e5f5', borderRadius: 8, padding: '14px 16px', border: '1px solid #ce93d8' }}>
+                            <div style={{ fontWeight: 700, fontSize: 12, color: '#6a1b9a', marginBottom: 8 }}>💡 Suggested Orchestrator Changes</div>
+                            <div style={mdStyles}>
+                              <ReactMarkdown>{testResult.suggestedChanges}</ReactMarkdown>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (typeof testResult.suggestedChanges === 'object') {
+                        const changes = testResult.suggestedChanges as Record<string, string>;
+                        if (Object.keys(changes).length > 0) {
+                          return (
+                            <div style={{ background: '#f3e5f5', borderRadius: 8, padding: '14px 16px', border: '1px solid #ce93d8' }}>
+                              <div style={{ fontWeight: 700, fontSize: 12, color: '#6a1b9a', marginBottom: 10 }}>💡 Suggested Field Changes</div>
+                              {Object.entries(changes).map(([field, text]) => (
+                                <div key={field} style={{ marginBottom: 10 }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: '#6a1b9a', marginBottom: 3 }}>{field}</div>
+                                  <div style={{ fontSize: 12, color: '#333', background: '#fff', padding: '8px 10px', borderRadius: 6, border: '1px solid #e1bee7', lineHeight: 1.6, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{text}</div>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }
+                      }
+                    }
+                    return null;
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Footer actions */}
+            <div style={{ padding: '12px 20px', borderTop: '1px solid #e0e0e0', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0, background: '#fafafa' }}>
+              {!testResult ? (
+                <>
+                  <button
+                    onClick={runTest}
+                    disabled={testRunning || !testSymbol.trim() || !testDescription.trim()}
+                    style={{ padding: '8px 24px', background: testRunning ? '#aaa' : '#6a1b9a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: testRunning ? 'default' : 'pointer' }}
+                  >
+                    {testRunning ? '⏳ Running test…' : '▶ Run Test'}
+                  </button>
+                  <button onClick={() => setShowTest(false)} style={toolbarBtn}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  {nav?.type === 'skill' && (() => {
+                    const changes = testResult && 'suggestedChanges' in testResult && typeof testResult.suggestedChanges === 'object'
+                      ? testResult.suggestedChanges as Record<string, string> : {};
+                    return Object.keys(changes).length > 0 ? (
+                      <button onClick={applyTestSuggestions} style={{ padding: '8px 20px', background: '#6a1b9a', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                        ✓ Apply Suggestions to Fields
+                      </button>
+                    ) : null;
+                  })()}
+                  <button onClick={() => setTestResult(null)} style={toolbarBtn}>← Run Again</button>
+                  <button onClick={() => setShowTest(false)} style={toolbarBtn}>Close</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -753,4 +1028,17 @@ const toolbarBtn: React.CSSProperties = {
 const headerBtn: React.CSSProperties = {
   padding: '5px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff',
   border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 13,
+};
+
+const mdStyles: React.CSSProperties = {
+  fontSize: 13, color: '#333', lineHeight: 1.7,
+};
+
+const formLabel: React.CSSProperties = {
+  display: 'block', fontSize: 12, fontWeight: 600, color: '#444', marginBottom: 5,
+};
+
+const formInput: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box', border: '1px solid #ddd',
+  borderRadius: 6, padding: '7px 10px', fontSize: 13,
 };

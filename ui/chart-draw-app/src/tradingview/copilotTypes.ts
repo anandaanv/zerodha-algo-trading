@@ -110,6 +110,36 @@ export interface OrchestratorValidateResult {
   sampleResponse: string | null;
 }
 
+export interface SkillTestRequest {
+  symbol: string;
+  timeframe: string;
+  patternPresent: boolean;
+  description: string;
+}
+
+export interface SkillTestResult {
+  matched: boolean;
+  verdict: string;
+  analysis: string;
+  failedRules: string[];
+  suggestedChanges: Record<string, string>;
+}
+
+export interface OrchestratorTestRequest {
+  symbol: string;
+  timeframe: string;
+  description: string;
+  expectedSkills: string[];
+}
+
+export interface OrchestratorTestResult {
+  selectedSkills: string[];
+  correct: boolean;
+  verdict: string;
+  analysis: string;
+  suggestedChanges: string;
+}
+
 // ─── API Response Shapes ──────────────────────────────────────────────────────
 
 export interface TriggerAnalysisResponse {

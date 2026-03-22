@@ -177,6 +177,25 @@ export async function aiAssistSkill(
   });
 }
 
+export async function testSkill(
+  skillId: number,
+  req: import('./copilotTypes').SkillTestRequest,
+): Promise<import('./copilotTypes').SkillTestResult> {
+  return request(`/copilot/skills/${skillId}/test`, {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function testOrchestrator(
+  req: import('./copilotTypes').OrchestratorTestRequest,
+): Promise<import('./copilotTypes').OrchestratorTestResult> {
+  return request('/copilot/orchestrator/test', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
 // ─── OpenAI Credentials ───────────────────────────────────────────────────────
 
 export async function saveOpenAiKey(apiKey: string, model?: string): Promise<void> {

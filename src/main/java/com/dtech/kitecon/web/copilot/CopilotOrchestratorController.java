@@ -2,13 +2,20 @@ package com.dtech.kitecon.web.copilot;
 
 import com.dtech.kitecon.auth.User;
 import com.dtech.kitecon.auth.UserRepository;
+import com.dtech.kitecon.data.copilot.CopilotSkill;
+import com.dtech.kitecon.service.copilot.CopilotAIService;
 import com.dtech.kitecon.service.copilot.CopilotOrchestratorService;
+import com.dtech.kitecon.service.copilot.CopilotSkillService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * REST API for managing the user's orchestrator instructions.
@@ -25,6 +32,9 @@ import java.util.Map;
 public class CopilotOrchestratorController {
 
     private final CopilotOrchestratorService orchestratorService;
+    private final CopilotSkillService skillService;
+    private final CopilotAIService aiService;
+    private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
 
     /** Get the user's current orchestrator instructions plus metadata. */
@@ -81,6 +91,110 @@ public class CopilotOrchestratorController {
                 "instructions", orchestratorService.getDefaultInstructions(),
                 "isCustomized", false
         ));
+    }
+
+    /**
+     * Test the orchestrator against a hypothetical market scenario.
+     *
+     * Body: { symbol, timeframe, description, expectedSkills[] }
+     * Returns: { selectedSkills[], correct, verdict, analysis, suggestedChanges }
+     */
+    @PostMapping("/test")
+    public ResponseEntity<Map<String, Object>> testOrchestrator(
+            Authentication auth,
+            @RequestBody Map<String, Object> body) {
+
+        Long userId = resolveUserId(auth);
+        String instructions = orchestratorService.getInstructionsForUser(userId);
+        List<CopilotSkill> activeSkills = skillService.getAllSkillsForUser(userId)
+                .stream().filter(s -> Boolean.TRUE.equals(s.getIsActive())).collect(Collectors.toList());
+
+        String symbol = (String) body.getOrDefault("symbol", "");
+        String timeframe = (String) body.getOrDefault("timeframe", "");
+        String description = (String) body.getOrDefault("description", "");
+
+        @SuppressWarnings("unchecked")
+        List<String> expectedSkills = (List<String>) body.getOrDefault("expectedSkills", List.of());
+
+        String skillList = activeSkills.stream()
+                .map(s -> "- " + s.getSkillKey() + ": " + s.getName()
+                        + (s.getDescription() != null && !s.getDescription().isBlank()
+                                ? " — " + s.getDescription() : ""))
+                .collect(Collectors.joining("\n"));
+
+        String systemPrompt = """
+                You are validating an orchestrator's skill-selection logic for an Elliott Wave analysis system.
+
+                Given a market context, determine which skills the orchestrator would select based on its
+                instructions, then evaluate if those selections match what was expected.
+
+                Format your `analysis` field as Markdown:
+
+                ## Skill Selection Analysis
+
+                ### Skills that WOULD be selected
+                For each selected skill, explain which part of the orchestrator instructions triggered it
+                and whether selecting it was appropriate for this scenario.
+
+                ### Skills that would NOT be selected
+                For any expected skill that was NOT selected, explain which rule or condition in the
+                orchestrator instructions caused it to be skipped, and whether that omission was correct.
+
+                ## Verdict
+                Correct / Incorrect — root cause if wrong.
+
+                Return ONLY a valid JSON object with no markdown fences:
+                {
+                  "selectedSkills": ["skill_key1", "skill_key2"],
+                  "correct": true or false,
+                  "verdict": "one-sentence summary",
+                  "analysis": "the full Markdown analysis as described above",
+                  "suggestedChanges": "rewritten orchestrator instruction snippet that would fix the selection, or empty string if correct"
+                }
+                """;
+
+        String userMessage = String.format("""
+                ORCHESTRATOR INSTRUCTIONS:
+                %s
+
+                AVAILABLE ACTIVE SKILLS:
+                %s
+
+                CHART CONTEXT:
+                Symbol: %s
+                Timeframe: %s
+
+                WHAT IS VISIBLE ON THE CHART / MARKET SITUATION:
+                %s
+
+                SKILLS THE USER EXPECTED TO BE SELECTED:
+                %s
+                """,
+                instructions,
+                skillList.isBlank() ? "(no active skills)" : skillList,
+                symbol, timeframe, description,
+                expectedSkills.isEmpty() ? "(user did not specify — just determine what the orchestrator would pick)" :
+                        String.join(", ", expectedSkills));
+
+        try {
+            String raw = aiService.call(userId, systemPrompt, userMessage);
+            String json = raw.trim();
+            if (json.startsWith("```")) {
+                int start = json.indexOf('\n');
+                int end = json.lastIndexOf("```");
+                if (start > 0 && end > start) json = json.substring(start + 1, end).trim();
+            }
+            Map<String, Object> result = objectMapper.readValue(json, new TypeReference<>() {});
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of(
+                    "selectedSkills", List.of(),
+                    "correct", false,
+                    "verdict", "Test could not be completed: " + e.getMessage(),
+                    "analysis", "",
+                    "suggestedChanges", ""
+            ));
+        }
     }
 
     private Long resolveUserId(Authentication auth) {

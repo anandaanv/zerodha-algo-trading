@@ -216,10 +216,15 @@ public class CopilotOrchestratorService {
         sb.append("Symbol: ").append(investigation.getSymbol()).append("\n");
         sb.append("Timeframes: ").append(investigation.getTimeframesActive()).append("\n");
         sb.append("Wave count confirmed: ").append(investigation.getWaveCountConfirmed()).append("\n");
-        if (investigation.getMarketStructureData() != null) {
-            sb.append("Market structure data: available\n");
+        if (investigation.getMarketStructureData() != null && !investigation.getMarketStructureData().isBlank()) {
+            sb.append("\n--- MARKET STRUCTURE ---\n");
+            sb.append(investigation.getMarketStructureData()).append("\n");
         }
-        if (investigation.getDrawingsData() != null) {
+        if (investigation.getZigzagData() != null && !investigation.getZigzagData().isBlank()) {
+            sb.append("\n--- ZIGZAG PIVOTS ---\n");
+            sb.append(investigation.getZigzagData()).append("\n");
+        }
+        if (investigation.getDrawingsData() != null && !investigation.getDrawingsData().isBlank()) {
             sb.append("Expert drawings: available\n");
         }
 
