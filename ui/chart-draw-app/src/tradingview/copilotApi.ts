@@ -1,6 +1,7 @@
 import type {
   CopilotSkill, CopilotActiveTrade,
   TriggerAnalysisResponse, DashboardResponse, BoardResponse, AiAssistResponse,
+  OrchestratorConfig, OrchestratorValidateResult,
 } from './copilotTypes';
 
 const BASE = '/api';
@@ -136,6 +137,34 @@ export async function previewSkillPrompt(id: number): Promise<{ prompt: string }
 
 export async function orchestratorPrompt(): Promise<{ prompt: string }> {
   return request('/copilot/skills/orchestrator-prompt');
+}
+
+// ─── Orchestrator Config ───────────────────────────────────────────────────────
+
+export async function getOrchestratorConfig(): Promise<OrchestratorConfig> {
+  return request('/copilot/orchestrator');
+}
+
+export async function getOrchestratorDefault(): Promise<{ instructions: string }> {
+  return request('/copilot/orchestrator/default');
+}
+
+export async function saveOrchestratorConfig(instructions: string): Promise<OrchestratorConfig> {
+  return request('/copilot/orchestrator', {
+    method: 'PUT',
+    body: JSON.stringify({ instructions }),
+  });
+}
+
+export async function validateOrchestratorConfig(instructions: string): Promise<OrchestratorValidateResult> {
+  return request('/copilot/orchestrator/validate', {
+    method: 'POST',
+    body: JSON.stringify({ instructions }),
+  });
+}
+
+export async function resetOrchestratorConfig(): Promise<OrchestratorConfig> {
+  return request('/copilot/orchestrator', { method: 'DELETE' });
 }
 
 export async function aiAssistSkill(

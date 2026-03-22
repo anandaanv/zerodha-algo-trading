@@ -99,6 +99,17 @@ export interface AiAssistResponse {
   suggestedFields?: Record<string, string>;
 }
 
+export interface OrchestratorConfig {
+  instructions: string;
+  isCustomized: boolean;
+}
+
+export interface OrchestratorValidateResult {
+  valid: boolean;
+  issues: string[];
+  sampleResponse: string | null;
+}
+
 // ─── API Response Shapes ──────────────────────────────────────────────────────
 
 export interface TriggerAnalysisResponse {

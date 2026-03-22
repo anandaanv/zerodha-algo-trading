@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { CopilotSkill, AiAssistResponse } from './copilotTypes';
+import type { CopilotSkill, AiAssistResponse, OrchestratorConfig, OrchestratorValidateResult } from './copilotTypes';
 import {
   getSkills, getSkill, createSkill, updateSkill, deleteSkill,
   seedDemoSkills, previewSkillPrompt, orchestratorPrompt, aiAssistSkill,
+  getOrchestratorConfig, getOrchestratorDefault, saveOrchestratorConfig,
+  validateOrchestratorConfig, resetOrchestratorConfig,
 } from './copilotApi';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -69,7 +71,12 @@ export default function SkillBuilderPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   // Orchestrator
-  const [orchPrompt, setOrchPrompt] = useState<string | null>(null);
+  const [orchConfig, setOrchConfig] = useState<OrchestratorConfig | null>(null);
+  const [orchDraft, setOrchDraft] = useState<string>('');          // textarea value in edit mode
+  const [orchMode, setOrchMode] = useState<'view' | 'edit'>('view');
+  const [orchSaving, setOrchSaving] = useState(false);
+  const [orchValidating, setOrchValidating] = useState(false);
+  const [orchValidResult, setOrchValidResult] = useState<OrchestratorValidateResult | null>(null);
 
   // Skill form
   const [form, setForm] = useState<Partial<CopilotSkill>>(EMPTY_SKILL);
@@ -110,14 +117,82 @@ export default function SkillBuilderPage() {
   const selectOrchestrator = async () => {
     setNav({ type: 'orchestrator' });
     setMode('view');
+    setOrchMode('view');
+    setOrchValidResult(null);
     setError(null);
-    if (!orchPrompt) {
+    if (!orchConfig) {
       try {
-        const res = await orchestratorPrompt();
-        setOrchPrompt(res.prompt);
+        const cfg = await getOrchestratorConfig();
+        setOrchConfig(cfg);
+        setOrchDraft(cfg.instructions);
       } catch (e) {
         setError(String(e));
       }
+    }
+  };
+
+  const startEditOrchestrator = () => {
+    setOrchMode('edit');
+    setOrchValidResult(null);
+    if (orchConfig) setOrchDraft(orchConfig.instructions);
+  };
+
+  const cancelEditOrchestrator = () => {
+    setOrchMode('view');
+    setOrchValidResult(null);
+    if (orchConfig) setOrchDraft(orchConfig.instructions);
+  };
+
+  const validateOrchestrator = async () => {
+    setOrchValidating(true);
+    setOrchValidResult(null);
+    try {
+      const result = await validateOrchestratorConfig(orchDraft);
+      setOrchValidResult(result);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setOrchValidating(false);
+    }
+  };
+
+  const saveOrchestrator = async () => {
+    setOrchSaving(true);
+    setError(null);
+    try {
+      const updated = await saveOrchestratorConfig(orchDraft);
+      setOrchConfig(updated);
+      setOrchMode('view');
+      setOrchValidResult(null);
+      setSuccess('Orchestrator instructions saved.');
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setOrchSaving(false);
+    }
+  };
+
+  const resetOrchestrator = async () => {
+    if (!confirm('Reset orchestrator to the default instructions? Your customisation will be deleted.')) return;
+    try {
+      const updated = await resetOrchestratorConfig();
+      setOrchConfig(updated);
+      setOrchDraft(updated.instructions);
+      setOrchMode('view');
+      setOrchValidResult(null);
+      setSuccess('Orchestrator reset to default.');
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const loadDefaultOrchestrator = async () => {
+    try {
+      const res = await getOrchestratorDefault();
+      setOrchDraft(res.instructions);
+      setOrchValidResult(null);
+    } catch (e) {
+      setError(String(e));
     }
   };
 
@@ -267,9 +342,11 @@ export default function SkillBuilderPage() {
             }}
           >
             <span style={{ fontSize: 18 }}>🎯</span>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: '#1a237e' }}>Orchestrator</div>
-              <div style={{ fontSize: 10, color: '#888' }}>Skill selection logic</div>
+              <div style={{ fontSize: 10, color: orchConfig?.isCustomized ? '#e65100' : '#888' }}>
+                {orchConfig?.isCustomized ? 'customised' : 'Skill selection logic'}
+              </div>
             </div>
           </div>
 
@@ -344,21 +421,107 @@ export default function SkillBuilderPage() {
             </div>
           )}
 
-          {/* ── Orchestrator View ── */}
+          {/* ── Orchestrator Panel ── */}
           {nav?.type === 'orchestrator' && (
             <div style={{ flex: 1, overflow: 'auto', padding: 28 }}>
-              <div style={{ marginBottom: 6 }}>
-                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1a237e' }}>🎯 Orchestrator</h2>
-                <p style={{ margin: '6px 0 0', color: '#777', fontSize: 13 }}>
-                  These static rules govern how the system selects which skills to invoke for each investigation.
-                  The dynamic skill list and investigation context are appended at runtime.
-                </p>
-              </div>
-              {orchPrompt ? (
-                <div style={codeBlock}>
-                  <div style={{ fontWeight: 700, color: '#90caf9', marginBottom: 10, fontSize: 12 }}>ORCHESTRATOR INSTRUCTIONS</div>
-                  {orchPrompt}
+              {error && <div style={alertStyle('#c62828', '#ffebee')}>{error}</div>}
+              {success && <div style={alertStyle('#388e3c', '#e8f5e9')}>{success}</div>}
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1a237e' }}>🎯 Orchestrator</h2>
+                  <p style={{ margin: '6px 0 0', color: '#777', fontSize: 13 }}>
+                    Controls which skills are selected and in what order for each investigation.
+                    The dynamic skill list and investigation context are appended at runtime.
+                    {orchConfig?.isCustomized && (
+                      <span style={{ marginLeft: 8, background: '#fff3e0', color: '#e65100', padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>customised</span>
+                    )}
+                  </p>
                 </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  {orchMode === 'view' ? (
+                    <>
+                      <button onClick={startEditOrchestrator} style={primaryBtn}>✏ Edit</button>
+                      {orchConfig?.isCustomized && (
+                        <button onClick={resetOrchestrator} style={{ ...secondaryBtn, color: '#c62828', borderColor: '#c62828' }}>↺ Reset to Default</button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={validateOrchestrator}
+                        disabled={orchValidating}
+                        style={{ ...secondaryBtn, color: '#6a1b9a', borderColor: '#6a1b9a' }}
+                      >
+                        {orchValidating ? '⏳ Validating…' : '✔ Validate'}
+                      </button>
+                      <button
+                        onClick={saveOrchestrator}
+                        disabled={orchSaving || orchValidating}
+                        style={primaryBtn}
+                      >
+                        {orchSaving ? 'Saving…' : '💾 Save'}
+                      </button>
+                      <button onClick={loadDefaultOrchestrator} style={secondaryBtn}>
+                        ↓ Load Default
+                      </button>
+                      <button onClick={cancelEditOrchestrator} style={secondaryBtn}>Cancel</button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Validation result */}
+              {orchValidResult && (
+                <div style={{
+                  marginBottom: 16, padding: '12px 16px', borderRadius: 8,
+                  background: orchValidResult.valid ? '#e8f5e9' : '#ffebee',
+                  border: `1px solid ${orchValidResult.valid ? '#a5d6a7' : '#ef9a9a'}`,
+                }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: orchValidResult.valid ? '#2e7d32' : '#c62828', marginBottom: 6 }}>
+                    {orchValidResult.valid ? '✔ Validation passed — AI response schema is correct' : '✘ Validation failed'}
+                  </div>
+                  {orchValidResult.issues.length > 0 && (
+                    <ul style={{ margin: '4px 0', padding: '0 0 0 20px', fontSize: 12, color: '#c62828' }}>
+                      {orchValidResult.issues.map((issue, i) => <li key={i}>{issue}</li>)}
+                    </ul>
+                  )}
+                  {orchValidResult.sampleResponse && (
+                    <details style={{ marginTop: 8 }}>
+                      <summary style={{ fontSize: 12, cursor: 'pointer', color: '#555' }}>AI sample response</summary>
+                      <pre style={{ marginTop: 6, fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+                        {orchValidResult.sampleResponse}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )}
+
+              {orchConfig ? (
+                orchMode === 'view' ? (
+                  <div style={codeBlock}>
+                    <div style={{ fontWeight: 700, color: '#90caf9', marginBottom: 10, fontSize: 12 }}>ORCHESTRATOR INSTRUCTIONS</div>
+                    {orchConfig.instructions}
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 12, color: '#777', marginBottom: 6 }}>
+                      Edit the orchestrator instructions below. The system will append the dynamic skill list
+                      and investigation context at runtime — do not include them here.
+                      Use <strong>Validate</strong> to test that the AI still returns the correct JSON schema before saving.
+                    </div>
+                    <textarea
+                      value={orchDraft}
+                      onChange={e => { setOrchDraft(e.target.value); setOrchValidResult(null); }}
+                      style={{
+                        width: '100%', boxSizing: 'border-box', minHeight: 520,
+                        fontFamily: 'monospace', fontSize: 13, lineHeight: 1.6,
+                        padding: '12px 14px', border: '1px solid #ccc', borderRadius: 6,
+                        background: '#1e1e1e', color: '#d4d4d4', resize: 'vertical',
+                      }}
+                    />
+                  </div>
+                )
               ) : (
                 <div style={{ color: '#aaa', fontSize: 13, marginTop: 20 }}>Loading…</div>
               )}

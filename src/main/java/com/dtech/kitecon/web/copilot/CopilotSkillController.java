@@ -89,10 +89,11 @@ public class CopilotSkillController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /** Returns the static orchestrator instructions (no dynamic skill list or context). */
+    /** Returns the user's orchestrator instructions (custom or default). */
     @GetMapping("/orchestrator-prompt")
-    public ResponseEntity<Map<String, String>> getOrchestratorPrompt() {
-        return ResponseEntity.ok(Map.of("prompt", orchestratorService.getStaticOrchestratorInstructions()));
+    public ResponseEntity<Map<String, String>> getOrchestratorPrompt(Authentication auth) {
+        Long userId = resolveUserId(auth);
+        return ResponseEntity.ok(Map.of("prompt", orchestratorService.getInstructionsForUser(userId)));
     }
 
     /** AI skill builder assistant — takes a user message + current skill state, returns reply + suggested field values. */

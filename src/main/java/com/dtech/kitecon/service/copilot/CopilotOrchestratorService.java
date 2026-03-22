@@ -1,17 +1,18 @@
 package com.dtech.kitecon.service.copilot;
 
 import com.dtech.kitecon.data.copilot.CopilotInvestigation;
+import com.dtech.kitecon.data.copilot.CopilotOrchestratorConfig;
 import com.dtech.kitecon.data.copilot.CopilotSkill;
+import com.dtech.kitecon.repository.copilot.CopilotOrchestratorConfigRepository;
 import com.dtech.kitecon.service.copilot.dto.*;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 /**
  * Orchestrates the multi-turn AI investigation loop.
@@ -34,17 +35,21 @@ public class CopilotOrchestratorService {
 
     private final CopilotSkillService skillService;
     private final CopilotInvestigationService investigationService;
+    private final CopilotAIService aiService;
     private final AIResponseParser responseParser;
     private final ObjectMapper objectMapper;
+    private final CopilotOrchestratorConfigRepository orchestratorConfigRepository;
 
     private static final int MAX_TURNS = 20; // Safety guard against runaway loops
 
+    // ─── Default instructions (hardcoded fallback) ────────────────────────────
+
     /**
-     * Returns the static instruction portion of the orchestrator system prompt.
-     * This does not include the dynamic skill list or investigation context.
-     * Exposed via the Skill Builder UI so users can see what the orchestrator does.
+     * The hardcoded default orchestrator instructions.
+     * Used as fallback when the user has not customised their orchestrator.
+     * Also shown as "Reset to default" reference text in the UI.
      */
-    public String getStaticOrchestratorInstructions() {
+    public String getDefaultInstructions() {
         return """
             You are a trading analysis orchestrator. Your ONLY job is to decide which skills to invoke
             and in what sequence based on the investigation context provided.
@@ -68,15 +73,135 @@ public class CopilotOrchestratorService {
             """;
     }
 
+    // ─── User-specific instructions (DB-backed) ───────────────────────────────
+
     /**
-     * Build the orchestrator system prompt.
-     * The orchestrator knows what skills exist but contains no trading knowledge itself.
+     * Returns the user's custom orchestrator instructions, or the hardcoded default.
      */
-    public String buildOrchestratorPrompt(List<CopilotSkill> availableSkills,
+    public String getInstructionsForUser(Long userId) {
+        return orchestratorConfigRepository.findByUserId(userId)
+                .map(CopilotOrchestratorConfig::getInstructions)
+                .orElseGet(this::getDefaultInstructions);
+    }
+
+    /**
+     * Returns whether the user has a custom orchestrator config.
+     */
+    public boolean isCustomized(Long userId) {
+        return orchestratorConfigRepository.findByUserId(userId).isPresent();
+    }
+
+    /**
+     * Save (upsert) the user's orchestrator instructions.
+     */
+    @Transactional
+    public CopilotOrchestratorConfig saveInstructionsForUser(Long userId, String instructions) {
+        CopilotOrchestratorConfig config = orchestratorConfigRepository.findByUserId(userId)
+                .orElse(CopilotOrchestratorConfig.builder().userId(userId).build());
+        config.setInstructions(instructions);
+        return orchestratorConfigRepository.save(config);
+    }
+
+    /**
+     * Delete the user's custom instructions, reverting to the hardcoded default.
+     */
+    @Transactional
+    public void resetToDefault(Long userId) {
+        orchestratorConfigRepository.findByUserId(userId)
+                .ifPresent(orchestratorConfigRepository::delete);
+    }
+
+    /**
+     * Validate proposed orchestrator instructions by running the AI against a dummy context
+     * and verifying the response matches the expected ORCHESTRATOR JSON schema.
+     *
+     * Returns a map with: valid (boolean), issues (list<string>), sampleResponse (string)
+     */
+    public Map<String, Object> validateInstructions(Long userId, String instructions) {
+        String dummyContext = instructions + "\n\n" +
+                "=== AVAILABLE SKILLS ===\n" +
+                "- triangle (key: triangle, category: PATTERN): Triangle pattern detection\n" +
+                "- wave_4 (key: wave_4, category: WAVE): Elliott Wave 4 analysis\n\n" +
+                "=== ALREADY INVOKED THIS SESSION ===\n" +
+                "[]\n\n" +
+                "=== CURRENT INVESTIGATION CONTEXT ===\n" +
+                "Symbol: NIFTY\n" +
+                "Timeframes: daily,1h\n" +
+                "Wave count confirmed: false\n";
+
+        List<String> issues = new ArrayList<>();
+        String sampleResponse = null;
+        boolean valid = false;
+
+        try {
+            String rawResponse = aiService.call(userId, dummyContext,
+                    "Determine which skills to invoke for this investigation.");
+
+            // Strip markdown fences
+            String json = rawResponse.trim();
+            if (json.startsWith("```")) {
+                int start = json.indexOf('\n');
+                int end = json.lastIndexOf("```");
+                if (start > 0 && end > start) json = json.substring(start + 1, end).trim();
+            }
+
+            sampleResponse = json;
+
+            Map<String, Object> parsed = objectMapper.readValue(json, new TypeReference<>() {});
+
+            // Check required fields
+            Object type = parsed.get("type");
+            if (!"ORCHESTRATOR".equals(type)) {
+                issues.add("Response 'type' must be \"ORCHESTRATOR\" but got: " + type);
+            }
+            Object skillsToInvoke = parsed.get("skillsToInvoke");
+            if (!(skillsToInvoke instanceof List)) {
+                issues.add("'skillsToInvoke' must be a JSON array, got: " + skillsToInvoke);
+            }
+            Object rationale = parsed.get("selectionRationale");
+            if (!(rationale instanceof String)) {
+                issues.add("'selectionRationale' must be a string, got: " + rationale);
+            }
+            Object complete = parsed.get("analysisComplete");
+            if (!(complete instanceof Boolean)) {
+                issues.add("'analysisComplete' must be a boolean, got: " + complete);
+            }
+
+            valid = issues.isEmpty();
+
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            issues.add("AI response is not valid JSON: " + e.getMessage());
+        } catch (Exception e) {
+            issues.add("Validation failed: " + e.getMessage());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("valid", valid);
+        result.put("issues", issues);
+        result.put("sampleResponse", sampleResponse);
+        return result;
+    }
+
+    // ─── Deprecated alias kept for backward-compat with any callers ──────────
+
+    /** @deprecated Use getDefaultInstructions() or getInstructionsForUser(userId). */
+    @Deprecated
+    public String getStaticOrchestratorInstructions() {
+        return getDefaultInstructions();
+    }
+
+    // ─── Prompt building ──────────────────────────────────────────────────────
+
+    /**
+     * Build the orchestrator system prompt for a specific user.
+     * Uses the user's custom instructions if present, otherwise the hardcoded default.
+     */
+    public String buildOrchestratorPrompt(Long userId,
+                                           List<CopilotSkill> availableSkills,
                                            CopilotInvestigation investigation,
                                            Optional<CopilotInvestigation> previousInvestigation) {
         StringBuilder sb = new StringBuilder();
-        sb.append(getStaticOrchestratorInstructions()).append("\n");
+        sb.append(getInstructionsForUser(userId)).append("\n");
 
         sb.append("=== AVAILABLE SKILLS ===\n");
         for (CopilotSkill skill : availableSkills) {
@@ -155,20 +280,14 @@ public class CopilotOrchestratorService {
         return sb.toString();
     }
 
-    /**
-     * Check if a skill key has already been invoked in this investigation.
-     * Cycle detection — prevents re-invoking the same skill.
-     */
+    // ─── Cycle detection ──────────────────────────────────────────────────────
+
     public boolean isSkillAlreadyInvoked(CopilotInvestigation investigation, String skillKey) {
         String invoked = investigation.getInvokedSkills();
         if (invoked == null || invoked.equals("[]")) return false;
         return invoked.contains("\"" + skillKey + "\"");
     }
 
-    /**
-     * Filter the orchestrator's requested skill list to remove already-invoked skills.
-     * Returns only skills that are safe to call.
-     */
     public List<String> filterCycleSkills(List<String> requested, CopilotInvestigation investigation) {
         if (requested == null) return List.of();
         return requested.stream()
@@ -176,9 +295,8 @@ public class CopilotOrchestratorService {
                 .toList();
     }
 
-    /**
-     * Build a summary of the investigation for chat display.
-     */
+    // ─── Utilities ────────────────────────────────────────────────────────────
+
     public String buildInvestigationSummary(CopilotInvestigation investigation) {
         return String.format(
                 "Investigation for %s | Timeframes: %s | Wave confirmed: %s | Skills run: %s",
@@ -189,9 +307,6 @@ public class CopilotOrchestratorService {
         );
     }
 
-    /**
-     * Parse the invoked skills JSON array from the investigation.
-     */
     public List<String> getInvokedSkillKeys(CopilotInvestigation investigation) {
         String json = investigation.getInvokedSkills();
         if (json == null || json.equals("[]")) return new ArrayList<>();
