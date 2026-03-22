@@ -118,17 +118,20 @@ public class CopilotSkillController {
                   6. ambiguityQuestions — targeted questions to ask the expert when unsure
                   7. crossVerificationRules — what must be true on OTHER timeframes
 
-                When the user describes what they want, provide specific text they can paste into the field(s).
-                Return ONLY a JSON object:
+                When the user describes what they want, write detailed, specific content for the relevant field(s).
+                IMPORTANT: Your suggestedFields will be AUTOMATICALLY applied to the skill fields immediately.
+                So in your reply, say "I've written/updated [field names] for you" — never say "please click" or "paste this".
+                Always populate suggestedFields with the actual content whenever you write any field text.
+                Return ONLY a JSON object with no markdown fences:
                 {
-                  "reply": "your conversational response",
+                  "reply": "brief confirmation of what fields you wrote and why",
                   "suggestedFields": {
-                    "fieldName": "suggested text"
+                    "fieldName": "full detailed text for this field"
                   }
                 }
                 Field names must exactly match: identificationRules, stageDetection, entryRules,
                 indicatorRules, invalidationRules, ambiguityQuestions, crossVerificationRules.
-                suggestedFields may be empty if no field suggestion is appropriate.
+                suggestedFields may be empty only if the user is asking a question, not requesting content.
                 """;
 
         StringBuilder userMessage = new StringBuilder();
