@@ -40,14 +40,12 @@ public class CopilotOrchestratorService {
     private static final int MAX_TURNS = 20; // Safety guard against runaway loops
 
     /**
-     * Build the orchestrator system prompt.
-     * The orchestrator knows what skills exist but contains no trading knowledge itself.
+     * Returns the static instruction portion of the orchestrator system prompt.
+     * This does not include the dynamic skill list or investigation context.
+     * Exposed via the Skill Builder UI so users can see what the orchestrator does.
      */
-    public String buildOrchestratorPrompt(List<CopilotSkill> availableSkills,
-                                           CopilotInvestigation investigation,
-                                           Optional<CopilotInvestigation> previousInvestigation) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("""
+    public String getStaticOrchestratorInstructions() {
+        return """
             You are a trading analysis orchestrator. Your ONLY job is to decide which skills to invoke
             and in what sequence based on the investigation context provided.
             You contain NO trading knowledge — all trading knowledge lives in the skills.
@@ -67,8 +65,18 @@ public class CopilotOrchestratorService {
             - If no more skills are needed, set analysisComplete=true and provide completionSummary
             - Prioritise PATTERN skills first, then WAVE skills for cross-verification
             - CONFIRMATION and OVERRIDE skills are invoked during monitoring phase only
+            """;
+    }
 
-            """);
+    /**
+     * Build the orchestrator system prompt.
+     * The orchestrator knows what skills exist but contains no trading knowledge itself.
+     */
+    public String buildOrchestratorPrompt(List<CopilotSkill> availableSkills,
+                                           CopilotInvestigation investigation,
+                                           Optional<CopilotInvestigation> previousInvestigation) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getStaticOrchestratorInstructions()).append("\n");
 
         sb.append("=== AVAILABLE SKILLS ===\n");
         for (CopilotSkill skill : availableSkills) {
