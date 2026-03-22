@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+
+const TEST_CACHE_KEY = 'skill_test_last';
 import type {
   CopilotSkill, AiAssistResponse, OrchestratorConfig, OrchestratorValidateResult,
   SkillTestResult, OrchestratorTestResult,
@@ -180,16 +183,30 @@ export default function SkillBuilderPage() {
 
   const openTest = () => {
     setTestResult(null);
-    setTestSymbol('');
-    setTestTimeframe('1D');
-    setTestPatternPresent(true);
-    setTestDescription('');
-    setTestExpectedSkills('');
+    // Restore last values from localStorage
+    try {
+      const cached = JSON.parse(localStorage.getItem(TEST_CACHE_KEY) || '{}');
+      setTestSymbol(cached.symbol ?? '');
+      setTestTimeframe(cached.timeframe ?? '1D');
+      setTestPatternPresent(cached.patternPresent ?? true);
+      setTestDescription(cached.description ?? '');
+      setTestExpectedSkills(cached.expectedSkills ?? '');
+    } catch {
+      setTestSymbol(''); setTestTimeframe('1D');
+      setTestPatternPresent(true); setTestDescription(''); setTestExpectedSkills('');
+    }
     setShowTest(true);
   };
 
   const runTest = async () => {
     if (!testDescription.trim() || !testSymbol.trim()) return;
+    // Persist form values for next time
+    localStorage.setItem(TEST_CACHE_KEY, JSON.stringify({
+      symbol: testSymbol.trim(), timeframe: testTimeframe,
+      patternPresent: testPatternPresent,
+      description: testDescription.trim(),
+      expectedSkills: testExpectedSkills,
+    }));
     setTestRunning(true);
     setTestResult(null);
     try {
@@ -898,10 +915,12 @@ export default function SkillBuilderPage() {
                     );
                   })()}
 
-                  {/* Analysis */}
+                  {/* Analysis — rendered as Markdown */}
                   <div style={{ background: '#f8f9fa', borderRadius: 8, padding: '14px 16px', border: '1px solid #e0e0e0' }}>
                     <div style={{ fontWeight: 700, fontSize: 12, color: '#333', marginBottom: 8 }}>AI Analysis</div>
-                    <div style={{ fontSize: 13, color: '#444', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{testResult.analysis}</div>
+                    <div style={mdStyles}>
+                      <ReactMarkdown>{testResult.analysis}</ReactMarkdown>
+                    </div>
                   </div>
 
                   {/* Suggested changes */}
@@ -911,7 +930,9 @@ export default function SkillBuilderPage() {
                         return (
                           <div style={{ background: '#f3e5f5', borderRadius: 8, padding: '14px 16px', border: '1px solid #ce93d8' }}>
                             <div style={{ fontWeight: 700, fontSize: 12, color: '#6a1b9a', marginBottom: 8 }}>💡 Suggested Orchestrator Changes</div>
-                            <div style={{ fontSize: 12, color: '#4a148c', lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{testResult.suggestedChanges}</div>
+                            <div style={mdStyles}>
+                              <ReactMarkdown>{testResult.suggestedChanges}</ReactMarkdown>
+                            </div>
                           </div>
                         );
                       }
@@ -924,7 +945,7 @@ export default function SkillBuilderPage() {
                               {Object.entries(changes).map(([field, text]) => (
                                 <div key={field} style={{ marginBottom: 10 }}>
                                   <div style={{ fontSize: 11, fontWeight: 700, color: '#6a1b9a', marginBottom: 3 }}>{field}</div>
-                                  <div style={{ fontSize: 12, color: '#333', background: '#fff', padding: '8px 10px', borderRadius: 6, border: '1px solid #e1bee7', lineHeight: 1.6, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{text}</div>
+                                  <div style={{ fontSize: 12, color: '#333', background: '#fff', padding: '8px 10px', borderRadius: 6, border: '1px solid #e1bee7', lineHeight: 1.6, fontFamily: 'monospace', whiteSpace: 'pre-wrap' }}>{text}</div>
                                 </div>
                               ))}
                             </div>
@@ -1007,6 +1028,10 @@ const toolbarBtn: React.CSSProperties = {
 const headerBtn: React.CSSProperties = {
   padding: '5px 12px', background: 'rgba(255,255,255,0.15)', color: '#fff',
   border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, cursor: 'pointer', fontSize: 13,
+};
+
+const mdStyles: React.CSSProperties = {
+  fontSize: 13, color: '#333', lineHeight: 1.7,
 };
 
 const formLabel: React.CSSProperties = {

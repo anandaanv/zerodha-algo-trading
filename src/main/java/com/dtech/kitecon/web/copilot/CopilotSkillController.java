@@ -187,33 +187,41 @@ public class CopilotSkillController {
         String systemPrompt = """
                 You are a strict validator for a trading skill used in an Elliott Wave analysis system.
 
-                A skill is a set of rules an AI analyst uses to identify chart patterns, detect stages,
-                and make trade decisions. You will evaluate whether this skill would have correctly handled
-                a given real-world chart scenario.
+                A skill has 7 rule fields. You must evaluate EACH field individually against the described
+                chart scenario and give a clear pass/fail verdict per rule with specific reasoning.
 
-                You will receive:
-                  1. The compiled skill prompt (all 7 rule fields)
-                  2. A chart context: symbol, timeframe, and a description of what was visible
-                  3. Whether the pattern was actually present on that chart (YES or NO)
+                Format your `analysis` field as Markdown with this exact structure:
 
-                Your job: evaluate each rule field against the described chart and determine whether
-                the skill would have CORRECTLY identified (or correctly ignored) the pattern.
+                ## Rule-by-Rule Evaluation
+
+                ### 1. Identification Rules — ✅ PASS / ❌ FAIL
+                **What the rule says:** (quote or summarise the key condition)
+                **What the chart showed:** (what was actually described)
+                **Verdict:** Pass because... / Fail because... (be specific — quote exact words from the rule that were not met)
+
+                ### 2. Stage Detection — ✅ PASS / ❌ FAIL
+                ... (same format)
+
+                (repeat for all 7 rules)
+
+                ## Summary
+                Overall matched: YES/NO. Root cause of failure: ... (if failed)
 
                 Return ONLY a valid JSON object with no markdown fences:
                 {
                   "matched": true or false,
-                  "verdict": "one-sentence summary of pass or fail",
-                  "analysis": "thorough rule-by-rule analysis — what each rule says vs what the chart showed",
+                  "verdict": "one-sentence summary",
+                  "analysis": "the full Markdown analysis as described above",
                   "failedRules": ["identificationRules", "stageDetection"],
                   "suggestedChanges": {
-                    "fieldName": "improved text that would have handled this case correctly"
+                    "fieldName": "complete rewritten text for this field that would have caught this case"
                   }
                 }
 
                 Field names must exactly match: identificationRules, stageDetection, entryRules,
                 indicatorRules, invalidationRules, ambiguityQuestions, crossVerificationRules.
-                Only include fields in suggestedChanges if they need improvement.
-                If matched is true, suggestedChanges should be empty.
+                Only include fields in suggestedChanges if they failed. Be very specific — the user
+                needs to know EXACTLY which sentence in which rule caused the failure.
                 """;
 
         String userMessage = String.format("""

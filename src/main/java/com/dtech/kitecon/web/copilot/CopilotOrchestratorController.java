@@ -125,16 +125,31 @@ public class CopilotOrchestratorController {
         String systemPrompt = """
                 You are validating an orchestrator's skill-selection logic for an Elliott Wave analysis system.
 
-                Given a market context, you must determine which skills the orchestrator would select
-                based on its instructions, then evaluate if those selections are correct.
+                Given a market context, determine which skills the orchestrator would select based on its
+                instructions, then evaluate if those selections match what was expected.
+
+                Format your `analysis` field as Markdown:
+
+                ## Skill Selection Analysis
+
+                ### Skills that WOULD be selected
+                For each selected skill, explain which part of the orchestrator instructions triggered it
+                and whether selecting it was appropriate for this scenario.
+
+                ### Skills that would NOT be selected
+                For any expected skill that was NOT selected, explain which rule or condition in the
+                orchestrator instructions caused it to be skipped, and whether that omission was correct.
+
+                ## Verdict
+                Correct / Incorrect — root cause if wrong.
 
                 Return ONLY a valid JSON object with no markdown fences:
                 {
                   "selectedSkills": ["skill_key1", "skill_key2"],
                   "correct": true or false,
                   "verdict": "one-sentence summary",
-                  "analysis": "detailed reasoning — why each skill was or wasn't selected, and whether that was right",
-                  "suggestedChanges": "improved orchestrator instruction text if the selection was wrong, or empty string if correct"
+                  "analysis": "the full Markdown analysis as described above",
+                  "suggestedChanges": "rewritten orchestrator instruction snippet that would fix the selection, or empty string if correct"
                 }
                 """;
 
