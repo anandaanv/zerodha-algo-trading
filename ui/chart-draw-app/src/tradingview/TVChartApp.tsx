@@ -9,6 +9,9 @@ import AnalysisPanel from './AnalysisPanel';
 import ChartTabBar from './ChartTabBar';
 import AIChatOverlay from './AIChatOverlay';
 import PromptBuilderPage from './PromptBuilderPage';
+import CopilotChartPanel from './CopilotChartPanel';
+import CopilotSettingsModal from './CopilotSettingsModal';
+import type { CopilotHypothesis } from './copilotTypes';
 import {
   WorkspaceTab,
   WorkspaceLayout,
@@ -39,8 +42,12 @@ export default function TVChartApp() {
   const widgetReadyRef = useRef(false);
   const [isAnalysisPanelOpen, setIsAnalysisPanelOpen] = useState(false);
   const [isAiOverlayOpen, setIsAiOverlayOpen] = useState(false);
+  const [isCopilotPanelOpen, setIsCopilotPanelOpen] = useState(false);
+  const [showCopilotSettings, setShowCopilotSettings] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [layoutModalMode, setLayoutModalMode] = useState<'save' | 'load' | null>(null);
+  const [copilotHypotheses, setCopilotHypotheses] = useState<CopilotHypothesis[]>([]);
+  const hypothesisShapeIdsRef = useRef<any[]>([]);
 
   // Parse URL parameters for initial defaults only
   const urlSymbol = searchParams.get('script') || searchParams.get('symbol');
@@ -433,6 +440,71 @@ export default function TVChartApp() {
     }
   };
 
+  // ─── Co-Pilot: draw yellow hypothesis labels on chart ────────────────────
+
+  const handleHypothesesLoaded = useCallback((hypotheses: CopilotHypothesis[]) => {
+    setCopilotHypotheses(hypotheses);
+    if (!widgetReadyRef.current || !widgetRef.current) return;
+    try {
+      const chart = widgetRef.current.activeChart();
+
+      // Remove previous hypothesis shapes
+      hypothesisShapeIdsRef.current.forEach(id => {
+        try { chart.removeEntity(id); } catch { /* ignore */ }
+      });
+      hypothesisShapeIdsRef.current = [];
+
+      const visRange = chart.getVisibleRange();
+      if (!visRange) return;
+
+      const active = hypotheses.filter(h =>
+        h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED'
+      );
+
+      // Draw a text label at the right side of the visible range for each active hypothesis.
+      // Prices are spaced so labels don't overlap — we anchor to the chart's visible high.
+      active.forEach((h, idx) => {
+        try {
+          // Attempt to extract a price from the anticipatory trade JSON
+          let price: number | undefined;
+          try {
+            const tradeData = JSON.parse(h.anticipatoryTrade || '{}');
+            const zone: string = tradeData.entry_zone ?? tradeData.entryZone ?? '';
+            const match = zone.match(/[\d.]+/);
+            if (match) price = Number(match[0]);
+          } catch { /* ignore */ }
+
+          // Fall back: space labels 2% apart from top of visible range
+          if (!price) {
+            const bars = chart.getVisibleRange();
+            // We can't easily get the y-axis range, so just stack labels
+            price = undefined;
+          }
+
+          const shapeId = chart.createShape(
+            { time: visRange.to, price },
+            {
+              shape: 'text',
+              lock: true,
+              disableSelection: false,
+              overrides: {
+                text: `⚡ ${h.label}`,
+                fontsize: 12,
+                bold: true,
+                color: '#FFD700',
+                backgroundColor: 'rgba(26,35,126,0.75)',
+                backgroundTransparency: 25,
+              },
+            },
+          );
+          if (shapeId) hypothesisShapeIdsRef.current.push(shapeId);
+        } catch { /* TV shape API may not support all fields — fail silently */ }
+      });
+    } catch (e) {
+      console.warn('Could not draw copilot annotations:', e);
+    }
+  }, []);
+
   // ─── Derived: active tab for display ─────────────────────────────────────
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
@@ -499,50 +571,50 @@ export default function TVChartApp() {
       <div style={{
         position: 'fixed',
         top: '48px',
-        right: isAnalysisPanelOpen ? '470px' : '20px',
+        right: isAnalysisPanelOpen ? '470px' : isCopilotPanelOpen ? '408px' : '20px',
         zIndex: 9999,
         transition: 'right 0.3s ease',
         display: 'flex',
         gap: '8px',
+        alignItems: 'center',
       }}>
+        {/* Co-Pilot settings gear */}
         <button
-          onClick={() => navigate('/copilot')}
+          onClick={() => setShowCopilotSettings(true)}
+          title="Co-Pilot AI Settings"
           style={{
-            height: '40px',
-            padding: '0 14px',
-            backgroundColor: '#1a237e',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: 600,
+            height: '36px', width: '36px',
+            backgroundColor: 'rgba(26,35,126,0.85)',
+            color: 'white', border: 'none', borderRadius: '8px',
+            cursor: 'pointer', fontSize: '16px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >⚙</button>
+        <button
+          onClick={() => setIsCopilotPanelOpen(prev => !prev)}
+          style={{
+            height: '40px', padding: '0 14px',
+            backgroundColor: isCopilotPanelOpen ? '#283593' : '#1a237e',
+            color: 'white', border: 'none', borderRadius: '8px',
+            cursor: 'pointer', fontSize: '13px', fontWeight: 600,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
+            display: 'flex', alignItems: 'center', gap: '6px',
           }}
           title="Co-Pilot: hypothesis tracking and trade management"
         >
           <span style={{ fontSize: '16px' }}>🧠</span>
-          <span>Co-Pilot</span>
+          <span>Co-Pilot{copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length > 0 ? ` (${copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length})` : ''}</span>
         </button>
         <button
           onClick={() => setIsAnalysisPanelOpen(!isAnalysisPanelOpen)}
           style={{
-            height: '40px',
-            padding: '0 14px',
-            backgroundColor: '#1976d2',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontSize: '13px',
-            fontWeight: 600,
+            height: '40px', padding: '0 14px',
+            backgroundColor: '#1976d2', color: 'white',
+            border: 'none', borderRadius: '8px', cursor: 'pointer',
+            fontSize: '13px', fontWeight: 600,
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
+            display: 'flex', alignItems: 'center', gap: '6px',
           }}
           title="Fundamentals, news, snapshots"
         >
@@ -550,6 +622,62 @@ export default function TVChartApp() {
           <span>Analyse</span>
         </button>
       </div>
+
+      {/* Yellow hypothesis annotation badges — float over chart at bottom-right */}
+      {copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: 80,
+          right: isCopilotPanelOpen ? 420 : 20,
+          zIndex: 9996,
+          transition: 'right 0.3s ease',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+          alignItems: 'flex-end',
+        }}>
+          {copilotHypotheses
+            .filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED')
+            .map(h => (
+              <div
+                key={h.id}
+                onClick={() => setIsCopilotPanelOpen(true)}
+                style={{
+                  background: '#1a237e',
+                  color: '#FFD700',
+                  border: '1px solid #FFD700',
+                  borderRadius: 6,
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  whiteSpace: 'nowrap',
+                  letterSpacing: 0.3,
+                }}
+                title={`${h.pattern} · ${h.direction} · Click to open Co-Pilot`}
+              >
+                ⚡ {h.label}
+              </div>
+            ))}
+        </div>
+      )}
+
+      {/* Co-Pilot sliding panel */}
+      <CopilotChartPanel
+        open={isCopilotPanelOpen}
+        onClose={() => setIsCopilotPanelOpen(false)}
+        symbol={activeTab?.symbol || defaultSymbol}
+        timeframe={activeTab?.timeframe || rawTimeframe}
+        layoutId={Number(localStorage.getItem('lastLayoutId')) || null}
+        getChartState={getChartState}
+        onHypothesesLoaded={handleHypothesesLoaded}
+      />
+
+      {/* Co-Pilot settings modal */}
+      {showCopilotSettings && (
+        <CopilotSettingsModal onClose={() => setShowCopilotSettings(false)} />
+      )}
 
       {/* AI Chat Overlay — hidden when Prompt Builder is open */}
       {!showPromptBuilder && (
@@ -562,6 +690,11 @@ export default function TVChartApp() {
           tabs={tabs}
           activeTabId={activeTabId}
           onOpenPromptBuilder={() => setShowPromptBuilder(true)}
+          copilotHypotheses={copilotHypotheses}
+          onCopilotAction={() => {
+            const id = Number(localStorage.getItem('copilot_investigation_id')) || null;
+            // Just refresh from the panel if open; annotations will update via onHypothesesLoaded
+          }}
         />
       )}
 
