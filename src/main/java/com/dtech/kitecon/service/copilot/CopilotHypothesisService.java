@@ -161,6 +161,10 @@ public class CopilotHypothesisService {
     @Transactional
     public CopilotAnomalyFlag createAnomalyFlag(Long investigationId, Long hypothesisId,
                                                   String flagText, String level) {
+        if (flagText == null || flagText.isBlank()) {
+            log.warn("[Copilot] Skipping anomaly flag with null/blank flagText for investigation {}", investigationId);
+            return null;
+        }
         return anomalyFlagRepository.save(CopilotAnomalyFlag.builder()
                 .investigationId(investigationId)
                 .hypothesisId(hypothesisId)

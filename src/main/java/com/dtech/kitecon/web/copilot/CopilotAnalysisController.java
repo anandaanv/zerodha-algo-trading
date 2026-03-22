@@ -331,8 +331,9 @@ public class CopilotAnalysisController {
             log.info("[Copilot] FINDING: hypothesis '{}' created for investigation {}",
                     finding.getHypothesisLabel(), investigation.getId());
         } else if (response instanceof NeedsExpertResponse q) {
-            hypothesisService.createAnomalyFlag(investigation.getId(), null,
-                    q.getQuestionText(), "WARNING");
+            String questionText = q.getQuestionText() != null ? q.getQuestionText()
+                    : (q.getReasoning() != null ? q.getReasoning() : "Expert review required");
+            hypothesisService.createAnomalyFlag(investigation.getId(), null, questionText, "WARNING");
             log.info("[Copilot] NEEDS_EXPERT: question queued for investigation {}", investigation.getId());
         } else if (response instanceof NeedsDataResponse nd) {
             log.info("[Copilot] NEEDS_DATA: {} on {} needed for investigation {}",
