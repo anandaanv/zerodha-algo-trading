@@ -117,7 +117,7 @@ public class CopilotAnalysisController {
                     availableSkills.stream().map(s -> s.getSkillKey()).toList());
             try {
                 String orchestratorPrompt = orchestratorService.buildOrchestratorPrompt(
-                        availableSkills, investigation, previous);
+                        userId, availableSkills, investigation, previous);
                 log.info("[Copilot] Calling orchestrator AI for investigation #{}", investigation.getId());
 
                 String rawResponse = aiService.call(userId, orchestratorPrompt,
