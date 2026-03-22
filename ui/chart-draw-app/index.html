@@ -8,7 +8,9 @@
     />
     <title>Chart Draw App</title>
     <style>
-      html, body, #root { height: 100%; margin: 0; }
+      html, body { height: 100%; margin: 0; }
+      body { display: flex; flex-direction: column; }
+      #root { flex: 1; min-height: 0; overflow: auto; }
       .toolbar { display: flex; gap: 8px; padding: 8px; border-bottom: 1px solid #ddd; }
       .container { display: grid; grid-template-rows: auto 1fr auto; height: 100%; }
       .chart-wrap { position: relative; height: 100%; }
@@ -19,12 +21,13 @@
       .panel { padding: 8px; display: flex; gap: 8px; align-items: center; }
       .panel input, .panel select { padding: 4px; }
       .tradingview-attribution {
+        flex-shrink: 0;
         text-align: center;
-        padding: 8px;
+        padding: 6px;
         font-size: 12px;
-        color: #666;
-        border-top: 1px solid #ddd;
-        background: #f5f5f5;
+        color: #888;
+        background: #fff;
+        border-top: 1px solid #e0e0e0;
       }
       .tradingview-attribution a { color: #1976d2; text-decoration: none; }
       .tradingview-attribution a:hover { text-decoration: underline; }
