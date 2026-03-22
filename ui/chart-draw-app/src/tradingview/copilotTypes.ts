@@ -84,14 +84,19 @@ export interface CopilotSkill {
   description: string;
   category: string;
   identificationRules: string;
-  confidenceRules: string;
+  stageDetection: string;
   entryRules: string;
+  indicatorRules: string;
   invalidationRules: string;
-  waveContextRules: string;
-  managementRules: string;
+  ambiguityQuestions: string;
   crossVerificationRules: string;
   isSystemSeed: boolean;
   isActive: boolean;
+}
+
+export interface AiAssistResponse {
+  reply: string;
+  suggestedFields?: Record<string, string>;
 }
 
 // ─── API Response Shapes ──────────────────────────────────────────────────────

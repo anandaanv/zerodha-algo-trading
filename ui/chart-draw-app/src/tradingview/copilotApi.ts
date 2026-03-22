@@ -1,6 +1,6 @@
 import type {
   CopilotSkill, CopilotActiveTrade,
-  TriggerAnalysisResponse, DashboardResponse, BoardResponse,
+  TriggerAnalysisResponse, DashboardResponse, BoardResponse, AiAssistResponse,
 } from './copilotTypes';
 
 const BASE = '/api';
@@ -131,7 +131,21 @@ export async function seedDemoSkills(): Promise<any> {
 }
 
 export async function previewSkillPrompt(id: number): Promise<{ prompt: string }> {
-  return request(`/copilot/skills/${id}/preview`);
+  return request(`/copilot/skills/${id}/prompt`);
+}
+
+export async function orchestratorPrompt(): Promise<{ prompt: string }> {
+  return request('/copilot/skills/orchestrator-prompt');
+}
+
+export async function aiAssistSkill(
+  message: string,
+  currentSkill: Partial<CopilotSkill>,
+): Promise<AiAssistResponse> {
+  return request('/copilot/skills/ai-assist', {
+    method: 'POST',
+    body: JSON.stringify({ message, currentSkill }),
+  });
 }
 
 // ─── OpenAI Credentials ───────────────────────────────────────────────────────
