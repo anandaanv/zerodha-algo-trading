@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { CopilotSkill, AiAssistResponse, OrchestratorConfig, OrchestratorValidateResult } from './copilotTypes';
 import {
   getSkills, getSkill, createSkill, updateSkill, deleteSkill,
-  seedDemoSkills, previewSkillPrompt, orchestratorPrompt, aiAssistSkill,
+  seedDemoSkills, aiAssistSkill,
   getOrchestratorConfig, getOrchestratorDefault, saveOrchestratorConfig,
   validateOrchestratorConfig, resetOrchestratorConfig,
 } from './copilotApi';
@@ -17,13 +17,23 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 const SECTIONS: { key: keyof CopilotSkill; label: string; hint: string }[] = [
-  { key: 'identificationRules',   label: '1. Identification Rules',   hint: 'How to spot this pattern on the chart' },
+  { key: 'identificationRules',   label: '1. Identification Rules',   hint: 'How to spot this pattern' },
   { key: 'stageDetection',        label: '2. Stage Detection',        hint: 'Current stage within the pattern' },
-  { key: 'entryRules',            label: '3. Entry Rules',            hint: 'Anticipatory and confirmation entries with SL/TP' },
-  { key: 'indicatorRules',        label: '4. Indicator Rules',        hint: 'What MACD, RSI, Stochastic must show per stage' },
-  { key: 'invalidationRules',     label: '5. Invalidation Rules',     hint: 'Price action that kills this setup' },
-  { key: 'ambiguityQuestions',    label: '6. Ambiguity Questions',    hint: 'Questions to ask the expert when uncertain' },
-  { key: 'crossVerificationRules',label: '7. Cross-Verification',     hint: 'What must be true on other timeframes' },
+  { key: 'entryRules',            label: '3. Entry Rules',            hint: 'Entries with SL/TP per stage' },
+  { key: 'indicatorRules',        label: '4. Indicator Rules',        hint: 'MACD, RSI, Stochastic per stage' },
+  { key: 'invalidationRules',     label: '5. Invalidation Rules',     hint: 'Price action that kills the setup' },
+  { key: 'ambiguityQuestions',    label: '6. Ambiguity Questions',    hint: 'Questions to ask when uncertain' },
+  { key: 'crossVerificationRules',label: '7. Cross-Verification',     hint: 'Conditions on other timeframes' },
+];
+
+const SECTION_HEADERS: { key: keyof CopilotSkill; header: string }[] = [
+  { key: 'identificationRules',    header: '1. IDENTIFICATION RULES' },
+  { key: 'stageDetection',         header: '2. STAGE DETECTION' },
+  { key: 'entryRules',             header: '3. ENTRY RULES PER STAGE' },
+  { key: 'indicatorRules',         header: '4. INDICATOR RULES PER STAGE' },
+  { key: 'invalidationRules',      header: '5. INVALIDATION RULES' },
+  { key: 'ambiguityQuestions',     header: '6. AMBIGUITY QUESTIONS' },
+  { key: 'crossVerificationRules', header: '7. CROSS-VERIFICATION RULES' },
 ];
 
 const EMPTY_SKILL: Partial<CopilotSkill> = {
@@ -37,8 +47,9 @@ type NavSelection = { type: 'orchestrator' } | { type: 'skill'; id: number | 'ne
 type PageMode = 'view' | 'edit';
 
 interface ChatMessage { role: 'user' | 'assistant'; content: string; suggestedFields?: Record<string, string> }
+interface AttachedFile { name: string; content: string }
 
-// ─── Client-side prompt compiler (mirrors Java CopilotSkillService.buildSkillPrompt) ───
+// ─── Prompt compile / decompile ───────────────────────────────────────────────
 
 function compileSkillPrompt(skill: Partial<CopilotSkill>): string {
   const sec = (header: string, content?: string) =>
@@ -46,14 +57,37 @@ function compileSkillPrompt(skill: Partial<CopilotSkill>): string {
   return (
     `=== SKILL: ${skill.name || '(unnamed)'} ===\n` +
     `Category: ${skill.category || ''}\n\n` +
-    sec('1. IDENTIFICATION RULES',    skill.identificationRules) +
-    sec('2. STAGE DETECTION',         skill.stageDetection) +
-    sec('3. ENTRY RULES PER STAGE',   skill.entryRules) +
+    sec('1. IDENTIFICATION RULES',      skill.identificationRules) +
+    sec('2. STAGE DETECTION',           skill.stageDetection) +
+    sec('3. ENTRY RULES PER STAGE',     skill.entryRules) +
     sec('4. INDICATOR RULES PER STAGE', skill.indicatorRules) +
-    sec('5. INVALIDATION RULES',      skill.invalidationRules) +
-    sec('6. AMBIGUITY QUESTIONS',     skill.ambiguityQuestions) +
-    sec('7. CROSS-VERIFICATION RULES', skill.crossVerificationRules)
+    sec('5. INVALIDATION RULES',        skill.invalidationRules) +
+    sec('6. AMBIGUITY QUESTIONS',       skill.ambiguityQuestions) +
+    sec('7. CROSS-VERIFICATION RULES',  skill.crossVerificationRules)
   );
+}
+
+/** Parse an edited compiled prompt back into skill fields. */
+function decompileSkillPrompt(prompt: string): Partial<CopilotSkill> {
+  const result: Partial<CopilotSkill> = {};
+
+  const nameMatch = prompt.match(/=== SKILL: (.+?) ===/);
+  if (nameMatch) result.name = nameMatch[1].trim();
+
+  const catMatch = prompt.match(/^Category: (.+)$/m);
+  if (catMatch) result.category = catMatch[1].trim() as CopilotSkill['category'];
+
+  for (const { key, header } of SECTION_HEADERS) {
+    const escaped = header.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`--- ${escaped} ---\\n([\\s\\S]*?)(?=\\n--- |$)`);
+    const match = prompt.match(regex);
+    if (match) {
+      const content = match[1].trim();
+      (result as Record<string, unknown>)[key as string] = content === '(Not yet populated)' ? '' : content;
+    }
+  }
+
+  return result;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -72,7 +106,7 @@ export default function SkillBuilderPage() {
 
   // Orchestrator
   const [orchConfig, setOrchConfig] = useState<OrchestratorConfig | null>(null);
-  const [orchDraft, setOrchDraft] = useState<string>('');          // textarea value in edit mode
+  const [orchDraft, setOrchDraft] = useState<string>('');
   const [orchMode, setOrchMode] = useState<'view' | 'edit'>('view');
   const [orchSaving, setOrchSaving] = useState(false);
   const [orchValidating, setOrchValidating] = useState(false);
@@ -84,8 +118,9 @@ export default function SkillBuilderPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Live preview (client-side, updates as form changes)
-  const compiledPreview = compileSkillPrompt(form);
+  // Prompt modal
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [promptDraft, setPromptDraft] = useState('');
 
   // AI chat
   const [chat, setChat] = useState<ChatMessage[]>([]);
@@ -93,17 +128,17 @@ export default function SkillBuilderPage() {
   const [chatLoading, setChatLoading] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
+  // File attachments
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
+
   // ─── Data loading ───────────────────────────────────────────────────────────
 
   const loadSkills = useCallback(async () => {
     setLoadingSkills(true);
-    try {
-      setSkills(await getSkills());
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoadingSkills(false);
-    }
+    try { setSkills(await getSkills()); }
+    catch (e) { setError(String(e)); }
+    finally { setLoadingSkills(false); }
   }, []);
 
   useEffect(() => { loadSkills(); }, [loadSkills]);
@@ -112,7 +147,38 @@ export default function SkillBuilderPage() {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chat]);
 
-  // ─── Navigation ────────────────────────────────────────────────────────────
+  // ─── Prompt modal ───────────────────────────────────────────────────────────
+
+  const openPrompt = () => {
+    setPromptDraft(compileSkillPrompt(form));
+    setShowPrompt(true);
+  };
+
+  const applyPromptToFields = () => {
+    const parsed = decompileSkillPrompt(promptDraft);
+    setForm(prev => ({ ...prev, ...parsed }));
+    if (mode === 'view') setMode('edit');
+    setShowPrompt(false);
+    setSuccess('Prompt applied — fields updated. Review and save when ready.');
+  };
+
+  // ─── File attachment ─────────────────────────────────────────────────────────
+
+  const handleFileAttach = (e: React.ChangeEvent<HTMLInputElement>) => {
+    Array.from(e.target.files || []).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const content = ev.target?.result as string;
+        setAttachedFiles(prev => [...prev, { name: file.name, content }]);
+      };
+      reader.readAsText(file);
+    });
+    e.target.value = '';
+  };
+
+  const removeFile = (idx: number) => setAttachedFiles(prev => prev.filter((_, i) => i !== idx));
+
+  // ─── Navigation ─────────────────────────────────────────────────────────────
 
   const selectOrchestrator = async () => {
     setNav({ type: 'orchestrator' });
@@ -125,132 +191,86 @@ export default function SkillBuilderPage() {
         const cfg = await getOrchestratorConfig();
         setOrchConfig(cfg);
         setOrchDraft(cfg.instructions);
-      } catch (e) {
-        setError(String(e));
-      }
-    }
-  };
-
-  const startEditOrchestrator = () => {
-    setOrchMode('edit');
-    setOrchValidResult(null);
-    if (orchConfig) setOrchDraft(orchConfig.instructions);
-  };
-
-  const cancelEditOrchestrator = () => {
-    setOrchMode('view');
-    setOrchValidResult(null);
-    if (orchConfig) setOrchDraft(orchConfig.instructions);
-  };
-
-  const validateOrchestrator = async () => {
-    setOrchValidating(true);
-    setOrchValidResult(null);
-    try {
-      const result = await validateOrchestratorConfig(orchDraft);
-      setOrchValidResult(result);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setOrchValidating(false);
-    }
-  };
-
-  const saveOrchestrator = async () => {
-    setOrchSaving(true);
-    setError(null);
-    try {
-      const updated = await saveOrchestratorConfig(orchDraft);
-      setOrchConfig(updated);
-      setOrchMode('view');
-      setOrchValidResult(null);
-      setSuccess('Orchestrator instructions saved.');
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setOrchSaving(false);
-    }
-  };
-
-  const resetOrchestrator = async () => {
-    if (!confirm('Reset orchestrator to the default instructions? Your customisation will be deleted.')) return;
-    try {
-      const updated = await resetOrchestratorConfig();
-      setOrchConfig(updated);
-      setOrchDraft(updated.instructions);
-      setOrchMode('view');
-      setOrchValidResult(null);
-      setSuccess('Orchestrator reset to default.');
-    } catch (e) {
-      setError(String(e));
-    }
-  };
-
-  const loadDefaultOrchestrator = async () => {
-    try {
-      const res = await getOrchestratorDefault();
-      setOrchDraft(res.instructions);
-      setOrchValidResult(null);
-    } catch (e) {
-      setError(String(e));
+      } catch (e) { setError(String(e)); }
     }
   };
 
   const selectSkill = async (id: number) => {
     setNav({ type: 'skill', id });
     setMode('view');
-    setError(null);
-    setSuccess(null);
-    setChat([]);
-    try {
-      setForm(await getSkill(id));
-    } catch (e) {
-      setError(String(e));
-    }
+    setError(null); setSuccess(null);
+    setChat([]); setAttachedFiles([]);
+    try { setForm(await getSkill(id)); }
+    catch (e) { setError(String(e)); }
   };
 
   const newSkill = () => {
     setNav({ type: 'skill', id: 'new' });
     setMode('edit');
     setForm(EMPTY_SKILL);
-    setChat([]);
-    setError(null);
-    setSuccess(null);
+    setChat([]); setAttachedFiles([]);
+    setError(null); setSuccess(null);
   };
 
   const toggleCategory = (cat: string) =>
-    setCollapsed(prev => {
-      const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
-      return next;
-    });
+    setCollapsed(prev => { const n = new Set(prev); n.has(cat) ? n.delete(cat) : n.add(cat); return n; });
+
+  // ─── Orchestrator handlers ───────────────────────────────────────────────────
+
+  const startEditOrchestrator = () => { setOrchMode('edit'); setOrchValidResult(null); if (orchConfig) setOrchDraft(orchConfig.instructions); };
+  const cancelEditOrchestrator = () => { setOrchMode('view'); setOrchValidResult(null); if (orchConfig) setOrchDraft(orchConfig.instructions); };
+
+  const validateOrchestrator = async () => {
+    setOrchValidating(true); setOrchValidResult(null);
+    try { setOrchValidResult(await validateOrchestratorConfig(orchDraft)); }
+    catch (e) { setError(String(e)); }
+    finally { setOrchValidating(false); }
+  };
+
+  const saveOrchestrator = async () => {
+    setOrchSaving(true); setError(null);
+    try {
+      const updated = await saveOrchestratorConfig(orchDraft);
+      setOrchConfig(updated); setOrchMode('view'); setOrchValidResult(null);
+      setSuccess('Orchestrator instructions saved.');
+    } catch (e) { setError(String(e)); }
+    finally { setOrchSaving(false); }
+  };
+
+  const resetOrchestrator = async () => {
+    if (!confirm('Reset to default? Your customisation will be deleted.')) return;
+    try {
+      const updated = await resetOrchestratorConfig();
+      setOrchConfig(updated); setOrchDraft(updated.instructions);
+      setOrchMode('view'); setOrchValidResult(null);
+      setSuccess('Orchestrator reset to default.');
+    } catch (e) { setError(String(e)); }
+  };
+
+  const loadDefaultOrchestrator = async () => {
+    try { const res = await getOrchestratorDefault(); setOrchDraft(res.instructions); setOrchValidResult(null); }
+    catch (e) { setError(String(e)); }
+  };
 
   // ─── Skill CRUD ─────────────────────────────────────────────────────────────
 
   const save = async () => {
     if (nav?.type !== 'skill') return;
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
+    setSaving(true); setError(null); setSuccess(null);
     try {
       if (nav.id === 'new') {
         const created = await createSkill(form);
         setSkills(prev => [...prev, created]);
         setNav({ type: 'skill', id: created.id });
-        setForm(created);
-        setSuccess('Skill created.');
+        setForm(created); setSuccess('Skill created.');
       } else {
         const updated = await updateSkill(nav.id, form);
         setSkills(prev => prev.map(s => s.id === updated.id ? updated : s));
-        setForm(updated);
-        setSuccess('Skill saved.');
+        setForm(updated); setSuccess('Skill saved.');
       }
       setMode('view');
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setSaving(false);
-    }
+    } catch (e) { setError(String(e)); }
+    finally { setSaving(false); }
   };
 
   const remove = async () => {
@@ -259,21 +279,13 @@ export default function SkillBuilderPage() {
     try {
       await deleteSkill(nav.id);
       setSkills(prev => prev.filter(s => s.id !== nav.id));
-      setNav(null);
-      setForm(EMPTY_SKILL);
-    } catch (e) {
-      setError(String(e));
-    }
+      setNav(null); setForm(EMPTY_SKILL);
+    } catch (e) { setError(String(e)); }
   };
 
   const seed = async () => {
-    try {
-      await seedDemoSkills();
-      await loadSkills();
-      setSuccess('Demo skills seeded.');
-    } catch (e) {
-      setError(String(e));
-    }
+    try { await seedDemoSkills(); await loadSkills(); setSuccess('Demo skills seeded.'); }
+    catch (e) { setError(String(e)); }
   };
 
   const setField = (key: keyof CopilotSkill, value: string | boolean) =>
@@ -285,36 +297,38 @@ export default function SkillBuilderPage() {
     const msg = chatInput.trim();
     if (!msg || chatLoading) return;
     setChatInput('');
-    setChat(prev => [...prev, { role: 'user', content: msg }]);
+
+    const fileNote = attachedFiles.length > 0 ? ` 📎 (${attachedFiles.length} file${attachedFiles.length > 1 ? 's' : ''})` : '';
+    const fullMsg = attachedFiles.length > 0
+      ? `${msg}\n\n--- Attached Files ---\n${attachedFiles.map(f => `[${f.name}]\n${f.content}`).join('\n\n')}`
+      : msg;
+    setAttachedFiles([]);
+    setChat(prev => [...prev, { role: 'user', content: msg + fileNote }]);
     setChatLoading(true);
     try {
-      const res: AiAssistResponse = await aiAssistSkill(msg, form);
+      const res: AiAssistResponse = await aiAssistSkill(fullMsg, form);
       setChat(prev => [...prev, {
-        role: 'assistant',
-        content: res.reply,
-        suggestedFields: res.suggestedFields && Object.keys(res.suggestedFields).length > 0
-          ? res.suggestedFields : undefined,
+        role: 'assistant', content: res.reply,
+        suggestedFields: res.suggestedFields && Object.keys(res.suggestedFields).length > 0 ? res.suggestedFields : undefined,
       }]);
     } catch (e) {
       setChat(prev => [...prev, { role: 'assistant', content: `Error: ${e}` }]);
-    } finally {
-      setChatLoading(false);
-    }
+    } finally { setChatLoading(false); }
   };
 
   const applyFields = (fields: Record<string, string>) => {
     setForm(prev => ({ ...prev, ...fields }));
-    setSuccess('AI suggestions applied to fields.');
+    if (mode === 'view') setMode('edit');
+    setSuccess('AI suggestions applied — review and save when ready.');
   };
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   const skillsById = Object.fromEntries(skills.map(s => [s.id, s]));
-  const currentSkill = nav?.type === 'skill' && nav.id !== 'new'
-    ? (skillsById[nav.id] ?? null) : null;
+  const currentSkill = nav?.type === 'skill' && nav.id !== 'new' ? (skillsById[nav.id as number] ?? null) : null;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f5', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100vh', background: '#f0f2f5', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
       {/* ── Header ── */}
       <div style={{ background: '#1a237e', color: '#fff', padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -331,7 +345,6 @@ export default function SkillBuilderPage() {
         {/* ── Left Nav ── */}
         <div style={{ width: 240, background: '#fff', borderRight: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0 }}>
 
-          {/* Orchestrator */}
           <div
             onClick={selectOrchestrator}
             style={{
@@ -352,19 +365,14 @@ export default function SkillBuilderPage() {
 
           <div style={{ fontSize: 10, fontWeight: 700, color: '#aaa', padding: '8px 14px 4px', letterSpacing: 1 }}>SKILLS</div>
 
-          {/* Skill list grouped by category */}
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {loadingSkills && <div style={{ padding: 12, color: '#aaa', fontSize: 12 }}>Loading…</div>}
-
             {CATEGORIES.map(cat => {
               const catSkills = skills.filter(s => s.category === cat);
               const isOpen = !collapsed.has(cat);
               return (
                 <div key={cat}>
-                  <div
-                    onClick={() => toggleCategory(cat)}
-                    style={{ padding: '6px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}
-                  >
+                  <div onClick={() => toggleCategory(cat)} style={{ padding: '6px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, background: '#fafafa', borderBottom: '1px solid #f0f0f0' }}>
                     <span style={{ fontSize: 10, color: '#aaa', width: 10 }}>{isOpen ? '▼' : '▶'}</span>
                     <span style={{ fontSize: 13 }}>{CATEGORY_ICONS[cat]}</span>
                     <span style={{ fontSize: 11, fontWeight: 700, color: '#555' }}>{cat}</span>
@@ -373,16 +381,7 @@ export default function SkillBuilderPage() {
                   {isOpen && catSkills.map(skill => {
                     const isSelected = nav?.type === 'skill' && nav.id === skill.id;
                     return (
-                      <div
-                        key={skill.id}
-                        onClick={() => selectSkill(skill.id)}
-                        style={{
-                          padding: '8px 14px 8px 28px', cursor: 'pointer',
-                          background: isSelected ? '#e3f2fd' : 'transparent',
-                          borderLeft: isSelected ? '3px solid #1976d2' : '3px solid transparent',
-                          borderBottom: '1px solid #f8f8f8',
-                        }}
-                      >
+                      <div key={skill.id} onClick={() => selectSkill(skill.id)} style={{ padding: '8px 14px 8px 28px', cursor: 'pointer', background: isSelected ? '#e3f2fd' : 'transparent', borderLeft: isSelected ? '3px solid #1976d2' : '3px solid transparent', borderBottom: '1px solid #f8f8f8' }}>
                         <div style={{ fontWeight: 600, fontSize: 12, color: '#222' }}>{skill.name}</div>
                         <div style={{ fontSize: 10, color: '#aaa', marginTop: 1 }}>
                           {skill.skillKey}
@@ -400,12 +399,8 @@ export default function SkillBuilderPage() {
             })}
           </div>
 
-          {/* New skill button */}
           <div style={{ padding: 10, borderTop: '1px solid #eee' }}>
-            <button
-              onClick={newSkill}
-              style={{ width: '100%', padding: '8px 0', background: '#1976d2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
-            >
+            <button onClick={newSkill} style={{ width: '100%', padding: '8px 0', background: '#1976d2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
               + New Skill
             </button>
           </div>
@@ -423,274 +418,295 @@ export default function SkillBuilderPage() {
 
           {/* ── Orchestrator Panel ── */}
           {nav?.type === 'orchestrator' && (
-            <div style={{ flex: 1, overflow: 'auto', padding: 28 }}>
-              {error && <div style={alertStyle('#c62828', '#ffebee')}>{error}</div>}
-              {success && <div style={alertStyle('#388e3c', '#e8f5e9')}>{success}</div>}
-
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1a237e' }}>🎯 Orchestrator</h2>
-                  <p style={{ margin: '6px 0 0', color: '#777', fontSize: 13 }}>
-                    Controls which skills are selected and in what order for each investigation.
-                    The dynamic skill list and investigation context are appended at runtime.
-                    {orchConfig?.isCustomized && (
-                      <span style={{ marginLeft: 8, background: '#fff3e0', color: '#e65100', padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>customised</span>
-                    )}
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {/* Toolbar */}
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 10, background: '#fff', flexShrink: 0 }}>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#1a237e' }}>🎯 Orchestrator</span>
+                {orchConfig?.isCustomized && (
+                  <span style={{ background: '#fff3e0', color: '#e65100', padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>customised</span>
+                )}
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
                   {orchMode === 'view' ? (
                     <>
-                      <button onClick={startEditOrchestrator} style={primaryBtn}>✏ Edit</button>
-                      {orchConfig?.isCustomized && (
-                        <button onClick={resetOrchestrator} style={{ ...secondaryBtn, color: '#c62828', borderColor: '#c62828' }}>↺ Reset to Default</button>
-                      )}
+                      <button onClick={startEditOrchestrator} style={toolbarBtn}>✏ Edit</button>
+                      {orchConfig?.isCustomized && <button onClick={resetOrchestrator} style={{ ...toolbarBtn, color: '#c62828', borderColor: '#c62828' }}>↺ Reset</button>}
                     </>
                   ) : (
                     <>
-                      <button
-                        onClick={validateOrchestrator}
-                        disabled={orchValidating}
-                        style={{ ...secondaryBtn, color: '#6a1b9a', borderColor: '#6a1b9a' }}
-                      >
-                        {orchValidating ? '⏳ Validating…' : '✔ Validate'}
-                      </button>
-                      <button
-                        onClick={saveOrchestrator}
-                        disabled={orchSaving || orchValidating}
-                        style={primaryBtn}
-                      >
-                        {orchSaving ? 'Saving…' : '💾 Save'}
-                      </button>
-                      <button onClick={loadDefaultOrchestrator} style={secondaryBtn}>
-                        ↓ Load Default
-                      </button>
-                      <button onClick={cancelEditOrchestrator} style={secondaryBtn}>Cancel</button>
+                      <button onClick={validateOrchestrator} disabled={orchValidating} style={{ ...toolbarBtn, color: '#6a1b9a', borderColor: '#6a1b9a' }}>{orchValidating ? '⏳ Validating…' : '✔ Validate'}</button>
+                      <button onClick={loadDefaultOrchestrator} style={toolbarBtn}>↓ Default</button>
+                      <button onClick={saveOrchestrator} disabled={orchSaving || orchValidating} style={primaryBtn}>{orchSaving ? 'Saving…' : '💾 Save'}</button>
+                      <button onClick={cancelEditOrchestrator} style={toolbarBtn}>Cancel</button>
                     </>
                   )}
                 </div>
+              </div>
+
+              {/* Alerts */}
+              {(error || success) && (
+                <div style={{ padding: '0 16px', paddingTop: 10, flexShrink: 0 }}>
+                  {error && <div style={alertStyle('#c62828', '#ffebee')}>{error}</div>}
+                  {success && <div style={alertStyle('#388e3c', '#e8f5e9')}>{success}</div>}
+                </div>
+              )}
+
+              {/* Instructions */}
+              <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {orchConfig ? (
+                  orchMode === 'view' ? (
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', fontFamily: 'monospace', fontSize: 13, lineHeight: 1.7, whiteSpace: 'pre-wrap', background: '#1a1a2e', color: '#e0e0e0' }}>
+                      {orchConfig.instructions}
+                    </div>
+                  ) : (
+                    <textarea
+                      value={orchDraft}
+                      onChange={e => { setOrchDraft(e.target.value); setOrchValidResult(null); }}
+                      style={{ flex: 1, fontFamily: 'monospace', fontSize: 13, lineHeight: 1.7, padding: '16px 20px', border: 'none', background: '#1e1e1e', color: '#d4d4d4', resize: 'none', outline: 'none' }}
+                    />
+                  )
+                ) : (
+                  <div style={{ padding: 20, color: '#aaa', fontSize: 13 }}>Loading…</div>
+                )}
               </div>
 
               {/* Validation result */}
               {orchValidResult && (
-                <div style={{
-                  marginBottom: 16, padding: '12px 16px', borderRadius: 8,
-                  background: orchValidResult.valid ? '#e8f5e9' : '#ffebee',
-                  border: `1px solid ${orchValidResult.valid ? '#a5d6a7' : '#ef9a9a'}`,
-                }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: orchValidResult.valid ? '#2e7d32' : '#c62828', marginBottom: 6 }}>
-                    {orchValidResult.valid ? '✔ Validation passed — AI response schema is correct' : '✘ Validation failed'}
+                <div style={{ flexShrink: 0, padding: '10px 16px', borderTop: '1px solid #e0e0e0', background: orchValidResult.valid ? '#e8f5e9' : '#ffebee', borderLeft: `4px solid ${orchValidResult.valid ? '#43a047' : '#c62828'}` }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: orchValidResult.valid ? '#2e7d32' : '#c62828', marginBottom: 4 }}>
+                    {orchValidResult.valid ? '✔ Validation passed' : '✘ Validation failed'}
                   </div>
-                  {orchValidResult.issues.length > 0 && (
-                    <ul style={{ margin: '4px 0', padding: '0 0 0 20px', fontSize: 12, color: '#c62828' }}>
-                      {orchValidResult.issues.map((issue, i) => <li key={i}>{issue}</li>)}
-                    </ul>
-                  )}
+                  {orchValidResult.issues.map((issue, i) => <div key={i} style={{ fontSize: 12, color: '#c62828' }}>• {issue}</div>)}
                   {orchValidResult.sampleResponse && (
-                    <details style={{ marginTop: 8 }}>
+                    <details style={{ marginTop: 6 }}>
                       <summary style={{ fontSize: 12, cursor: 'pointer', color: '#555' }}>AI sample response</summary>
-                      <pre style={{ marginTop: 6, fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
-                        {orchValidResult.sampleResponse}
-                      </pre>
+                      <pre style={{ marginTop: 4, fontSize: 11, background: '#f5f5f5', padding: 8, borderRadius: 4, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>{orchValidResult.sampleResponse}</pre>
                     </details>
                   )}
                 </div>
               )}
-
-              {orchConfig ? (
-                orchMode === 'view' ? (
-                  <div style={codeBlock}>
-                    <div style={{ fontWeight: 700, color: '#90caf9', marginBottom: 10, fontSize: 12 }}>ORCHESTRATOR INSTRUCTIONS</div>
-                    {orchConfig.instructions}
-                  </div>
-                ) : (
-                  <div>
-                    <div style={{ fontSize: 12, color: '#777', marginBottom: 6 }}>
-                      Edit the orchestrator instructions below. The system will append the dynamic skill list
-                      and investigation context at runtime — do not include them here.
-                      Use <strong>Validate</strong> to test that the AI still returns the correct JSON schema before saving.
-                    </div>
-                    <textarea
-                      value={orchDraft}
-                      onChange={e => { setOrchDraft(e.target.value); setOrchValidResult(null); }}
-                      style={{
-                        width: '100%', boxSizing: 'border-box', minHeight: 520,
-                        fontFamily: 'monospace', fontSize: 13, lineHeight: 1.6,
-                        padding: '12px 14px', border: '1px solid #ccc', borderRadius: 6,
-                        background: '#1e1e1e', color: '#d4d4d4', resize: 'vertical',
-                      }}
-                    />
-                  </div>
-                )
-              ) : (
-                <div style={{ color: '#aaa', fontSize: 13, marginTop: 20 }}>Loading…</div>
-              )}
             </div>
           )}
 
-          {/* ── Skill View Mode ── */}
-          {nav?.type === 'skill' && mode === 'view' && currentSkill && (
-            <div style={{ flex: 1, overflow: 'auto', padding: 28 }}>
-              {error && <div style={alertStyle('#c62828', '#ffebee')}>{error}</div>}
-              {success && <div style={alertStyle('#388e3c', '#e8f5e9')}>{success}</div>}
+          {/* ── Skill Panel ── */}
+          {nav?.type === 'skill' && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#222' }}>{currentSkill.name}</h2>
-                  <div style={{ color: '#777', fontSize: 13, marginTop: 4 }}>{currentSkill.description}</div>
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ background: '#e3f2fd', color: '#1565c0', padding: '2px 10px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
+              {/* Toolbar */}
+              <div style={{ padding: '8px 16px', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: 10, background: '#fff', flexShrink: 0 }}>
+                {mode === 'view' && currentSkill ? (
+                  <>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: '#222' }}>{currentSkill.name}</span>
+                    <span style={{ background: '#e3f2fd', color: '#1565c0', padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700 }}>
                       {CATEGORY_ICONS[currentSkill.category]} {currentSkill.category}
                     </span>
-                    <span style={{ fontSize: 11, color: '#888' }}>{currentSkill.skillKey}</span>
-                    {!currentSkill.isActive && <span style={{ background: '#f5f5f5', color: '#aaa', padding: '2px 8px', borderRadius: 10, fontSize: 11 }}>inactive</span>}
-                    {currentSkill.isSystemSeed && <span style={{ background: '#e8f5e9', color: '#388e3c', padding: '2px 8px', borderRadius: 10, fontSize: 11 }}>⚡ system</span>}
+                    {!currentSkill.isActive && <span style={{ background: '#f5f5f5', color: '#aaa', padding: '1px 8px', borderRadius: 10, fontSize: 11 }}>inactive</span>}
+                    {currentSkill.isSystemSeed && <span style={{ background: '#e8f5e9', color: '#388e3c', padding: '1px 8px', borderRadius: 10, fontSize: 11 }}>⚡ system</span>}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                      <button onClick={openPrompt} style={{ ...toolbarBtn, color: '#1565c0', borderColor: '#1565c0' }}>📄 Prompt</button>
+                      <button onClick={() => setMode('edit')} style={toolbarBtn}>✏ Edit</button>
+                      <button onClick={remove} style={{ ...toolbarBtn, color: '#c62828', borderColor: '#c62828' }}>🗑 Delete</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontWeight: 700, fontSize: 14, color: '#222' }}>{nav.id === 'new' ? 'New Skill' : (form.name || 'Editing…')}</span>
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                      <button onClick={openPrompt} style={{ ...toolbarBtn, color: '#1565c0', borderColor: '#1565c0' }}>📄 Prompt</button>
+                      <button onClick={save} disabled={saving} style={primaryBtn}>{saving ? 'Saving…' : nav.id === 'new' ? '+ Create' : '💾 Save'}</button>
+                      {nav.id !== 'new' && <button onClick={() => setMode('view')} style={toolbarBtn}>Cancel</button>}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Two columns: AI Chat | Fields */}
+              <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+
+                {/* ── Left: AI Chat ── */}
+                <div style={{ width: '40%', borderRight: '1px solid #e0e0e0', background: '#fff', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                  <div style={{ padding: '8px 14px', borderBottom: '1px solid #eee', fontWeight: 700, fontSize: 12, color: '#1a237e', background: '#f5f7ff', flexShrink: 0 }}>
+                    🤖 AI Assistant
                   </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => setMode('edit')} style={primaryBtn}>✏ Edit</button>
-                  <button onClick={remove} style={{ ...secondaryBtn, color: '#c62828', borderColor: '#c62828' }}>🗑 Delete</button>
-                </div>
-              </div>
+                  <div style={{ padding: '5px 10px', background: '#fffde7', borderBottom: '1px solid #fff176', fontSize: 11, color: '#795548', flexShrink: 0 }}>
+                    Describe what you want. AI will suggest field text. Use 📄 Prompt to edit the full prompt and sync back to fields.
+                  </div>
 
-              <div style={codeBlock}>
-                <div style={{ fontWeight: 700, color: '#90caf9', marginBottom: 10, fontSize: 12 }}>COMPILED SKILL PROMPT</div>
-                {compileSkillPrompt(form)}
-              </div>
-            </div>
-          )}
+                  {/* Chat history */}
+                  <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {chat.length === 0 && (
+                      <div style={{ color: '#bbb', fontSize: 12, textAlign: 'center', paddingTop: 24 }}>
+                        Ask AI to help write any field.<br />
+                        e.g. "Write identification rules for an ascending triangle"
+                      </div>
+                    )}
+                    {chat.map((msg, i) => (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                        <div style={{
+                          maxWidth: '90%', padding: '7px 10px', borderRadius: 10, fontSize: 12, lineHeight: 1.5,
+                          background: msg.role === 'user' ? '#1976d2' : '#37474f', color: '#fff',
+                          borderBottomRightRadius: msg.role === 'user' ? 2 : 10,
+                          borderBottomLeftRadius: msg.role === 'assistant' ? 2 : 10,
+                        }}>
+                          {msg.content}
+                        </div>
+                        {msg.suggestedFields && (
+                          <button onClick={() => applyFields(msg.suggestedFields!)} style={{ marginTop: 4, fontSize: 11, padding: '3px 10px', background: '#43a047', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}>
+                            ✓ Apply {Object.keys(msg.suggestedFields).length} suggestion(s) to fields
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {chatLoading && <div style={{ color: '#aaa', fontSize: 12, fontStyle: 'italic' }}>AI is thinking…</div>}
+                    <div ref={chatBottomRef} />
+                  </div>
 
-          {/* ── Skill Edit Mode (3 columns) ── */}
-          {nav?.type === 'skill' && mode === 'edit' && (
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-
-              {/* Col 1: AI Chat */}
-              <div style={{ width: 280, borderRight: '1px solid #e0e0e0', background: '#fff', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-                <div style={{ padding: '10px 14px', borderBottom: '1px solid #eee', fontWeight: 700, fontSize: 13, color: '#1a237e', background: '#f5f7ff' }}>
-                  🤖 AI Assistant
-                </div>
-                <div style={{ padding: '8px 10px', background: '#fffde7', borderBottom: '1px solid #fff176', fontSize: 11, color: '#795548' }}>
-                  Describe what you want the skill to do. AI will suggest field text.
-                </div>
-
-                {/* Chat history */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {chat.length === 0 && (
-                    <div style={{ color: '#bbb', fontSize: 12, textAlign: 'center', paddingTop: 20 }}>
-                      Ask the AI to help write any field.<br />
-                      e.g. "Help me write identification rules for an ascending triangle"
+                  {/* Attached files */}
+                  {attachedFiles.length > 0 && (
+                    <div style={{ padding: '4px 10px', borderTop: '1px solid #f0f0f0', display: 'flex', flexWrap: 'wrap', gap: 4, flexShrink: 0 }}>
+                      {attachedFiles.map((f, i) => (
+                        <span key={i} style={{ background: '#e3f2fd', color: '#1565c0', borderRadius: 10, padding: '2px 8px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          📎 {f.name}
+                          <button onClick={() => removeFile(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1565c0', padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+                        </span>
+                      ))}
                     </div>
                   )}
-                  {chat.map((msg, i) => (
-                    <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
-                      <div style={{
-                        maxWidth: '90%', padding: '7px 10px', borderRadius: 10, fontSize: 12, lineHeight: 1.5,
-                        background: msg.role === 'user' ? '#1976d2' : '#37474f',
-                        color: '#fff',
-                        borderBottomRightRadius: msg.role === 'user' ? 2 : 10,
-                        borderBottomLeftRadius: msg.role === 'assistant' ? 2 : 10,
-                      }}>
-                        {msg.content}
+
+                  {/* Chat input */}
+                  <div style={{ padding: '8px 10px', borderTop: '1px solid #eee', flexShrink: 0 }}>
+                    <textarea
+                      rows={4}
+                      value={chatInput}
+                      onChange={e => setChatInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+                      placeholder="Describe what you want… (Enter to send, Shift+Enter = new line)"
+                      disabled={chatLoading}
+                      style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 6, padding: '6px 8px', fontSize: 12, resize: 'none', fontFamily: 'inherit' }}
+                    />
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                      <input ref={fileInputRef} type="file" multiple onChange={handleFileAttach} style={{ display: 'none' }} accept=".txt,.md,.csv,.json,.py,.js,.ts,.java,.xml,.yaml,.yml" />
+                      <button onClick={() => fileInputRef.current?.click()} style={{ padding: '5px 10px', background: '#f5f5f5', color: '#555', border: '1px solid #ddd', borderRadius: 6, fontSize: 11, cursor: 'pointer' }} title="Attach text files">📎</button>
+                      <button onClick={sendChat} disabled={chatLoading || !chatInput.trim()} style={{ flex: 1, padding: '5px 0', background: chatLoading ? '#aaa' : '#1976d2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: chatLoading ? 'default' : 'pointer' }}>
+                        {chatLoading ? 'Thinking…' : 'Ask AI ↵'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Right: Skill Fields ── */}
+                <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', background: '#f8f9fa' }}>
+                  {error && <div style={alertStyle('#c62828', '#ffebee')}>{error}</div>}
+                  {success && <div style={alertStyle('#388e3c', '#e8f5e9')}>{success}</div>}
+
+                  {/* Metadata */}
+                  <div style={{ background: '#fff', borderRadius: 8, padding: '12px 14px', marginBottom: 12, border: '1px solid #e0e0e0' }}>
+                    <div style={{ fontWeight: 700, fontSize: 12, color: '#333', marginBottom: 10 }}>Skill Metadata</div>
+                    {mode === 'edit' ? (
+                      <>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+                          <MetaField label="Name *" value={form.name ?? ''} onChange={v => setField('name', v)} />
+                          <MetaField label="Skill Key *" value={form.skillKey ?? ''} onChange={v => setField('skillKey', v)} hint="e.g. wave_4" />
+                          <MetaField label="Category" value={form.category ?? ''} onChange={v => setField('category', v)} hint="WAVE / PATTERN / CONFIRMATION / OVERRIDE" />
+                          <MetaField label="Description" value={form.description ?? ''} onChange={v => setField('description', v)} />
+                        </div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#555', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={form.isActive ?? true} onChange={e => setField('isActive', e.target.checked)} style={{ marginRight: 6 }} />
+                          Active (included in orchestration)
+                        </label>
+                      </>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, color: '#444' }}>
+                        <span><strong>Key:</strong> {currentSkill?.skillKey || '—'}</span>
+                        <span><strong>Category:</strong> {currentSkill?.category || '—'}</span>
+                        <span style={{ color: currentSkill?.isActive ? '#388e3c' : '#aaa' }}>{currentSkill?.isActive ? 'Active' : 'Inactive'}</span>
+                        {currentSkill?.description && <span style={{ color: '#777' }}>{currentSkill.description}</span>}
                       </div>
-                      {msg.suggestedFields && (
-                        <button
-                          onClick={() => applyFields(msg.suggestedFields!)}
-                          style={{ marginTop: 4, fontSize: 11, padding: '3px 10px', background: '#43a047', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-                        >
-                          ✓ Apply {Object.keys(msg.suggestedFields).length} suggestion(s)
-                        </button>
+                    )}
+                  </div>
+
+                  {/* 7 fields */}
+                  {SECTIONS.map(s => (
+                    <div key={s.key as string} style={{ background: '#fff', borderRadius: 8, padding: '10px 14px', marginBottom: 10, border: '1px solid #e0e0e0' }}>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: '#333', marginBottom: 4 }}>
+                        {s.label}
+                        <span style={{ fontWeight: 400, color: '#bbb', marginLeft: 6, fontSize: 11 }}>{s.hint}</span>
+                      </div>
+                      {mode === 'edit' ? (
+                        <textarea
+                          rows={4}
+                          value={String(form[s.key] ?? '')}
+                          onChange={e => setField(s.key, e.target.value)}
+                          style={{ width: '100%', boxSizing: 'border-box', padding: '6px 8px', border: '1px solid #e0e0e0', borderRadius: 6, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.5, resize: 'vertical' }}
+                        />
+                      ) : (
+                        <div style={{ fontSize: 12, fontFamily: 'monospace', lineHeight: 1.5, color: String(form[s.key] ?? '').trim() ? '#333' : '#ddd', whiteSpace: 'pre-wrap', minHeight: 18 }}>
+                          {String(form[s.key] ?? '').trim() || '(not populated)'}
+                        </div>
                       )}
                     </div>
                   ))}
-                  {chatLoading && (
-                    <div style={{ color: '#aaa', fontSize: 12, fontStyle: 'italic' }}>AI is thinking…</div>
-                  )}
-                  <div ref={chatBottomRef} />
-                </div>
 
-                {/* Chat input */}
-                <div style={{ padding: 10, borderTop: '1px solid #eee' }}>
-                  <textarea
-                    rows={3}
-                    value={chatInput}
-                    onChange={e => setChatInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
-                    placeholder="Describe what you want… (Enter to send)"
-                    disabled={chatLoading}
-                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 6, padding: '6px 8px', fontSize: 12, resize: 'none', fontFamily: 'inherit' }}
-                  />
-                  <button
-                    onClick={sendChat}
-                    disabled={chatLoading || !chatInput.trim()}
-                    style={{ marginTop: 6, width: '100%', padding: '6px 0', background: chatLoading ? '#aaa' : '#1976d2', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 12, cursor: chatLoading ? 'default' : 'pointer' }}
-                  >
-                    {chatLoading ? 'Thinking…' : 'Ask AI ↵'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Col 2: Field Editors */}
-              <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', background: '#f8f9fa' }}>
-                {error && <div style={alertStyle('#c62828', '#ffebee')}>{error}</div>}
-                {success && <div style={alertStyle('#388e3c', '#e8f5e9')}>{success}</div>}
-
-                {/* Metadata */}
-                <div style={{ background: '#fff', borderRadius: 8, padding: '14px 16px', marginBottom: 16, border: '1px solid #e0e0e0' }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: '#333', marginBottom: 12 }}>Skill Metadata</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                    <MetaField label="Name *" value={form.name ?? ''} onChange={v => setField('name', v)} />
-                    <MetaField label="Skill Key *" value={form.skillKey ?? ''} onChange={v => setField('skillKey', v)} hint="e.g. wave_4" />
-                    <MetaField label="Category" value={form.category ?? ''} onChange={v => setField('category', v)} hint="WAVE / PATTERN / CONFIRMATION / OVERRIDE" />
-                    <MetaField label="Description" value={form.description ?? ''} onChange={v => setField('description', v)} />
-                  </div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#555', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={form.isActive ?? true} onChange={e => setField('isActive', e.target.checked)} style={{ marginRight: 6 }} />
-                    Active (included in orchestration)
-                  </label>
-                </div>
-
-                {/* 7 fields */}
-                {SECTIONS.map(s => (
-                  <div key={s.key as string} style={{ background: '#fff', borderRadius: 8, padding: '12px 16px', marginBottom: 12, border: '1px solid #e0e0e0' }}>
-                    <label style={{ display: 'block', fontWeight: 700, fontSize: 12, color: '#333', marginBottom: 3 }}>
-                      {s.label}
-                      <span style={{ fontWeight: 400, color: '#aaa', marginLeft: 8 }}>{s.hint}</span>
-                    </label>
-                    <textarea
-                      rows={5}
-                      value={String(form[s.key] ?? '')}
-                      onChange={e => setField(s.key, e.target.value)}
-                      style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', border: '1px solid #e0e0e0', borderRadius: 6, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.6, resize: 'vertical' }}
-                    />
-                  </div>
-                ))}
-
-                {/* Action bar */}
-                <div style={{ display: 'flex', gap: 10, paddingBottom: 24 }}>
-                  <button onClick={save} disabled={saving} style={primaryBtn}>
-                    {saving ? 'Saving…' : nav.id === 'new' ? '+ Create Skill' : '💾 Save'}
-                  </button>
-                  {nav.id !== 'new' && (
-                    <button onClick={() => setMode('view')} style={secondaryBtn}>Cancel</button>
+                  {mode === 'edit' && (
+                    <div style={{ paddingBottom: 16, display: 'flex', gap: 8 }}>
+                      <button onClick={save} disabled={saving} style={primaryBtn}>
+                        {saving ? 'Saving…' : nav.id === 'new' ? '+ Create Skill' : '💾 Save'}
+                      </button>
+                      {nav.id !== 'new' && <button onClick={() => setMode('view')} style={toolbarBtn}>Cancel</button>}
+                    </div>
                   )}
                 </div>
-              </div>
 
-              {/* Col 3: Live Preview */}
-              <div style={{ width: 320, borderLeft: '1px solid #e0e0e0', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-                <div style={{ padding: '10px 14px', borderBottom: '1px solid #1a1a2e', fontWeight: 700, fontSize: 13, color: '#90caf9', background: '#1a1a2e' }}>
-                  Live Prompt Preview
-                </div>
-                <div style={{ flex: 1, overflowY: 'auto', ...codeBlock, borderRadius: 0, margin: 0, fontSize: 11, lineHeight: 1.55 }}>
-                  {compiledPreview}
-                </div>
               </div>
-
             </div>
           )}
 
         </div>
       </div>
+
+      {/* ── Prompt Modal ── */}
+      {showPrompt && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowPrompt(false); }}
+        >
+          <div style={{ width: '72%', height: '82vh', background: '#1a1a2e', borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+
+            {/* Modal header */}
+            <div style={{ padding: '12px 18px', borderBottom: '1px solid #252550', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+              <span style={{ fontWeight: 700, fontSize: 13, color: '#90caf9' }}>📄 COMPILED SKILL PROMPT</span>
+              <span style={{ fontSize: 11, color: '#666', flex: 1 }}>Edit directly, then click "Apply to Fields" to sync back to the 7 sections.</span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={applyPromptToFields}
+                  style={{ padding: '6px 16px', background: '#1565c0', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}
+                >
+                  ✓ Apply to Fields
+                </button>
+                <button
+                  onClick={() => setShowPrompt(false)}
+                  style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', color: '#ccc', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Editable prompt */}
+            <textarea
+              value={promptDraft}
+              onChange={e => setPromptDraft(e.target.value)}
+              spellCheck={false}
+              style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7, padding: '14px 18px', border: 'none', background: '#1e1e1e', color: '#d4d4d4', resize: 'none', outline: 'none' }}
+            />
+
+            {/* Modal footer hint */}
+            <div style={{ padding: '8px 18px', borderTop: '1px solid #252550', fontSize: 11, color: '#555', flexShrink: 0 }}>
+              Tip: The format uses <code style={{ color: '#90caf9' }}>--- SECTION NAME ---</code> markers. Editing the text and clicking "Apply to Fields" will parse each section back into its field.
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
@@ -703,36 +719,25 @@ function MetaField({ label, value, onChange, hint }: { label: string; value: str
       <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#555', marginBottom: 3 }}>
         {label} {hint && <span style={{ fontWeight: 400, color: '#bbb' }}>{hint}</span>}
       </label>
-      <input
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 6, padding: '5px 8px', fontSize: 12 }}
-      />
+      <input value={value} onChange={e => onChange(e.target.value)} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #ddd', borderRadius: 6, padding: '5px 8px', fontSize: 12 }} />
     </div>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const codeBlock: React.CSSProperties = {
-  background: '#1a1a2e', color: '#e0e0e0', borderRadius: 8,
-  padding: 16, fontSize: 12, fontFamily: 'monospace',
-  lineHeight: 1.6, whiteSpace: 'pre-wrap', overflowY: 'auto',
-  flex: 1,
-};
-
 function alertStyle(color: string, bg: string): React.CSSProperties {
-  return { background: bg, border: `1px solid ${color}`, color, borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 12 };
+  return { background: bg, border: `1px solid ${color}`, color, borderRadius: 6, padding: '8px 12px', marginBottom: 10, fontSize: 12 };
 }
 
 const primaryBtn: React.CSSProperties = {
-  padding: '8px 20px', background: '#1976d2', color: '#fff', border: 'none',
+  padding: '7px 18px', background: '#1976d2', color: '#fff', border: 'none',
   borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13,
 };
 
-const secondaryBtn: React.CSSProperties = {
-  padding: '8px 16px', background: '#fff', color: '#555', border: '1px solid #ccc',
-  borderRadius: 6, cursor: 'pointer', fontWeight: 500, fontSize: 13,
+const toolbarBtn: React.CSSProperties = {
+  padding: '5px 12px', background: '#fff', color: '#555', border: '1px solid #ccc',
+  borderRadius: 6, cursor: 'pointer', fontWeight: 500, fontSize: 12,
 };
 
 const headerBtn: React.CSSProperties = {
