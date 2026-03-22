@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import datafeed from './datafeed';
 import TVMultiPanelChart from './TVMultiPanelChart';
 import { mapTimeframeToInterval, intervalToPeriod } from './intervalUtils';
@@ -32,6 +32,7 @@ declare const TradingView: any;
 
 
 export default function TVChartApp() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
@@ -494,14 +495,38 @@ export default function TVChartApp() {
         />
       )}
 
-      {/* Floating Action Buttons — Analyse only (AI chat is now the bottom-left bar) */}
+      {/* Floating Action Buttons */}
       <div style={{
         position: 'fixed',
         top: '48px',
         right: isAnalysisPanelOpen ? '470px' : '20px',
         zIndex: 9999,
         transition: 'right 0.3s ease',
+        display: 'flex',
+        gap: '8px',
       }}>
+        <button
+          onClick={() => navigate('/copilot')}
+          style={{
+            height: '40px',
+            padding: '0 14px',
+            backgroundColor: '#1a237e',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 600,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+          }}
+          title="Co-Pilot: hypothesis tracking and trade management"
+        >
+          <span style={{ fontSize: '16px' }}>🧠</span>
+          <span>Co-Pilot</span>
+        </button>
         <button
           onClick={() => setIsAnalysisPanelOpen(!isAnalysisPanelOpen)}
           style={{
