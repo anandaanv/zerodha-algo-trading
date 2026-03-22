@@ -171,50 +171,49 @@ bootWar {
 // --------------------------------------------------------
 // Frontend (npm) integration: build and package static UI
 // --------------------------------------------------------
-//def isWindows = System.getProperty("os.name").toLowerCase().contains("win")
-//def npmCmd = isWindows ? "npm.cmd" : "npm"
-//def uiDir = "${projectDir}/ui/chart-draw-app"
-//def frontendDist = "${uiDir}/dist"
-//def staticTargetDir = "${buildDir}/resources/main/static/"
-//
-//// npm install
-//tasks.register("npmInstall", Exec) {
-//    description = "Install npm dependencies for chart-draw app"
-//    workingDir uiDir
-//    commandLine npmCmd, "install"
-//    // Only run if package.json exists
-//    onlyIf { file("${uiDir}/package.json").exists() }
-//}
+def isWindows = System.getProperty("os.name").toLowerCase().contains("win")
+def npmCmd = isWindows ? "npm.cmd" : "npm"
+def uiDir = "${projectDir}/ui/chart-draw-app"
+def frontendDist = "${uiDir}/dist"
+def staticTargetDir = "${buildDir}/resources/main/static/"
+
+// npm install
+tasks.register("npmInstall", Exec) {
+    description = "Install npm dependencies for chart-draw app"
+    workingDir uiDir
+    commandLine npmCmd, "install"
+    onlyIf { file("${uiDir}/package.json").exists() }
+}
 
 // npm run build
-//tasks.register("npmBuild", Exec) {
-//    description = "Build chart-draw app (vite)"
-//    workingDir uiDir
-//    commandLine npmCmd, "run", "build"
-//    dependsOn "npmInstall"
-//    onlyIf { file("${uiDir}/package.json").exists() }
-//}
-//
-//// Copy dist to Spring Boot resources (in build dir, not source tree)
-//tasks.register("copyFrontend", Sync) {
-//    description = "Copy built frontend to build/resources/static for packaging"
-//    dependsOn "npmBuild"
-//    from(frontendDist)
-//    into(staticTargetDir)
-//    onlyIf { file(frontendDist).exists() }
-//}
+tasks.register("npmBuild", Exec) {
+    description = "Build chart-draw app (vite)"
+    workingDir uiDir
+    commandLine npmCmd, "run", "build"
+    dependsOn "npmInstall"
+    onlyIf { file("${uiDir}/package.json").exists() }
+}
 
-//// Include frontend assets in jar/war packaging
-//tasks.named("processResources") {
-//    dependsOn "copyFrontend"
-//}
-//
-//// Clean frontend outputs from build dir
-//tasks.register("cleanFrontend", Delete) {
-//    description = "Clean copied frontend assets from build dir"
-//    delete staticTargetDir
-//}
-//
-//tasks.named("clean") {
-//    dependsOn "cleanFrontend"
-//}
+// Copy dist to Spring Boot resources (in build dir, not source tree)
+tasks.register("copyFrontend", Sync) {
+    description = "Copy built frontend to build/resources/static for packaging"
+    dependsOn "npmBuild"
+    from(frontendDist)
+    into(staticTargetDir)
+    onlyIf { file(frontendDist).exists() }
+}
+
+// Include frontend assets in jar/war packaging
+tasks.named("processResources") {
+    dependsOn "copyFrontend"
+}
+
+// Clean frontend outputs from build dir
+tasks.register("cleanFrontend", Delete) {
+    description = "Clean copied frontend assets from build dir"
+    delete staticTargetDir
+}
+
+tasks.named("clean") {
+    dependsOn "cleanFrontend"
+}

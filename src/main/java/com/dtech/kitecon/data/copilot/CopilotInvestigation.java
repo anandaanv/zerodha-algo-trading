@@ -1,0 +1,141 @@
+package com.dtech.kitecon.data.copilot;
+
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.Instant;
+
+/**
+ * Represents an active investigation session for a symbol within a layout.
+ *
+ * Scoped per: ChartLayout + User.
+ * Time-limited: expires after validityMinutes (configured per layout, default 60).
+ * Persisted to DB — survives browser refresh.
+ * Previous investigation is passed as context to the new orchestrator call.
+ *
+ * The investigation object is the ONLY context passed to every AI call.
+ * AI never holds state — the investigation object holds everything.
+ */
+@Entity
+@Table(name = "copilot_investigation")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class CopilotInvestigation {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "layout_id", nullable = false)
+    private Long layoutId;
+
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
+
+    @Column(name = "symbol", nullable = false, length = 50)
+    private String symbol;
+
+    /** Comma-separated active timeframes, e.g. "weekly,daily,1h,15min" */
+    @Column(name = "timeframes_active", length = 200)
+    private String timeframesActive;
+
+    /** JSON: Map<String, List<ZigZagPoint>> — ZigZag data per timeframe */
+    @Lob
+    @Column(name = "zigzag_data", columnDefinition = "TEXT")
+    private String zigzagData;
+
+    /** JSON: Map<String, MarketStructureData> — market structure per timeframe */
+    @Lob
+    @Column(name = "market_structure_data", columnDefinition = "TEXT")
+    private String marketStructureData;
+
+    /** JSON: Map<String, List<Drawing>> — expert drawings per timeframe */
+    @Lob
+    @Column(name = "drawings_data", columnDefinition = "TEXT")
+    private String drawingsData;
+
+    /** Whether the wave count has been confirmed (expert or system) */
+    @Column(name = "wave_count_confirmed", nullable = false)
+    @Builder.Default
+    private Boolean waveCountConfirmed = false;
+
+    /** EXPERT_LABELED | SYSTEM_PROPOSED | null if not yet addressed */
+    @Column(name = "wave_count_source", length = 50)
+    private String waveCountSource;
+
+    /**
+     * JSON: List<String> — skill keys already invoked this session.
+     * Used for cycle detection — orchestrator will not re-invoke skills already present.
+     */
+    @Lob
+    @Column(name = "invoked_skills", columnDefinition = "TEXT")
+    @Builder.Default
+    private String invokedSkills = "[]";
+
+    /**
+     * JSON: Map<String, Object> — results from each invoked skill.
+     * Passed back to orchestrator so it knows what's already been found.
+     */
+    @Lob
+    @Column(name = "skill_results", columnDefinition = "TEXT")
+    @Builder.Default
+    private String skillResults = "{}";
+
+    /** JSON: List<AnomalyFlag> — active anomaly flags */
+    @Lob
+    @Column(name = "anomaly_flags", columnDefinition = "TEXT")
+    @Builder.Default
+    private String anomalyFlags = "[]";
+
+    /** JSON: List<ExpertOverride> — logged expert overrides */
+    @Lob
+    @Column(name = "expert_overrides", columnDefinition = "TEXT")
+    @Builder.Default
+    private String expertOverrides = "[]";
+
+    /** Minutes before this investigation expires (default 60, configurable per layout) */
+    @Column(name = "validity_minutes", nullable = false)
+    @Builder.Default
+    private Integer validityMinutes = 60;
+
+    @Column(name = "expires_at")
+    private Instant expiresAt;
+
+    /**
+     * ACTIVE | EXPIRED | SUPERSEDED
+     * SUPERSEDED: a newer investigation replaced this one for the same layout+user
+     */
+    @Column(name = "status", nullable = false, length = 20)
+    @Builder.Default
+    private String status = "ACTIVE";
+
+    /** Who triggered this investigation: LAYOUT_OPEN | EXPERT_ANNOTATION | MANUAL */
+    @Column(name = "initiated_by", length = 50)
+    private String initiatedBy;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = Instant.now();
+        updatedAt = Instant.now();
+        if (expiresAt == null && validityMinutes != null) {
+            expiresAt = createdAt.plusSeconds(validityMinutes * 60L);
+        }
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = Instant.now();
+    }
+
+    public boolean isExpired() {
+        return expiresAt != null && Instant.now().isAfter(expiresAt);
+    }
+}
