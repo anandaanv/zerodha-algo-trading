@@ -25,10 +25,14 @@ public class AIResponseParser {
         try {
             // Strip markdown code fences if AI wrapped it
             String json = extractJson(rawJson);
+            log.debug("Parsing AI response ({}chars): {}", rawJson != null ? rawJson.length() : 0,
+                    rawJson != null ? rawJson.substring(0, Math.min(300, rawJson.length())) : "null");
             JsonNode root = objectMapper.readTree(json);
             String typeStr = root.path("type").asText("NEEDS_EXPERT");
+            log.info("AI response type: {}", typeStr);
 
             return switch (AIResponseType.valueOf(typeStr)) {
+                case ORCHESTRATOR -> objectMapper.treeToValue(root, OrchestratorResponse.class);
                 case NEEDS_DATA   -> objectMapper.treeToValue(root, NeedsDataResponse.class);
                 case NEEDS_EXPERT -> objectMapper.treeToValue(root, NeedsExpertResponse.class);
                 case FINDING      -> objectMapper.treeToValue(root, FindingResponse.class);
@@ -37,8 +41,8 @@ public class AIResponseParser {
                 case INVALIDATED  -> objectMapper.treeToValue(root, InvalidatedResponse.class);
             };
         } catch (Exception e) {
-            log.warn("Failed to parse AI response: {}", e.getMessage());
-            log.debug("Raw AI response was: {}", rawJson);
+            log.warn("Failed to parse AI response: {} | raw: {}", e.getMessage(),
+                    rawJson != null ? rawJson.substring(0, Math.min(500, rawJson.length())) : "null");
             return NeedsExpertResponse.builder()
                     .type(AIResponseType.NEEDS_EXPERT)
                     .questionId("parse_error_" + System.currentTimeMillis())
