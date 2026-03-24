@@ -619,7 +619,11 @@ export default function TVChartApp() {
             open={isCopilotPanelOpen}
             onClose={() => setIsCopilotPanelOpen(false)}
             symbol={activeTab?.symbol || defaultSymbol}
-            timeframe={activeTab?.timeframe || rawTimeframe}
+            timeframes={[...new Set(
+              tabs
+                .filter(t => t.symbol === (activeTab?.symbol || defaultSymbol))
+                .map(t => t.timeframe)
+            )]}
             layoutId={Number(localStorage.getItem('lastLayoutId')) || null}
             getChartState={getChartState}
             onHypothesesLoaded={handleHypothesesLoaded}

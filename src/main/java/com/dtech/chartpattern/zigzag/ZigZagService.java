@@ -20,6 +20,7 @@ import org.ta4j.core.num.DoubleNumFactory;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -292,7 +293,9 @@ public class ZigZagService {
             log.warn("Data refresh failed for {} {}: {}", tradingSymbol, interval, e.getMessage());
         }
 
-        List<com.dtech.kitecon.data.Candle> candles = candleRepository.findAllByInstrumentAndTimeframe(instrument, interval);
+        Instant from = candleLookbackFrom(interval);
+        List<com.dtech.kitecon.data.Candle> candles = candleRepository
+                .findAllByInstrumentAndTimeframeAndTimestampBetween(instrument, interval, from, Instant.now());
         candles.sort(Comparator.comparing(com.dtech.kitecon.data.Candle::getTimestamp));
         BarSeries series = new BaseBarSeriesBuilder().withName(tradingSymbol).build();
         candles.forEach(c ->
@@ -303,6 +306,22 @@ public class ZigZagService {
             persistSnapshot(tradingSymbol, interval, pivots);
         }
         return pivots;
+    }
+
+    /**
+     * Build a BarSeries from persisted candles for this symbol/interval.
+     * Candles are sorted oldest-first, matching the ZigZag pivot bar indices.
+     */
+    public BarSeries getBarSeries(String tradingSymbol, Instrument instrument, Interval interval) {
+        Instant from = candleLookbackFrom(interval);
+        List<com.dtech.kitecon.data.Candle> candles = candleRepository
+                .findAllByInstrumentAndTimeframeAndTimestampBetween(instrument, interval, from, Instant.now());
+        candles.sort(Comparator.comparing(com.dtech.kitecon.data.Candle::getTimestamp));
+        BarSeries series = new BaseBarSeriesBuilder().withName(tradingSymbol).build();
+        candles.forEach(c ->
+                series.addBar(BarsLoader.getBar(c.getOpen(), c.getHigh(), c.getLow(), c.getClose(),
+                        Optional.ofNullable(c.getVolume()).orElse(0L), c.getTimestamp())));
+        return series;
     }
 
     /**
@@ -337,6 +356,34 @@ public class ZigZagService {
         } catch (Exception e) {
             log.error("Failed to persist ZigZag snapshot for {} {}", tradingSymbol, interval, e);
         }
+    }
+
+    /**
+     * Returns the earliest candle timestamp to load for a given interval,
+     * keeping context lean for the Elliott Wave engine and AI prompts.
+     *
+     * weekly  → 10 years  (~520 bars)
+     * daily   → 3 years   (~750 bars)
+     * 60min   → 1 year    (~1,600 bars)
+     * 30min   → 6 months  (~1,600 bars)
+     * 15min   → 3 months  (~1,500 bars)
+     * 5min    → 1 month   (~1,500 bars)
+     * 3min    → 3 weeks   (~1,500 bars)
+     * 1min    → 1 week    (~1,500 bars)
+     */
+    private Instant candleLookbackFrom(Interval interval) {
+        Instant now = Instant.now();
+        return switch (interval) {
+            case Week         -> now.minus(10 * 365, ChronoUnit.DAYS);
+            case Day          -> now.minus(3 * 365, ChronoUnit.DAYS);
+            case OneHour      -> now.minus(365,      ChronoUnit.DAYS);
+            case FourHours    -> now.minus(2 * 365,  ChronoUnit.DAYS);
+            case ThirtyMinute -> now.minus(180,      ChronoUnit.DAYS);
+            case FifteenMinute -> now.minus(90,      ChronoUnit.DAYS);
+            case FiveMinute   -> now.minus(30,       ChronoUnit.DAYS);
+            case ThreeMinute  -> now.minus(21,       ChronoUnit.DAYS);
+            case OneMinute    -> now.minus(7,        ChronoUnit.DAYS);
+        };
     }
 
     private String toJson(List<ZigZagPoint> pivots) {

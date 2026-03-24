@@ -2,7 +2,6 @@ package com.dtech.kitecon.service.copilot;
 
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
-import com.openai.models.conversations.Conversation;
 import com.openai.models.responses.Response;
 import com.openai.models.responses.ResponseCreateParams;
 import com.openai.models.responses.ResponseInputItem;
@@ -21,6 +20,10 @@ import java.util.stream.Collectors;
  * AI call service for the Co-Pilot system.
  * Uses the user's own OpenAI API key (stored in DB per user).
  * Falls back to the system-level key if the user hasn't configured their own.
+ *
+ * Uses the OpenAI Responses API (SDK 4.x) with proper role separation:
+ * - instructions() → developer/system role (model instructions)
+ * - input USER message → user role (investigation data)
  */
 @Slf4j
 @Service
@@ -32,28 +35,26 @@ public class CopilotAIService {
     @Value("${openai.key:}")
     private String systemApiKey;
 
-    @Value("${openai.model:gpt-4o-mini}")
+    @Value("${openai.model}")
     private String systemModel;
 
     @Value("${openai.baseUrl:https://api.openai.com/v1}")
     private String systemBaseUrl;
 
     /**
-     * Call OpenAI with a system prompt and user message.
-     * Uses the user's own API key if configured, otherwise falls back to system key.
+     * Call OpenAI with separate system instructions and user data.
      *
-     * @param userId     the authenticated user (for per-user key lookup)
-     * @param systemPrompt  the instruction/skill content
-     * @param userMessage   the investigation context / data
+     * @param userId        the authenticated user (for per-user key lookup)
+     * @param instructions  the skill/instruction prompt (developer role)
+     * @param userMessage   the investigation context / data (user role)
      * @return raw response text from the AI
      */
-    public String call(Long userId, String systemPrompt, String userMessage) {
+    public String call(Long userId, String instructions, String userMessage) {
         String apiKey = resolveApiKey(userId);
         String model = resolveModel(userId);
         String baseUrl = resolveBaseUrl(userId);
 
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("No OpenAI API key configured for user {} or system", userId);
             throw new IllegalStateException("OpenAI API key not configured. Please add your API key in Settings → Co-Pilot.");
         }
 
@@ -64,21 +65,26 @@ public class CopilotAIService {
                 .build();
 
         try {
-            // Combine system prompt + user message into a single prompt (matches existing SDK pattern)
-            String combinedPrompt = systemPrompt + "\n\n=== TASK ===\n" + userMessage;
-
-            Conversation conversation = client.conversations().create();
+            int instrChars = instructions != null ? instructions.length() : 0;
+            int dataChars  = userMessage  != null ? userMessage.length()  : 0;
+            // Rough token estimate: ~4 chars per token
+            log.info("[AI] model={} instructions={}chars(~{}tok) data={}chars(~{}tok) total~{}tok",
+                    model,
+                    instrChars, instrChars / 4,
+                    dataChars,  dataChars  / 4,
+                    (instrChars + dataChars) / 4);
 
             ResponseInputItem userMsg = ResponseInputItem.ofMessage(
                     ResponseInputItem.Message.builder()
-                            .addInputTextContent(combinedPrompt)
+                            .addInputTextContent(userMessage)
                             .role(ResponseInputItem.Message.Role.USER)
                             .build());
 
             ResponseCreateParams params = ResponseCreateParams.builder()
-                    .conversation(conversation.id())
                     .model(model)
+                    .instructions(instructions)
                     .input(ResponseCreateParams.Input.ofResponse(List.of(userMsg)))
+                    .store(false)
                     .build();
 
             Response response = client.responses().create(params);
@@ -90,8 +96,9 @@ public class CopilotAIService {
                             .map(c -> c.asOutputText().text())
                             .collect(Collectors.joining()))
                     .collect(Collectors.joining());
+
         } catch (Exception e) {
-            log.error("OpenAI call failed for user {}: {}", userId, e.getMessage());
+            log.error("OpenAI call failed for user {} model {}: {}", userId, model, e.getMessage());
             throw new RuntimeException("AI call failed: " + e.getMessage(), e);
         }
     }

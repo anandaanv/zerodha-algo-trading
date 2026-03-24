@@ -28,7 +28,7 @@ public class UserOpenAiCredentialController {
                                              @RequestBody Map<String, String> body) {
         Long userId = resolveUserId(auth);
         String apiKey = body.get("apiKey");
-        String model = body.getOrDefault("model", "gpt-4o-mini");
+        String model = body.getOrDefault("model", "gpt-4.1-mini");
         String baseUrl = body.getOrDefault("baseUrl", "https://api.openai.com/v1");
 
         if (apiKey == null || apiKey.isBlank()) {

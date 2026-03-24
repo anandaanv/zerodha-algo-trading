@@ -19,7 +19,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   symbol: string;
-  timeframe: string;
+  timeframes: string[];
   layoutId: number | null;
   getChartState?: () => string;
   onHypothesesLoaded?: (hypotheses: CopilotHypothesis[], investigationId: number) => void;
@@ -42,7 +42,7 @@ const CONFIDENCE_COLOR: Record<string, string> = {
 };
 
 export default function CopilotChartPanel({
-  open, onClose, symbol, timeframe, layoutId, getChartState,
+  open, onClose, symbol, timeframes, layoutId, getChartState,
   onHypothesesLoaded, onObservationsLoaded,
 }: Props) {
   const navigate = useNavigate();
@@ -83,7 +83,7 @@ export default function CopilotChartPanel({
     try {
       let drawingsJson: string | undefined;
       try { drawingsJson = getChartState?.(); } catch { /* ignore */ }
-      const res = await scanAnalysis(layoutId, symbol, drawingsJson, [timeframe], force);
+      const res = await scanAnalysis(layoutId, symbol, drawingsJson, timeframes, force);
       if (res.warning) setWarning(res.warning);
       setState(prev => ({
         ...prev,
@@ -96,7 +96,7 @@ export default function CopilotChartPanel({
     } finally {
       setLoading(false); setLoadingAction(null);
     }
-  }, [layoutId, symbol, timeframe, getChartState, onObservationsLoaded]);
+  }, [layoutId, symbol, timeframes, getChartState, onObservationsLoaded]);
 
   // Phase 2: Reason
   const handleReason = useCallback(async () => {
@@ -132,7 +132,7 @@ export default function CopilotChartPanel({
     try {
       let drawingsJson: string | undefined;
       try { drawingsJson = getChartState?.(); } catch { /* ignore */ }
-      const res = await triggerAnalysis(layoutId, symbol, drawingsJson, [timeframe], force);
+      const res = await triggerAnalysis(layoutId, symbol, drawingsJson, timeframes, force);
       if (res.warning) setWarning(res.warning);
       setState(prev => ({
         ...prev,
@@ -148,7 +148,7 @@ export default function CopilotChartPanel({
     } finally {
       setLoading(false); setLoadingAction(null);
     }
-  }, [layoutId, symbol, timeframe, getChartState, onHypothesesLoaded, onObservationsLoaded]);
+  }, [layoutId, symbol, timeframes, getChartState, onHypothesesLoaded, onObservationsLoaded]);
 
   // Auto-trigger on panel open
   useEffect(() => {
@@ -198,7 +198,7 @@ export default function CopilotChartPanel({
       }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14 }}>Co-Pilot</div>
-          <div style={{ fontSize: 11, opacity: 0.7 }}>{symbol} · {timeframe}</div>
+          <div style={{ fontSize: 11, opacity: 0.7 }}>{symbol} · {timeframes.join(', ')}</div>
         </div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {state.investigationId && (

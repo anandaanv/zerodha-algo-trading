@@ -103,7 +103,7 @@ dependencies {
     implementation 'org.mapstruct:mapstruct:1.4.1.Final'
     annotationProcessor 'org.mapstruct:mapstruct-processor:1.4.1.Final'
 
-    implementation("com.openai:openai-java-spring-boot-starter:3.4.1")
+    implementation("com.openai:openai-java-spring-boot-starter:4.29.1")
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
     // Kotlin JSR-223 Scripting Engine (for .kts screeners)

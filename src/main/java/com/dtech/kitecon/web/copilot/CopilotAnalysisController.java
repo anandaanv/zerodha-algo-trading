@@ -14,13 +14,20 @@ import com.dtech.kitecon.repository.ChartLayoutRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.service.copilot.*;
 import com.dtech.kitecon.service.copilot.dto.*;
+import com.dtech.ta.elliott.ElliottWaveAnalysis;
+import com.dtech.ta.elliott.ElliottWaveAnalyzer;
+import com.dtech.ta.elliott.WaveCount;
+import com.dtech.ta.elliott.WaveScenario;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.ta4j.core.BarSeries;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -50,6 +57,7 @@ public class CopilotAnalysisController {
     private final AIResponseParser responseParser;
     private final MarketStructureService marketStructureService;
     private final ZigZagService zigzagService;
+    private final ElliottWaveAnalyzer elliottWaveAnalyzer;
     private final InstrumentRepository instrumentRepository;
     private final UserRepository userRepository;
     private final ChartLayoutRepository chartLayoutRepository;
@@ -269,8 +277,12 @@ public class CopilotAnalysisController {
         boolean force = Boolean.parseBoolean(body.getOrDefault("force", "false").toString());
 
         @SuppressWarnings("unchecked")
-        List<String> timeframes = (List<String>) body.getOrDefault("timeframes",
-                List.of("daily", "1h", "15min"));
+        List<String> timeframes = (List<String>) body.get("timeframes");
+        if (timeframes == null || timeframes.isEmpty()) {
+            log.warn("[Copilot] No timeframes sent in scan request for layout {} symbol {} — using active tab fallback",
+                    layoutId, symbol);
+            timeframes = List.of("1d", "1h", "15m");
+        }
 
         int validityMinutes = chartLayoutRepository.findById(layoutId)
                 .map(layout -> layout.getCopilotValidityMinutes() != null
@@ -294,51 +306,42 @@ public class CopilotAnalysisController {
     }
 
     /**
-     * Run Phase 1: all active scan skills, returning observations.
+     * Phase 1 (Scan): Single Scenario Evaluator call using pre-computed ElliottWaveAnalysis.
+     * Replaces the 33-skill scan loop — AI evaluates/ranks pre-computed scenarios instead of detecting.
      */
     private List<CopilotObservation> runScanPhase(CopilotInvestigation investigation, Long userId) {
-        List<CopilotSkill> scanSkills = skillService.getScanSkillsForUser(userId);
-        List<CopilotObservation> observations = new ArrayList<>();
-
-        if (scanSkills.isEmpty()) {
-            log.warn("[Copilot] No scan skills for user {} — skipping Phase 1", userId);
-            return observations;
+        if (investigation.getElliottAnalysisData() == null || investigation.getElliottAnalysisData().isBlank()) {
+            log.warn("[Copilot] No Elliott analysis data for investigation #{} — skipping Scenario Evaluator",
+                    investigation.getId());
+            investigationService.updatePhase(investigation.getId(), "SCANNED");
+            return List.of();
         }
 
-        log.info("[Copilot] Phase 1 SCAN: running {} skills for investigation #{}",
-                scanSkills.size(), investigation.getId());
+        log.info("[Copilot] Phase 1 SCAN: running Scenario Evaluator for investigation #{}", investigation.getId());
 
-        for (CopilotSkill skill : scanSkills) {
-            try {
-                String skillPrompt = skillService.buildScanSkillPrompt(skill);
-                String context = orchestratorService.buildScanPrompt(skillPrompt, investigation);
-                log.info("[Copilot] Scan skill '{}' (prompt {}chars)", skill.getSkillKey(), context.length());
+        try {
+            String instructions = orchestratorService.buildScenarioEvaluatorInstructions();
+            String data = orchestratorService.buildScenarioEvaluatorData(investigation);
+            log.info("[Copilot] Scenario Evaluator breakdown — instructions={}chars elliott={}chars msd={}chars drawings={}chars total={}chars",
+                    instructions.length(),
+                    investigation.getElliottAnalysisData()  != null ? investigation.getElliottAnalysisData().length()  : 0,
+                    investigation.getMarketStructureData()  != null ? investigation.getMarketStructureData().length()  : 0,
+                    investigation.getDrawingsData()          != null ? investigation.getDrawingsData().length()          : 0,
+                    instructions.length() + data.length());
 
-                String rawResponse = aiService.call(userId, skillPrompt, context);
-                log.info("[Copilot] Scan skill '{}' raw response: {}", skill.getSkillKey(), rawResponse);
+            String rawResponse = aiService.call(userId, instructions, data);
+            log.info("[Copilot] Scenario Evaluator raw response: {}", rawResponse);
 
-                AIResponse response = responseParser.parse(rawResponse);
-
-                if (response instanceof ObservationResponse obsResponse) {
-                    CopilotObservation obs = observationService.createFromScan(
-                            investigation.getId(), skill.getSkillKey(), obsResponse, rawResponse);
-                    observations.add(obs);
-                    log.info("[Copilot] OBSERVATION: {} — detected={}, confidence={}, pattern={}",
-                            skill.getSkillKey(), obsResponse.getPatternDetected(),
-                            obsResponse.getConfidence(), obsResponse.getPatternType());
-                } else {
-                    log.warn("[Copilot] Scan skill '{}' returned {} instead of OBSERVATION",
-                            skill.getSkillKey(), response.getClass().getSimpleName());
-                }
-
-                investigationService.recordSkillInvoked(investigation.getId(), skill.getSkillKey(), rawResponse);
-            } catch (Exception e) {
-                log.error("[Copilot] Error running scan skill '{}': {}", skill.getSkillKey(), e.getMessage(), e);
-            }
+            AIResponse response = responseParser.parse(rawResponse);
+            handleSkillResponse(response, investigation, userId);
+            investigationService.recordSkillInvoked(investigation.getId(), "scenario_evaluator", rawResponse);
+        } catch (Exception e) {
+            log.error("[Copilot] Scenario Evaluator failed for investigation #{}: {}",
+                    investigation.getId(), e.getMessage(), e);
         }
 
         investigationService.updatePhase(investigation.getId(), "SCANNED");
-        return observations;
+        return List.of();
     }
 
     /**
@@ -415,7 +418,7 @@ public class CopilotAnalysisController {
 
     /**
      * Fetch ZigZag pivots for each requested timeframe, compute market structure,
-     * and store the prompt-ready summary in the investigation.
+     * run the full Elliott Wave engine, and store all results in the investigation.
      */
     private void fetchAndStoreMarketStructure(Long investigationId, String symbol, List<String> timeframes) {
         Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
@@ -426,6 +429,12 @@ public class CopilotAnalysisController {
 
         StringBuilder msdSummary = new StringBuilder();
         StringBuilder zigzagSummary = new StringBuilder();
+
+        // Collect per-TF data for Elliott Wave engine
+        Map<String, List<ZigZagPoint>> pivotsByTf = new LinkedHashMap<>();
+        Map<String, MarketStructureData> structureByTf = new LinkedHashMap<>();
+        Map<String, BarSeries> seriesByTf = new LinkedHashMap<>();
+        List<String> orderedTfs = new ArrayList<>();
 
         for (String tf : timeframes) {
             Interval interval = mapTimeframeToInterval(tf);
@@ -441,7 +450,7 @@ public class CopilotAnalysisController {
                 MarketStructureData msd = marketStructureService.analyse(pivots, tf);
                 msdSummary.append(msd.toPromptSummary()).append("\n");
 
-                // Zigzag summary: last 30 pivots (enough to see recently completed patterns)
+                // Zigzag summary: last 30 pivots
                 if (!pivots.isEmpty()) {
                     zigzagSummary.append("=== ").append(tf).append(" ===\n");
                     zigzagSummary.append(String.format("  Total pivots: %d (showing last %d)%n",
@@ -455,11 +464,20 @@ public class CopilotAnalysisController {
                                 p.getExtensionPct() != null ? p.getExtensionPct() : 0.0));
                     }
                 }
+
+                // Collect for Elliott Wave engine
+                BarSeries series = zigzagService.getBarSeries(symbol, instrument, interval);
+                pivotsByTf.put(tf, pivots);
+                structureByTf.put(tf, msd);
+                seriesByTf.put(tf, series);
+                orderedTfs.add(tf);
+
             } catch (Exception e) {
                 log.warn("[Copilot] Failed to fetch market structure for {} {}: {}", symbol, tf, e.getMessage());
             }
         }
 
+        // Store zigzag + market structure text
         String msdText = msdSummary.toString();
         String zzText = zigzagSummary.toString();
         if (!msdText.isBlank() || !zzText.isBlank()) {
@@ -469,16 +487,84 @@ public class CopilotAnalysisController {
                     null);
             log.info("[Copilot] Stored market structure + zigzag data for investigation #{}", investigationId);
         }
+
+        // Run Elliott Wave engine (Layers 4-7) and store pre-computed analysis
+        if (!orderedTfs.isEmpty()) {
+            try {
+                String primaryTf = orderedTfs.get(0); // first = highest resolution requested (or lowest — use last)
+                // Use the most detailed timeframe that has data as primary
+                String detailTf = orderedTfs.get(orderedTfs.size() - 1);
+                log.info("[Copilot] Running Elliott Wave engine for {} — primary TF: {}", symbol, detailTf);
+
+                ElliottWaveAnalysis analysis = elliottWaveAnalyzer.analyze(
+                        pivotsByTf, structureByTf, seriesByTf, orderedTfs, detailTf);
+
+                String promptSummary = analysis.toPromptSummary();
+                investigationService.updateElliottData(investigationId, promptSummary);
+                log.info("[Copilot] Stored Elliott Wave analysis ({} chars, {} scenarios) for investigation #{}",
+                        promptSummary.length(), analysis.getScenarios().size(), investigationId);
+                log.info("[Copilot] Elliott analysis ready: primaryTf={}, waveCounts={}, patterns={}, scenarios={}",
+                        analysis.getPrimaryTimeframe(),
+                        analysis.getWaveCounts() != null ? analysis.getWaveCounts().size() : 0,
+                        analysis.getAllPatterns() != null ? analysis.getAllPatterns().size() : 0,
+                        analysis.getScenarios() != null ? analysis.getScenarios().size() : 0);
+
+                if (analysis.getWaveCounts() != null) {
+                    analysis.getWaveCounts().stream()
+                            .sorted(Comparator.comparingInt(WaveCount::totalScore).reversed())
+                            .limit(5)
+                            .forEach(wc -> log.info(
+                                    "[Copilot] WaveCount {} [{}] bullish={} score={} fib={} ind={} crossTf={} alt={} current={}",
+                                    wc.getWaveType(),
+                                    wc.getPrimaryTimeframe(),
+                                    wc.isBullish(),
+                                    wc.totalScore(),
+                                    wc.getFibonacciScore(),
+                                    wc.getIndicatorScore(),
+                                    wc.getCrossTfScore(),
+                                    wc.getAlternationScore(),
+                                    wc.getCurrentPositionDescription()));
+                }
+
+                WaveScenario topScenario = analysis.topScenario();
+                if (topScenario != null) {
+                    log.info("[Copilot] Top scenario {} [{}] hypotheses={}",
+                            topScenario.getId(), topScenario.getDirectionLabel(),
+                            topScenario.getHypotheses() != null ? topScenario.getHypotheses().size() : 0);
+                    if (topScenario.getHypotheses() != null) {
+                        topScenario.getHypotheses().stream().limit(3).forEach(h ->
+                                log.info("[Copilot]   Hypothesis {} score={} position={} invalidation={} target={}",
+                                        h.getId(),
+                                        h.getTotalScore(),
+                                        h.getCurrentPositionDescription(),
+                                        h.getInvalidationLevel(),
+                                        h.getPrimaryTarget() != null ? h.getPrimaryTarget().getLevel() : null));
+                    }
+                }
+
+                if (analysis.getNestedBranchNarrative() != null && !analysis.getNestedBranchNarrative().isBlank()) {
+                    log.info("[Copilot] Nested corrective branch context:\n{}",
+                            analysis.getNestedBranchNarrative());
+                }
+            } catch (Exception e) {
+                log.error("[Copilot] Elliott Wave engine failed for {} investigation #{}: {}",
+                        symbol, investigationId, e.getMessage(), e);
+            }
+        }
     }
 
     private Interval mapTimeframeToInterval(String tf) {
         if (tf == null) return null;
         return switch (tf.toLowerCase().trim()) {
-            case "daily", "1d", "day" -> Interval.Day;
-            case "1h", "60min", "60minute" -> Interval.OneHour;
-            case "15min", "15m", "15minute" -> Interval.FifteenMinute;
-            case "30min", "30m", "30minute" -> Interval.ThirtyMinute;
-            case "5min", "5m", "5minute" -> Interval.FiveMinute;
+            case "weekly", "1w", "week"             -> Interval.Week;
+            case "daily", "1d", "day"               -> Interval.Day;
+            case "4h", "4hour", "240"             -> Interval.FourHours;
+            case "1h", "60min", "60minute"          -> Interval.OneHour;
+            case "30min", "30m", "30minute"         -> Interval.ThirtyMinute;
+            case "15min", "15m", "15minute"         -> Interval.FifteenMinute;
+            case "5min", "5m", "5minute"            -> Interval.FiveMinute;
+            case "3min", "3m", "3minute"            -> Interval.ThreeMinute;
+            case "1min", "1m", "1minute"            -> Interval.OneMinute;
             default -> null;
         };
     }

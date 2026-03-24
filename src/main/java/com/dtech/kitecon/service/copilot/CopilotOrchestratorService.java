@@ -134,8 +134,7 @@ public class CopilotOrchestratorService {
         boolean valid = false;
 
         try {
-            String rawResponse = aiService.call(userId, dummyContext,
-                    "Determine which skills to invoke for this investigation.");
+            String rawResponse = aiService.call(userId, instructions, dummyContext);
 
             // Strip markdown fences
             String json = rawResponse.trim();
@@ -285,6 +284,107 @@ public class CopilotOrchestratorService {
         return sb.toString();
     }
 
+    // ─── Scenario Evaluator (replaces 33-skill scan) ──────────────────────────
+
+    /**
+     * Build the single prompt that replaces the entire 33-skill scan phase.
+     *
+     * The Elliott Wave engine (Layers 4–7) has already:
+     * - Detected all chart patterns (BUILDING / WATCHING / CONFIRMED)
+     * - Generated all valid wave counts with Fibonacci scoring
+     * - Grouped them into directional scenarios with targets, invalidation, and evidence
+     *
+     * The AI's job here is NOT detection — it's evaluation and selection:
+     * 1. Rank the pre-computed scenarios by plausibility
+     * 2. Select the most likely scenario given the current context
+     * 3. Identify the most actionable setup (if any)
+     * 4. Return a FINDING with trade parameters
+     */
+    public String buildScenarioEvaluatorInstructions() {
+        return """
+            You are an expert Elliott Wave analyst and trader.
+            The market structure analysis engine has already computed ALL possible wave scenarios
+            with Fibonacci targets, invalidation levels, and supporting/contradicting evidence.
+
+            YOUR TASK:
+            1. Review all pre-computed scenarios below
+            2. Rank them by plausibility based on the evidence provided
+            3. Select the SINGLE most likely scenario
+            4. Identify the best trade setup within that scenario (if one exists now)
+            5. Return a FINDING response
+
+            CRITICAL RULES:
+            - Do NOT re-detect patterns or re-count waves — that is already done
+            - The scenarios contain ALL possibilities — your job is to CONFIRM one, not invent new ones
+            - If the pre-computed evidence is ambiguous, say so in confidenceLayers
+            - If no trade setup is actionable right now, say so clearly
+            - Always reference which scenario and hypothesis ID you are confirming
+
+            Return a JSON FINDING response:
+            {
+              "type": "FINDING",
+              "hypothesisLabel": "short label e.g. Wave 4 Triangle → Wave 5 Launch",
+              "hypothesisDescription": "detailed description of the confirmed scenario",
+              "waveContext": "which scenario/hypothesis you confirmed and why",
+              "pattern": "the key pattern driving the setup (or null)",
+              "currentStage": "WATCHING | ENTRY_READY | INVALIDATED",
+              "confidenceLayers": {
+                "waveStructure": "pass | fail | warning",
+                "patternConfluence": "pass | fail | warning",
+                "indicatorAlignment": "pass | fail | warning",
+                "crossTfAlignment": "pass | fail | warning"
+              },
+              "anticipatoryEntry": {
+                "direction": "LONG | SHORT",
+                "entryZone": "price or range",
+                "stopLoss": "price",
+                "target1": "price",
+                "target2": "price (optional)",
+                "rationale": "why this entry"
+              },
+              "confirmationEntry": {
+                "trigger": "what must happen to confirm full entry",
+                "entryZone": "price on breakout",
+                "stopLoss": "price",
+                "target1": "price"
+              },
+              "invalidationConditions": ["list of conditions that kill this hypothesis"],
+              "anomalyFlags": ["any ambiguities, conflicting signals, or warnings"],
+              "reasoning": "overall reasoning for your selection"
+            }
+            """;
+    }
+
+    public String buildScenarioEvaluatorData(CopilotInvestigation investigation) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== SYMBOL: ").append(investigation.getSymbol()).append(" ===\n");
+        sb.append("=== TIMEFRAMES: ").append(investigation.getTimeframesActive()).append(" ===\n\n");
+
+        if (investigation.getElliottAnalysisData() != null && !investigation.getElliottAnalysisData().isBlank()) {
+            sb.append(investigation.getElliottAnalysisData()).append("\n");
+        } else {
+            sb.append("⚠ No pre-computed Elliott analysis available. Use market structure below.\n\n");
+        }
+
+        if (investigation.getMarketStructureData() != null && !investigation.getMarketStructureData().isBlank()) {
+            sb.append("=== MARKET STRUCTURE (Dow Theory) ===\n");
+            sb.append(investigation.getMarketStructureData()).append("\n");
+        }
+
+        if (investigation.getDrawingsData() != null && !investigation.getDrawingsData().isBlank()) {
+            sb.append("=== EXPERT ANNOTATIONS ===\n");
+            sb.append("The expert has drawn the following on the chart. Give these maximum weight:\n");
+            sb.append(investigation.getDrawingsData()).append("\n");
+        }
+
+        if (Boolean.TRUE.equals(investigation.getWaveCountConfirmed())) {
+            sb.append("=== EXPERT CONFIRMATION ===\n");
+            sb.append("The expert has confirmed the wave count. Do not contradict it.\n\n");
+        }
+
+        return sb.toString();
+    }
+
     // ─── Phase 1: Scan prompts ─────────────────────────────────────────────────
 
     /**
@@ -365,6 +465,16 @@ public class CopilotOrchestratorService {
 
         sb.append(skillPrompt).append("\n\n");
 
+        if (investigation.getElliottAnalysisData() != null && !investigation.getElliottAnalysisData().isBlank()) {
+            sb.append("=== PRE-COMPUTED ELLIOTT ANALYSIS ===\n");
+            sb.append(investigation.getElliottAnalysisData()).append("\n");
+        }
+
+        if (investigation.getMarketStructureData() != null && !investigation.getMarketStructureData().isBlank()) {
+            sb.append("=== MARKET STRUCTURE (Dow Theory) ===\n");
+            sb.append(investigation.getMarketStructureData()).append("\n");
+        }
+
         if (observationsSummary != null && !observationsSummary.isBlank()) {
             sb.append(observationsSummary).append("\n");
         }
@@ -409,6 +519,16 @@ public class CopilotOrchestratorService {
 
         sb.append("\n").append(observationsSummary).append("\n");
 
+        if (investigation.getElliottAnalysisData() != null && !investigation.getElliottAnalysisData().isBlank()) {
+            sb.append("=== PRE-COMPUTED ELLIOTT ANALYSIS ===\n");
+            sb.append(investigation.getElliottAnalysisData()).append("\n");
+        }
+
+        if (investigation.getMarketStructureData() != null && !investigation.getMarketStructureData().isBlank()) {
+            sb.append("=== MARKET STRUCTURE (Dow Theory) ===\n");
+            sb.append(investigation.getMarketStructureData()).append("\n");
+        }
+
         sb.append("=== INVESTIGATION CONTEXT ===\n");
         sb.append("Symbol: ").append(investigation.getSymbol()).append("\n");
         sb.append("Timeframes: ").append(investigation.getTimeframesActive()).append("\n");
@@ -437,6 +557,11 @@ public class CopilotOrchestratorService {
         if (investigation.getZigzagData() != null && !investigation.getZigzagData().isBlank()) {
             sb.append("\n--- ZIGZAG PIVOTS ---\n");
             sb.append(investigation.getZigzagData()).append("\n");
+        }
+
+        if (investigation.getElliottAnalysisData() != null && !investigation.getElliottAnalysisData().isBlank()) {
+            sb.append("\n--- ELLIOTT WAVE SCENARIOS (pre-computed) ---\n");
+            sb.append(investigation.getElliottAnalysisData()).append("\n");
         }
     }
 
