@@ -2,7 +2,7 @@ import type {
   CopilotSkill, CopilotActiveTrade, CopilotObservation,
   TriggerAnalysisResponse, DashboardResponse, BoardResponse, AiAssistResponse,
   OrchestratorConfig, OrchestratorValidateResult,
-  ScanResponse, ReasonResponse, ReasoningRequest,
+  ScanResponse, ReasonResponse, ReasoningRequest, AdvancedElliottResult,
 } from './copilotTypes';
 
 const BASE = '/api';
@@ -236,4 +236,17 @@ export async function getOpenAiKeyStatus(): Promise<{ configured: boolean; model
 
 export async function deleteOpenAiKey(): Promise<void> {
   return request('/copilot/credentials', { method: 'DELETE' });
+}
+
+// ─── Advanced Elliott Analysis ────────────────────────────────────────────────
+
+export async function runFullElliott(
+  symbol: string,
+  primaryTimeframe: string,
+  timeframes: string,
+): Promise<AdvancedElliottResult> {
+  const params = new URLSearchParams({ symbol, primaryTimeframe, timeframes });
+  return request<AdvancedElliottResult>(`/analysis/full-elliott?${params}`, {
+    method: 'POST',
+  });
 }

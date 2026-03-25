@@ -6,6 +6,9 @@ import {
   getHypothesisBoard, getTradeDashboard,
   confirmHypothesis, dismissHypothesis, acknowledgeFlag,
 } from './copilotApi';
+import ElliottPanel from './ElliottPanel';
+import { runFullElliott } from './copilotApi';
+import type { AdvancedElliottResult } from './copilotTypes';
 
 export interface CopilotPanelState {
   investigationId: number | null;
@@ -60,6 +63,9 @@ export default function CopilotChartPanel({
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [expandedObsId, setExpandedObsId] = useState<number | null>(null);
   const [scenarioText, setScenarioText] = useState('');
+  const [elliottResult, setElliottResult] = useState<AdvancedElliottResult | null>(null);
+  const [elliottLoading, setElliottLoading] = useState(false);
+  const [elliottError, setElliottError] = useState<string | null>(null);
 
   const refresh = useCallback(async (investigationId: number) => {
     const [board, dashboard] = await Promise.all([
@@ -157,6 +163,21 @@ export default function CopilotChartPanel({
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const handleFullElliott = useCallback(async () => {
+    setElliottLoading(true);
+    setElliottError(null);
+    try {
+      const primaryTf = timeframes[0] ?? '1D';
+      const tfParam = timeframes.join(',');
+      const result = await runFullElliott(symbol, primaryTf, tfParam);
+      setElliottResult(result);
+    } catch (e: any) {
+      setElliottError(e.message ?? 'Elliott analysis failed');
+    } finally {
+      setElliottLoading(false);
+    }
+  }, [symbol, timeframes]);
+
   const handleConfirm = async (id: number, entryType: string) => {
     try {
       await confirmHypothesis(id, entryType, false);
@@ -233,6 +254,17 @@ export default function CopilotChartPanel({
           style={actionBtnStyle(loading && loadingAction === 'full', '#3f51b5')}
         >
           {loadingAction === 'full' ? 'Running...' : 'Full'}
+        </button>
+        <button
+          onClick={handleFullElliott}
+          disabled={elliottLoading}
+          style={{
+            padding: '4px 10px', fontSize: 12, cursor: 'pointer',
+            background: elliottLoading ? '#37474f' : '#1a237e',
+            color: '#fff', border: 'none', borderRadius: 3,
+          }}
+        >
+          {elliottLoading ? '…' : 'Elliott'}
         </button>
         {state.investigationId && (
           <button
@@ -391,6 +423,20 @@ export default function CopilotChartPanel({
               </div>
             ))}
           </section>
+        )}
+
+        {/* Elliott Advanced Analysis */}
+        {(elliottResult !== null || elliottLoading || elliottError !== null) && (
+          <div style={{ borderTop: '1px solid #333', marginTop: 8, paddingTop: 8 }}>
+            <div style={{ fontWeight: 600, color: '#90caf9', fontSize: 13, padding: '0 12px 4px' }}>
+              Elliott Analysis
+            </div>
+            <ElliottPanel
+              result={elliottResult}
+              loading={elliottLoading}
+              error={elliottError}
+            />
+          </div>
         )}
       </div>
     </div>

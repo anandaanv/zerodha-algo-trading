@@ -57,7 +57,7 @@ public class ScreenerRunnerService {
                 String timeframe = run.getTimeframe(); // use run's scheduled timeframe
 
                 log.info("Starting ScreenerRun id={} screenerId={} symbol={}", runId, screenerId, symbol);
-//                screenerService.run(screenerId, symbol, nowIndex, timeframe, null, runId);
+                screenerService.run(screenerId, symbol, nowIndex, timeframe, null, runId);
 
                 // Mark complete on success
                 run.setSchedulingStatus(SchedulingStatus.COMPLETE);

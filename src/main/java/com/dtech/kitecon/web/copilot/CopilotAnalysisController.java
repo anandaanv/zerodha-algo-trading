@@ -18,6 +18,8 @@ import com.dtech.ta.elliott.ElliottWaveAnalysis;
 import com.dtech.ta.elliott.ElliottWaveAnalyzer;
 import com.dtech.ta.elliott.WaveCount;
 import com.dtech.ta.elliott.WaveScenario;
+import com.dtech.ta.elliott.AdvancedElliottAnalysisResult;
+import com.dtech.ta.elliott.AdvancedElliottService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 import org.ta4j.core.BarSeries;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +61,7 @@ public class CopilotAnalysisController {
     private final MarketStructureService marketStructureService;
     private final ZigZagService zigzagService;
     private final ElliottWaveAnalyzer elliottWaveAnalyzer;
+    private final AdvancedElliottService advancedElliottService;
     private final InstrumentRepository instrumentRepository;
     private final UserRepository userRepository;
     private final ChartLayoutRepository chartLayoutRepository;
@@ -631,6 +635,76 @@ public class CopilotAnalysisController {
             log.info("[Copilot] INVALIDATED: hypothesis {} — {}", inv.getHypothesisId(), inv.getInvalidationReason());
         } else {
             log.info("[Copilot] Skill returned unhandled type {}: {}", response.getClass().getSimpleName(), response.getReasoning());
+        }
+    }
+
+    // ─── Full Advanced Elliott Analysis ─────────────────────────────────────────
+
+    /**
+     * Run the complete advanced Elliott analysis pipeline:
+     * Wave counting → Confluence zones → Scenario scoring → Entry candidates → Hypothesis tracking.
+     *
+     * @param symbol          trading symbol e.g. INFY
+     * @param primaryTimeframe  primary timeframe e.g. "daily"
+     * @param timeframes      comma-separated list e.g. "weekly,daily"
+     */
+    @PostMapping("/full-elliott")
+    public ResponseEntity<?> fullElliottAnalysis(
+            @RequestParam String symbol,
+            @RequestParam String primaryTimeframe,
+            @RequestParam(defaultValue = "daily,weekly") String timeframes) {
+
+        List<String> tfList = Arrays.stream(timeframes.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .collect(java.util.stream.Collectors.toList());
+
+        if (tfList.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No valid timeframes provided"));
+        }
+
+        Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+        if (instrument == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Instrument not found: " + symbol));
+        }
+
+        Map<String, List<ZigZagPoint>> pivotsByTf = new LinkedHashMap<>();
+        Map<String, MarketStructureData> structureByTf = new LinkedHashMap<>();
+        Map<String, BarSeries> seriesByTf = new LinkedHashMap<>();
+        List<String> orderedTfs = new ArrayList<>();
+
+        for (String tf : tfList) {
+            Interval interval = mapTimeframeToInterval(tf);
+            if (interval == null) {
+                log.warn("[AdvancedElliott] Unknown timeframe '{}' — skipping", tf);
+                continue;
+            }
+            try {
+                List<ZigZagPoint> pivots = zigzagService.getOrComputePivots(symbol, instrument, interval);
+                MarketStructureData msd = marketStructureService.analyse(pivots, tf);
+                BarSeries series = zigzagService.getBarSeries(symbol, instrument, interval);
+                pivotsByTf.put(tf, pivots);
+                structureByTf.put(tf, msd);
+                seriesByTf.put(tf, series);
+                orderedTfs.add(tf);
+            } catch (Exception e) {
+                log.warn("[AdvancedElliott] Failed to load data for {} {}: {}", symbol, tf, e.getMessage());
+            }
+        }
+
+        if (orderedTfs.isEmpty()) {
+            return ResponseEntity.internalServerError().body(Map.of("error", "No data loaded for any timeframe"));
+        }
+
+        String resolvedPrimaryTf = orderedTfs.contains(primaryTimeframe) ? primaryTimeframe : orderedTfs.get(0);
+
+        try {
+            AdvancedElliottAnalysisResult result = advancedElliottService.analyze(
+                    seriesByTf, pivotsByTf, structureByTf, orderedTfs, symbol, resolvedPrimaryTf);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("[AdvancedElliott] Analysis failed for {}: {}", symbol, e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }
 

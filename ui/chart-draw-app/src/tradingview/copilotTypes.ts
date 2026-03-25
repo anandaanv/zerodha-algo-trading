@@ -219,3 +219,94 @@ export interface BoardResponse {
   hypotheses: CopilotHypothesis[];
   unacknowledgedFlags: CopilotAnomalyFlag[];
 }
+
+// ─── Advanced Elliott Analysis Types ─────────────────────────────────────────
+
+export type ScenarioStatus =
+  | 'LEADING'
+  | 'ACTIVE_ALTERNATE'
+  | 'WEAK_ALTERNATE'
+  | 'AWAITING_TRIGGER'
+  | 'INVALIDATED'
+  | 'COMPLETED';
+
+export type ElliottTriggerType =
+  | 'HAMMER'
+  | 'SHOOTING_STAR'
+  | 'BULLISH_ENGULFING'
+  | 'BEARISH_ENGULFING'
+  | 'LONG_LOWER_WICK_REJECTION'
+  | 'LONG_UPPER_WICK_REJECTION'
+  | 'NONE';
+
+export interface ElliottConfluenceZone {
+  id: string;
+  lowerPrice: number;
+  upperPrice: number;
+  midPrice: number;
+  factorCount: number;
+  factorDiversity: number;
+  score: number;
+  zoneType: string;
+  explanation: string[];
+}
+
+export interface ElliottEntryCandidate {
+  id: string;
+  symbol: string;
+  scenarioId: string;
+  hypothesisId: string;
+  bullish: boolean;
+  entryStyle: string;
+  triggerType: ElliottTriggerType;
+  entryPrice: number;
+  stopLoss: number;
+  target1: number;
+  target2: number;
+  riskRewardRatio: number;
+  rationale: string[];
+}
+
+export interface ElliottScenarioTransition {
+  scenarioId: string;
+  fromStatus: ScenarioStatus | null;
+  toStatus: ScenarioStatus;
+  timestamp: number;
+  reason: string;
+}
+
+export interface ElliottHypothesisSnapshot {
+  symbol: string;
+  primaryTimeframe: string;
+  snapshotTime: number;
+  transitions: ElliottScenarioTransition[];
+  relabelCount: number;
+  leadingScenarioId: string | null;
+}
+
+export interface ElliottScoredScenario {
+  status: ScenarioStatus;
+  totalScore: number;
+  statusReasons: string[];
+  scenario: {
+    id: string;
+    direction: string;
+    scenarioInvalidation: number;
+    hypotheses: Array<{
+      id: string;
+      currentPositionDescription: string;
+      nextMajorMoveUp: boolean;
+      totalScore: number;
+      invalidationLevel: number;
+      primaryTarget: { level: number; ratio: string; confidence: number } | null;
+    }>;
+  };
+}
+
+export interface AdvancedElliottResult {
+  confluenceZones: ElliottConfluenceZone[];
+  scoredScenarios: ElliottScoredScenario[];
+  entryCandidates: ElliottEntryCandidate[];
+  hypothesisSnapshot: ElliottHypothesisSnapshot | null;
+  promptSummary: string;
+}
