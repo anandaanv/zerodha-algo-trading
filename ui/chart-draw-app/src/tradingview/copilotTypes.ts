@@ -310,3 +310,75 @@ export interface AdvancedElliottResult {
   hypothesisSnapshot: ElliottHypothesisSnapshot | null;
   promptSummary: string;
 }
+
+// ─── Second-Pass Filtering + AI Verification ─────────────────────────────────
+
+export interface FamilyScore {
+  structuralStrength: number;
+  confluenceStrength: number;
+  momentumAlignment: number;
+  ambiguityPenalty: number;
+  contradictionPenalty: number;
+  tradeUtility: number;
+  triggerReadiness: number;
+  finalRankScore: number;
+}
+
+export interface ScenarioFamilyCandidate {
+  id: string;
+  symbol: string;
+  anchorTimeframe: string;
+  familyType: string;
+  directionalBias: 'UP' | 'DOWN' | 'NEUTRAL';
+  supportingStructures: string[];
+  supportingPatterns: string[];
+  contradictingPatterns: string[];
+  primaryInvalidationLevel: number;
+  confirmationLevel: number;
+  decisionZoneNearby: boolean;
+  triggerEligible: boolean;
+  tradableNow: boolean;
+  status: ScenarioStatus;
+  score: FamilyScore;
+  explanation: string[];
+  reasonCodes: string[];
+}
+
+export interface ScenarioConflictSet {
+  symbol: string;
+  anchorTimeframe: string;
+  bullishFamilies: ScenarioFamilyCandidate[];
+  bearishFamilies: ScenarioFamilyCandidate[];
+  neutralFamilies: ScenarioFamilyCandidate[];
+  dominantConflictMode: string;
+  explanation: string[];
+}
+
+export interface HumanResearchSummary {
+  symbol: string;
+  anchorTimeframe: string;
+  marketStateSummary: string;
+  leadingScenarioSummary: string[];
+  alternateScenarioSummary: string[];
+  actionHandlingNotes: string[];
+  invalidationNotes: string[];
+}
+
+export interface FilteredScenarioSet {
+  symbol: string;
+  anchorTimeframe: string;
+  leadingScenario: ScenarioFamilyCandidate | null;
+  activeAlternates: ScenarioFamilyCandidate[];
+  weakAlternates: ScenarioFamilyCandidate[];
+  invalidatedFamilies: ScenarioFamilyCandidate[];
+  conflictSet: ScenarioConflictSet | null;
+  humanSummary: HumanResearchSummary | null;
+}
+
+export interface VerifiedElliottResult {
+  filteredScenarioSet: FilteredScenarioSet;
+  aiRawResponse: string | null;
+  aiConfirmed: boolean;
+  aiReasoning: string;
+  aiConfidence: number;
+}

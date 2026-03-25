@@ -3,6 +3,7 @@ import type {
   TriggerAnalysisResponse, DashboardResponse, BoardResponse, AiAssistResponse,
   OrchestratorConfig, OrchestratorValidateResult,
   ScanResponse, ReasonResponse, ReasoningRequest, AdvancedElliottResult,
+  VerifiedElliottResult,
 } from './copilotTypes';
 
 const BASE = '/api';
@@ -247,6 +248,17 @@ export async function runFullElliott(
 ): Promise<AdvancedElliottResult> {
   const params = new URLSearchParams({ symbol, primaryTimeframe, timeframes });
   return request<AdvancedElliottResult>(`/analysis/full-elliott?${params}`, {
+    method: 'POST',
+  });
+}
+
+export async function runFullElliottVerified(
+  symbol: string,
+  primaryTimeframe: string,
+  timeframes: string,
+): Promise<VerifiedElliottResult> {
+  const params = new URLSearchParams({ symbol, primaryTimeframe, timeframes });
+  return request<VerifiedElliottResult>(`/analysis/full-elliott-verified?${params}`, {
     method: 'POST',
   });
 }

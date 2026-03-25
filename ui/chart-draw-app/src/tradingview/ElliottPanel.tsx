@@ -5,12 +5,18 @@ import type {
   ElliottScoredScenario,
   ElliottConfluenceZone,
   ScenarioStatus,
+  VerifiedElliottResult,
+  ScenarioFamilyCandidate,
+  HumanResearchSummary,
 } from './copilotTypes';
 
 interface Props {
   result: AdvancedElliottResult | null;
   loading: boolean;
   error: string | null;
+  verifiedResult?: VerifiedElliottResult | null;
+  verifiedLoading?: boolean;
+  verifiedError?: string | null;
 }
 
 const STATUS_COLOR: Record<ScenarioStatus, string> = {
@@ -28,9 +34,13 @@ const ENTRY_STYLE_COLOR: Record<string, string> = {
   CONSERVATIVE: '#1565c0',
 };
 
-export default function ElliottPanel({ result, loading, error }: Props) {
+export default function ElliottPanel({
+  result, loading, error,
+  verifiedResult, verifiedLoading, verifiedError,
+}: Props) {
   const [promptOpen, setPromptOpen] = useState(false);
   const [expandedScenarioId, setExpandedScenarioId] = useState<string | null>(null);
+  const [aiOpen, setAiOpen] = useState(false);
 
   if (loading) {
     return (
@@ -153,6 +163,135 @@ export default function ElliottPanel({ result, loading, error }: Props) {
           )}
         </div>
       )}
+
+      {/* ── Section F: Verified Elliott (Second Pass + AI) ── */}
+      {verifiedLoading && (
+        <div style={{ padding: '8px 0', color: '#90caf9', fontSize: 12 }}>Running verified analysis…</div>
+      )}
+      {verifiedError && (
+        <div style={{ padding: '8px 0', color: '#ef9a9a', fontSize: 12 }}>Verified error: {verifiedError}</div>
+      )}
+      {verifiedResult && <VerifiedSection verified={verifiedResult} aiOpen={aiOpen} onToggleAi={() => setAiOpen(o => !o)} />}
+    </div>
+  );
+}
+
+// ── Verified Section ──────────────────────────────────────────────────────────
+
+function VerifiedSection({
+  verified, aiOpen, onToggleAi,
+}: { verified: VerifiedElliottResult; aiOpen: boolean; onToggleAi: () => void }) {
+  const { filteredScenarioSet: fss, aiConfirmed, aiReasoning, aiConfidence } = verified;
+  const humanSummary = fss?.humanSummary;
+  const leading = fss?.leadingScenario;
+
+  return (
+    <div style={{ borderTop: '1px solid #333', paddingTop: 8, marginTop: 4 }}>
+      <div style={{ fontWeight: 700, color: '#ce93d8', marginBottom: 6, fontSize: 13 }}>
+        Verified Analysis (2nd Pass + AI)
+      </div>
+
+      {/* Market state summary */}
+      {humanSummary?.marketStateSummary && (
+        <div style={{
+          background: '#1a1a2e', border: '1px solid #3f2080', borderRadius: 4,
+          padding: '6px 10px', marginBottom: 8, color: '#e1bee7', fontSize: 12,
+        }}>
+          {humanSummary.marketStateSummary}
+        </div>
+      )}
+
+      {/* AI confirmation badge */}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+        <span style={{
+          background: aiConfirmed ? '#1b5e20' : '#b71c1c',
+          color: '#fff', padding: '2px 8px', borderRadius: 3, fontSize: 11, fontWeight: 700,
+        }}>
+          AI {aiConfirmed ? '✓ CONFIRMED' : '✗ CHALLENGED'}
+        </span>
+        <span style={{ color: '#bdbdbd', fontSize: 11 }}>
+          Confidence: {(aiConfidence * 100).toFixed(0)}%
+        </span>
+      </div>
+
+      {/* Leading scenario family */}
+      {leading && <FamilyCard family={leading} label="Leading" />}
+
+      {/* Active alternates */}
+      {fss?.activeAlternates?.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ color: '#90caf9', fontSize: 11, marginBottom: 3 }}>
+            Alternates ({fss.activeAlternates.length})
+          </div>
+          {fss.activeAlternates.map(f => <FamilyCard key={f.id} family={f} label="Alt" />)}
+        </div>
+      )}
+
+      {/* Action notes */}
+      {humanSummary?.actionHandlingNotes?.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ color: '#ffcc80', fontSize: 11, marginBottom: 2 }}>Actions</div>
+          {humanSummary.actionHandlingNotes.map((n, i) => (
+            <div key={i} style={{ color: '#bdbdbd', fontSize: 11, paddingLeft: 8 }}>• {n}</div>
+          ))}
+        </div>
+      )}
+
+      {/* AI reasoning collapsible */}
+      {aiReasoning && (
+        <div style={{ marginTop: 4 }}>
+          <button
+            onClick={onToggleAi}
+            style={{
+              background: 'none', border: '1px solid #424242', color: '#bdbdbd',
+              cursor: 'pointer', padding: '2px 8px', borderRadius: 3, fontSize: 11,
+            }}
+          >
+            {aiOpen ? '▾' : '▸'} AI Reasoning
+          </button>
+          {aiOpen && (
+            <pre style={{
+              marginTop: 6, padding: 8, background: '#1a1a1a', borderRadius: 4,
+              fontSize: 10, color: '#9e9e9e', overflowX: 'auto', maxHeight: 150,
+              overflowY: 'auto', whiteSpace: 'pre-wrap',
+            }}>
+              {aiReasoning}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FamilyCard({ family, label }: { family: ScenarioFamilyCandidate; label: string }) {
+  const dirColor = family.directionalBias === 'UP' ? '#a5d6a7'
+    : family.directionalBias === 'DOWN' ? '#ef9a9a' : '#ffcc80';
+  return (
+    <div style={{
+      background: '#1e1e2e', border: '1px solid #333', borderRadius: 4,
+      padding: '5px 8px', marginBottom: 4,
+    }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 2 }}>
+        <span style={{
+          background: '#3f2080', color: '#e1bee7',
+          padding: '1px 5px', borderRadius: 3, fontSize: 10,
+        }}>{label}</span>
+        <span style={{ color: dirColor, fontWeight: 700, fontSize: 11 }}>
+          {family.directionalBias}
+        </span>
+        <span style={{ color: '#bdbdbd', fontSize: 11 }}>
+          {family.familyType.replace(/_/g, ' ')}
+        </span>
+        <span style={{ color: '#90caf9', fontSize: 10, marginLeft: 'auto' }}>
+          {family.score?.finalRankScore?.toFixed(2) ?? '—'}
+        </span>
+      </div>
+      <div style={{ color: '#757575', fontSize: 10 }}>
+        Inv: {family.primaryInvalidationLevel.toFixed(2)}
+        {family.triggerEligible && <span style={{ color: '#a5d6a7', marginLeft: 6 }}>● Trigger</span>}
+        {family.tradableNow && <span style={{ color: '#ffcc80', marginLeft: 6 }}>● Now</span>}
+      </div>
     </div>
   );
 }
