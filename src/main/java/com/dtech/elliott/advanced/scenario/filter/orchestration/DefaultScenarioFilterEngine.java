@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-@Service
 public class DefaultScenarioFilterEngine implements ScenarioFilterEngine {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultScenarioFilterEngine.class);
