@@ -67,6 +67,10 @@ public class ElliottWaveAnalysis {
     @Builder.Default
     private List<NestedWaveContext> nestedCorrectiveContexts = new java.util.ArrayList<>();
 
+    /** Virgin (never-retested) trendlines connecting key wave structural pivots */
+    @Builder.Default
+    private List<com.dtech.ta.trendline.VirginTrendline> virginTrendlines = new java.util.ArrayList<>();
+
     // ── Convenience accessors ─────────────────────────────────────────────────
 
     public WaveScenario topScenario() {

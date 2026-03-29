@@ -21,6 +21,7 @@ public class ElliottWaveAnalyzer {
     private final ScenarioBuilder scenarioBuilder;
     private final GapDetectorService gapDetector;
     private final NestedCorrectiveContextBuilder nestedCorrectiveContextBuilder;
+    private final com.dtech.ta.trendline.VirginTrendlineDetector virginTrendlineDetector;
 
     public ElliottWaveAnalysis analyze(
             Map<String, List<ZigZagPoint>> pivotsByTf,
@@ -77,6 +78,18 @@ public class ElliottWaveAnalyzer {
         // Bottom-up: child TF confirmations boost parent scores
         applyBottomUpBoosts(tfContexts, tfOrder, waveCounts);
 
+        // Detect virgin trendlines from the top wave count per primary timeframe
+        List<com.dtech.ta.trendline.VirginTrendline> virginTrendlines = new java.util.ArrayList<>();
+        waveCounts.stream()
+            .filter(wc -> primaryTf.equals(wc.getPrimaryTimeframe()))
+            .max(java.util.Comparator.comparingInt(WaveCount::totalScore))
+            .ifPresent(topCount -> {
+                BarSeries primarySeries = seriesByTf.get(primaryTf);
+                if (primarySeries != null) {
+                    virginTrendlines.addAll(virginTrendlineDetector.detect(topCount, primarySeries));
+                }
+            });
+
         // Cross-TF narrative
         String narrative = buildCrossTfNarrative(tfOrder, tfContexts, gapsByTf, patterns);
         String nestedBranchNarrative = buildNestedBranchNarrative(tfOrder, tfContexts, patterns, scenarios);
@@ -91,6 +104,7 @@ public class ElliottWaveAnalyzer {
             .tfContexts(tfContexts).crossTfNarrative(narrative)
             .nestedBranchNarrative(nestedBranchNarrative)
             .nestedCorrectiveContexts(nestedCorrectiveContexts)
+            .virginTrendlines(virginTrendlines)
             .build();
     }
 
