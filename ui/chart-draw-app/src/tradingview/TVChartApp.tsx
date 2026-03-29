@@ -11,7 +11,7 @@ import AIChatOverlay from './AIChatOverlay';
 import PromptBuilderPage from './PromptBuilderPage';
 import CopilotChartPanel from './CopilotChartPanel';
 import CopilotSettingsModal from './CopilotSettingsModal';
-import type { CopilotHypothesis, CopilotObservation, DrawingPoint } from './copilotTypes';
+import type { CopilotHypothesis } from './copilotTypes';
 import {
   WorkspaceTab,
   WorkspaceLayout,
@@ -48,7 +48,6 @@ export default function TVChartApp() {
   const [layoutModalMode, setLayoutModalMode] = useState<'save' | 'load' | null>(null);
   const [copilotHypotheses, setCopilotHypotheses] = useState<CopilotHypothesis[]>([]);
   const hypothesisShapeIdsRef = useRef<any[]>([]);
-  const observationShapeIdsRef = useRef<any[]>([]);
 
   // Parse URL parameters for initial defaults only
   const urlSymbol = searchParams.get('script') || searchParams.get('symbol');
@@ -267,17 +266,17 @@ export default function TVChartApp() {
   }, [updateTabInState]);
 
   // ─── Keyboard shortcut: backtick toggles AI overlay ─────────────────────
-  // F4 toggle disabled — AI chat overlay replaced by Co-Pilot scan/reason
-  // useEffect(() => {
-  //   const onKeyDown = (e: KeyboardEvent) => {
-  //     if (e.key === 'F4' && !e.ctrlKey && !e.altKey && !e.metaKey) {
-  //       e.preventDefault();
-  //       setIsAiOverlayOpen(prev => !prev);
-  //     }
-  //   };
-  //   window.addEventListener('keydown', onKeyDown);
-  //   return () => window.removeEventListener('keydown', onKeyDown);
-  // }, []);
+  // F4 toggles AI overlay — function keys work even when chart iframe has focus.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F4' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        setIsAiOverlayOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // ─── Restore window focus after chart clicks so Ctrl+` keeps working ──────
   // Only steals focus back if nothing in the main document is actively focused
@@ -507,56 +506,6 @@ export default function TVChartApp() {
     }
   }, []);
 
-  // ─── Co-Pilot: draw observation patterns on chart (Phase 1) ─────────────
-
-  const handleObservationsLoaded = useCallback((observations: CopilotObservation[]) => {
-    if (!widgetReadyRef.current || !widgetRef.current) return;
-    try {
-      const chart = widgetRef.current.activeChart();
-
-      // Remove previous observation shapes
-      observationShapeIdsRef.current.forEach(id => {
-        try { chart.removeEntity(id); } catch { /* ignore */ }
-      });
-      observationShapeIdsRef.current = [];
-
-      const positive = observations.filter(o => o.patternDetected && o.drawingPoints && o.drawingType);
-
-      positive.forEach(obs => {
-        try {
-          let points: DrawingPoint[];
-          try {
-            points = typeof obs.drawingPoints === 'string'
-              ? JSON.parse(obs.drawingPoints)
-              : (obs.drawingPoints as unknown as DrawingPoint[]);
-          } catch { return; }
-
-          if (!points || points.length < 2) return;
-
-          const tvPoints = points.map(p => ({ time: p.time, price: p.price }));
-
-          const shapeId = chart.createMultipointShape(tvPoints, {
-            shape: obs.drawingType,
-            lock: true,
-            disableSelection: false,
-            disableSave: true,
-            overrides: {
-              linecolor: '#9E9E9E',
-              linestyle: 1, // dashed
-              linewidth: 1,
-              transparency: 40,
-            },
-          });
-          if (shapeId) observationShapeIdsRef.current.push(shapeId);
-        } catch (e) {
-          console.warn('Could not draw observation pattern:', obs.skillKey, e);
-        }
-      });
-    } catch (e) {
-      console.warn('Could not draw observation annotations:', e);
-    }
-  }, []);
-
   // ─── Derived: active tab for display ─────────────────────────────────────
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
@@ -623,7 +572,6 @@ export default function TVChartApp() {
             layoutId={Number(localStorage.getItem('lastLayoutId')) || null}
             getChartState={getChartState}
             onHypothesesLoaded={handleHypothesesLoaded}
-            onObservationsLoaded={handleObservationsLoaded}
           />
         </div>
       </div>
@@ -693,8 +641,8 @@ export default function TVChartApp() {
         <CopilotSettingsModal onClose={() => setShowCopilotSettings(false)} />
       )}
 
-      {/* AI Chat Overlay — disabled for now; Co-Pilot scan/reason replaces it */}
-      {/* {!showPromptBuilder && (
+      {/* AI Chat Overlay — hidden when Prompt Builder is open */}
+      {!showPromptBuilder && (
         <AIChatOverlay
           open={isAiOverlayOpen}
           onToggle={() => setIsAiOverlayOpen(prev => !prev)}
@@ -707,9 +655,10 @@ export default function TVChartApp() {
           copilotHypotheses={copilotHypotheses}
           onCopilotAction={() => {
             const id = Number(localStorage.getItem('copilot_investigation_id')) || null;
+            // Just refresh from the panel if open; annotations will update via onHypothesesLoaded
           }}
         />
-      )} */}
+      )}
 
       {/* Prompt Builder — rendered via portal into document.body so it
           sits above the TradingView iframe stacking context */}
