@@ -29,10 +29,10 @@ public class UserOpenAiCredential {
     @Column(name = "api_key_encrypted", nullable = false, length = 1024)
     private String apiKeyEncrypted;
 
-    /** Optional: user can override the model (defaults to gpt-4o-mini) */
+    /** Optional: user can override the model (defaults to gpt-4.1-mini) */
     @Column(name = "model", length = 100)
     @Builder.Default
-    private String model = "gpt-4o-mini";
+    private String model = "gpt-4.1-mini";
 
     /** Optional: user can override the base URL (for Azure OpenAI etc.) */
     @Column(name = "base_url", length = 255)

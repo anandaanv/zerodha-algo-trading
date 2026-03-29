@@ -103,7 +103,7 @@ export default function Dashboard() {
         }}
       >
         {/* Trades Card - USER, MODERATOR, ADMIN */}
-        {hasRole("USER") && (
+        {hasRole("ADMIN") && (
           <div
             onClick={() => navigate("/trades")}
             style={{
@@ -187,8 +187,8 @@ export default function Dashboard() {
         </div>
         )}
 
-        {/* Prompt Builder Card - USER */}
-        {hasRole("USER") && (
+        {/* Prompt Builder Card - ADMIN */}
+        {hasRole("ADMIN") && (
           <div
             onClick={() => navigate("/prompt-builder")}
             style={{
@@ -219,8 +219,8 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Co-Pilot Card - USER */}
-        {hasRole("USER") && (
+        {/* Co-Pilot Card - ADMIN */}
+        {hasRole("ADMIN") && (
           <div
             onClick={() => navigate("/copilot")}
             style={{
@@ -251,8 +251,72 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Charts Card - all users */}
+        {/* Elliott Scan Card - USER */}
         {hasRole("USER") && (
+          <div
+            onClick={() => navigate("/scan")}
+            style={{
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2.5rem",
+              cursor: "pointer",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-8px)";
+              e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+            }}
+          >
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🔬</div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "0.5rem", color: "#333", fontWeight: 600 }}>
+              Elliott Scan
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.95rem" }}>
+              On-demand Elliott Wave analysis for any symbol
+            </p>
+          </div>
+        )}
+
+        {/* Elliott Screener Card - USER */}
+        {hasRole("USER") && (
+          <div
+            onClick={() => navigate("/elliott-screener")}
+            style={{
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2.5rem",
+              cursor: "pointer",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-8px)";
+              e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+            }}
+          >
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📊</div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "0.5rem", color: "#333", fontWeight: 600 }}>
+              Elliott Screener
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.95rem" }}>
+              Automated Elliott Wave screener and trade suggestions
+            </p>
+          </div>
+        )}
+
+        {/* Charts Card - ADMIN */}
+        {hasRole("ADMIN") && (
           <div
             onClick={() => navigate("/chart?indicators=true")}
             style={{

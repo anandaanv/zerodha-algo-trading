@@ -35,7 +35,7 @@ public class UserOpenAiCredentialService {
             credentialRepository.save(UserOpenAiCredential.builder()
                     .userId(userId)
                     .apiKeyEncrypted(encrypted)
-                    .model(model != null ? model : "gpt-4o-mini")
+                    .model(model != null ? model : "gpt-4.1-mini")
                     .baseUrl(baseUrl != null ? baseUrl : "https://api.openai.com/v1")
                     .build());
         }
@@ -56,7 +56,7 @@ public class UserOpenAiCredentialService {
     public String getModel(Long userId) {
         return credentialRepository.findByUserId(userId)
                 .map(UserOpenAiCredential::getModel)
-                .orElse("gpt-4o-mini");
+                .orElse("gpt-4.1-mini");
     }
 
     /** Returns the base URL preference for a user. */

@@ -5,13 +5,21 @@ interface Props {
   onClose: () => void;
 }
 
-const MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo'];
+const MODELS = [
+  // GPT-4.1 family (1M context window — recommended)
+  'gpt-4.1',
+  'gpt-4.1-mini',
+  'gpt-4.1-nano',
+  // GPT-4o family (128k context)
+  'gpt-4o',
+  'gpt-4o-mini',
+];
 
 export default function CopilotSettingsModal({ onClose }: Props) {
   const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
-  const [model, setModel] = useState('gpt-4o');
+  const [model, setModel] = useState('gpt-4.1-mini');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);

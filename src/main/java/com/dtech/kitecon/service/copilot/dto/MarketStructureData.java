@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Complete market structure analysis for one timeframe.
@@ -45,19 +46,38 @@ public class MarketStructureData {
     /** True if the last structure event was a CHoCH (first sign of reversal) */
     private boolean lastEventWasCHoCH;
 
+    /**
+     * Coarse trend segments (oldest first, max 6).
+     * Each segment = a contiguous run of HH/HL (uptrend) or LH/LL (downtrend) pivots.
+     * Last segment is always ongoing=true.
+     */
+    private List<TrendSegment> trendSegments;
+
     /** Human-readable summary for inclusion in AI prompt */
     public String toPromptSummary() {
         StringBuilder sb = new StringBuilder();
-        sb.append(String.format("Timeframe: %s | Trend: %s (strength: %d)\n", timeframe, trendDirection, trendStrength));
-        if (lastSwingHigh != null) sb.append(String.format("Last Swing High: %.2f | Last Swing Low: %.2f\n", lastSwingHigh, lastSwingLow));
-        if (prevSwingHigh != null) sb.append(String.format("Prev Swing High: %.2f | Prev Swing Low: %.2f\n", prevSwingHigh, prevSwingLow));
-        if (lastEventWasBOS) sb.append("LAST EVENT: Break of Structure (BOS) — momentum continuation\n");
-        if (lastEventWasCHoCH) sb.append("LAST EVENT: Change of Character (CHoCH) — potential reversal signal\n");
-        sb.append("Recent swing sequence:\n");
-        int start = Math.max(0, swingPoints.size() - 8);
-        for (MarketStructurePoint p : swingPoints.subList(start, swingPoints.size())) {
-            sb.append("  ").append(p.toDescription()).append("\n");
+
+        // Header line
+        String event = lastEventWasBOS ? " | Last event: BOS (momentum continuation)"
+                     : lastEventWasCHoCH ? " | Last event: CHoCH (potential reversal)"
+                     : "";
+        sb.append(String.format("Timeframe: %s | Trend: %s (strength: %d)%s%n",
+                timeframe, trendDirection, trendStrength, event));
+
+        // Key levels
+        if (lastSwingHigh != null) {
+            sb.append(String.format("Key Levels: SwingH=%.2f  SwingL=%.2f", lastSwingHigh, lastSwingLow));
+            if (prevSwingHigh != null)
+                sb.append(String.format("  PrevH=%.2f  PrevL=%.2f", prevSwingHigh, prevSwingLow));
+            sb.append("\n");
         }
+
+        // Trend segments narrative (replaces noisy per-pivot dump)
+        if (trendSegments != null && !trendSegments.isEmpty()) {
+            sb.append("Trend segments (oldest → newest):\n");
+            trendSegments.forEach(seg -> sb.append("  ").append(seg.toSummary()).append("\n"));
+        }
+
         return sb.toString();
     }
 }

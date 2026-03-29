@@ -23,6 +23,8 @@ interface SingleChartPanelProps {
   showIndicators: boolean;
   indicatorMode?: "scrollable" | "compact";
   oscillatorLayout?: "side" | "bottom";
+  overlaysOverride?: Record<string, any[]>;
+  readonly?: boolean;
 }
 
 /**
@@ -36,6 +38,8 @@ export default function SingleChartPanel({
   showIndicators,
   indicatorMode = "compact",
   oscillatorLayout = "bottom",
+  overlaysOverride,
+  readonly = false,
 }: SingleChartPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -139,19 +143,25 @@ export default function SingleChartPanel({
 
       // Load overlays
       try {
-        const ok = await loadOverlaysFromServer(symbol, timeframe);
-        if (ok?.overlays) {
-          for (const def of getAllPlugins()) {
-            const data = ok.overlays[def.key] ?? [];
-            try {
-              instances[def.key]?.importAll?.(data);
-            } catch (e) {
-              console.warn("Import overlay failed for", def.key, e);
-            }
+        const overlaySource = overlaysOverride ?? (await loadOverlaysFromServer(symbol, timeframe))?.overlays ?? {};
+        for (const def of getAllPlugins()) {
+          const data = overlaySource[def.key] ?? [];
+          try {
+            instances[def.key]?.importAll?.(data);
+          } catch (e) {
+            console.warn("Import overlay failed for", def.key, e);
           }
         }
       } catch (e) {
         console.warn("Load overlays failed for", timeframe, e);
+      }
+
+      // Disable drawing if readonly
+      if (readonly) {
+        for (const inst of Object.values(instances)) {
+          const canvas = (inst as any)?.canvas as HTMLCanvasElement | undefined;
+          if (canvas) canvas.style.pointerEvents = 'none';
+        }
       }
 
       // Handle resize

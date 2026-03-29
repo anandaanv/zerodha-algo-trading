@@ -76,6 +76,14 @@ public class CopilotInvestigationService {
         return investigationRepository.save(inv);
     }
 
+    /** Store pre-computed Elliott Wave analysis summary text. */
+    @Transactional
+    public CopilotInvestigation updateElliottData(Long investigationId, String elliottAnalysisData) {
+        CopilotInvestigation inv = getOrThrow(investigationId);
+        inv.setElliottAnalysisData(elliottAnalysisData);
+        return investigationRepository.save(inv);
+    }
+
     /** Record that a skill has been invoked (for cycle detection). */
     @Transactional
     public CopilotInvestigation recordSkillInvoked(Long investigationId, String skillKey, String resultJson) {
@@ -100,6 +108,14 @@ public class CopilotInvestigationService {
         CopilotInvestigation inv = getOrThrow(investigationId);
         inv.setWaveCountConfirmed(confirmed);
         inv.setWaveCountSource(source);
+        return investigationRepository.save(inv);
+    }
+
+    /** Update the investigation phase (PENDING → SCANNED → REASONED). */
+    @Transactional
+    public CopilotInvestigation updatePhase(Long investigationId, String phase) {
+        CopilotInvestigation inv = getOrThrow(investigationId);
+        inv.setPhase(phase);
         return investigationRepository.save(inv);
     }
 
