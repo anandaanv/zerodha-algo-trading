@@ -145,8 +145,8 @@ public class ElliottScreenerController {
                 }
             }
 
-            // Generate layouts with empty analysis maps (produces hlines only for now)
-            layoutService.generateAndSaveLayouts(suggestion, java.util.Map.of(), java.util.Map.of());
+            // Re-run Elliott analysis pipeline and generate layouts with real data
+            screenerService.regenerateLayouts(suggestion);
 
             long count = layoutRepository.findBySuggestionIdOrderByTabOrder(suggestionId).size();
             return ResponseEntity.ok(Map.of("layoutsCreated", count));

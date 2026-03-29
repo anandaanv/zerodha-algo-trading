@@ -152,4 +152,72 @@ public class VirginTrendlineDetector {
         }
         return true; // Trendline is virgin
     }
+
+    private final java.util.List<TrendlineScenario> scenarios = java.util.List.of(
+            new com.dtech.ta.trendline.scenario.MajorReversalScenario(),
+            new com.dtech.ta.trendline.scenario.StructuralTrendlineScenario(),
+            new com.dtech.ta.trendline.scenario.ClusterTrendlineScenario(),
+            new com.dtech.ta.trendline.scenario.TrendReversalAlignmentScorer()
+    );
+
+    /**
+     * Detects virgin trendlines using the registered scenario pipeline.
+     * Each scenario contributes candidates + score. Deduplication merges
+     * same-anchor trendlines. Returns top 5 support + 5 resistance by score.
+     */
+    public List<VirginTrendline> detectFromEnrichedPivots(
+            List<com.dtech.ta.elliott.EnrichedPivot> pivots, BarSeries series) {
+
+        if (pivots == null || pivots.size() < 2 || series == null || series.getBarCount() == 0) {
+            return new ArrayList<>();
+        }
+
+        // 1. Collect candidates from all scenarios
+        java.util.Map<String, VirginTrendline> byKey = new java.util.LinkedHashMap<>();
+        for (TrendlineScenario scenario : scenarios) {
+            try {
+                for (VirginTrendline tl : scenario.detect(pivots, series)) {
+                    String key = tl.getAnchor1().getBarIndex() + ":" + tl.getAnchor2().getBarIndex();
+                    byKey.merge(key, tl, (existing, incoming) -> {
+                        existing.setScore(existing.getScore() + incoming.getScore());
+                        for (String tag : incoming.getScenarioTags()) {
+                            if (!existing.getScenarioTags().contains(tag)) existing.getScenarioTags().add(tag);
+                        }
+                        return existing;
+                    });
+                }
+            } catch (Exception e) {
+                // skip failing scenario
+            }
+        }
+
+        List<VirginTrendline> candidates = new ArrayList<>(byKey.values());
+
+        // 2. Post-scoring pass
+        for (TrendlineScenario scenario : scenarios) {
+            try {
+                scenario.score(candidates, pivots, series);
+            } catch (Exception e) {
+                // skip
+            }
+        }
+
+        // 3. Filter to within 15% of current price
+        int currentBarIndex = series.getBarCount() - 1;
+        double currentPrice = series.getBar(currentBarIndex).getClosePrice().doubleValue();
+        candidates = candidates.stream()
+                .filter(tl -> tl.getDistancePctFromCurrentPrice() < 0.15)
+                .sorted(Comparator.comparingInt(VirginTrendline::getScore).reversed())
+                .collect(Collectors.toList());
+
+        // 4. Top 5 support + top 5 resistance
+        List<VirginTrendline> result = new ArrayList<>();
+        int supportCount = 0, resistanceCount = 0;
+        for (VirginTrendline tl : candidates) {
+            if (tl.isSupport() && supportCount < 5) { result.add(tl); supportCount++; }
+            else if (!tl.isSupport() && resistanceCount < 5) { result.add(tl); resistanceCount++; }
+            if (supportCount >= 5 && resistanceCount >= 5) break;
+        }
+        return result;
+    }
 }

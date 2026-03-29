@@ -174,3 +174,36 @@ export async function generateSuggestionChartLayout(suggestionId: number): Promi
   if (!res.ok) throw new Error(`Failed to generate chart layout: ${res.status}`);
   return await res.json();
 }
+
+// On-demand scan API
+export async function initiateScan(symbol: string, primaryTimeframe: string) {
+  const res = await apiFetch('/api/scan', withAuth({
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol, primaryTimeframe }),
+  }));
+  if (res.status === 429) {
+    const data = await res.json();
+    throw new Error('RATE_LIMIT:' + (data.error || 'Rate limit exceeded'));
+  }
+  if (!res.ok) throw new Error('Failed to initiate scan');
+  return res.json();
+}
+
+export async function fetchScans() {
+  const res = await apiFetch('/api/scan', withAuth());
+  if (!res.ok) throw new Error('Failed to fetch scans');
+  return res.json();
+}
+
+export async function fetchScan(scanId: number) {
+  const res = await apiFetch(`/api/scan/${scanId}`, withAuth());
+  if (!res.ok) throw new Error('Failed to fetch scan');
+  return res.json();
+}
+
+export async function fetchScanLayouts(scanId: number) {
+  const res = await apiFetch(`/api/scan/${scanId}/layouts`, withAuth());
+  if (!res.ok) throw new Error('Failed to fetch scan layouts');
+  return res.json();
+}

@@ -15,4 +15,12 @@ public class VirginTrendline {
     boolean support;                     // true = support trendline
     double priceAtCurrentBar;
     double distancePctFromCurrentPrice;
+
+    /** Aggregated score from all matching scenarios. Higher = more significant. */
+    @lombok.Builder.Default
+    private int score = 0;
+
+    /** Which scenarios contributed to this trendline's detection/scoring. */
+    @lombok.Builder.Default
+    private java.util.List<String> scenarioTags = new java.util.ArrayList<>();
 }

@@ -252,6 +252,55 @@ public class ElliottScreenerService {
         return true;
     }
 
+    public void regenerateLayouts(ElliottTradeSuggestion suggestion) throws Exception {
+        String symbol = suggestion.getSymbol();
+        var instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+        if (instrument == null) throw new IllegalArgumentException("Instrument not found: " + symbol);
+
+        List<String> tfs = Arrays.stream(suggestion.getAllTimeframes().split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+
+        Map<String, List<ZigZagPoint>> pivotsByTf = new LinkedHashMap<>();
+        Map<String, MarketStructureData> structureByTf = new LinkedHashMap<>();
+        Map<String, BarSeries> seriesByTf = new LinkedHashMap<>();
+        List<String> orderedTfs = new ArrayList<>();
+
+        for (String tf : tfs) {
+            Interval interval = mapTimeframeToInterval(tf);
+            if (interval == null) { log.warn("[regenerateLayouts] Unknown tf {}", tf); continue; }
+            try {
+                List<ZigZagPoint> pivots = zigzagService.getOrComputePivots(symbol, instrument, interval);
+                BarSeries series = zigzagService.getBarSeries(symbol, instrument, interval);
+                List<ZigZagPoint> pivotsWithLtp = zigzagService.withLtpPivot(pivots, series);
+                MarketStructureData msd = marketStructureService.analyse(pivotsWithLtp, tf);
+                pivotsByTf.put(tf, pivotsWithLtp);
+                structureByTf.put(tf, msd);
+                seriesByTf.put(tf, series);
+                orderedTfs.add(tf);
+            } catch (Exception e) {
+                log.warn("[regenerateLayouts] TF {} failed for {}: {}", tf, symbol, e.getMessage());
+            }
+        }
+
+        if (orderedTfs.isEmpty()) throw new IllegalStateException("No valid timeframes for " + symbol);
+
+        String primaryTf = suggestion.getPrimaryTimeframe() != null
+                ? suggestion.getPrimaryTimeframe()
+                : orderedTfs.get(orderedTfs.size() - 1);
+
+        AdvancedElliottAnalysisResult advResult = advancedElliottService.analyze(
+                seriesByTf, pivotsByTf, structureByTf, orderedTfs, symbol, primaryTf);
+
+        Map<String, ElliottWaveAnalysis> analysisByTf = new LinkedHashMap<>();
+        for (String tf : orderedTfs) {
+            analysisByTf.put(tf, advResult.getWaveAnalysis());
+        }
+
+        layoutService.generateAndSaveLayouts(suggestion, analysisByTf, seriesByTf);
+    }
+
     private String deriveDirection(FindingResponse finding) {
         String text = "";
         if (finding.getAnticipatoryEntry() != null && finding.getAnticipatoryEntry().getTriggerDescription() != null) {
@@ -270,7 +319,7 @@ public class ElliottScreenerService {
         return null;
     }
 
-    static Interval mapTimeframeToInterval(String tf) {
+    public static Interval mapTimeframeToInterval(String tf) {
         if (tf == null) return null;
         return switch (tf.toLowerCase().trim()) {
             case "weekly", "1w", "week" -> Interval.Week;
