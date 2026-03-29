@@ -127,16 +127,21 @@ public class ElliottScreenerController {
                 return ResponseEntity.notFound().build();
             }
 
-            // If allTimeframes is null/blank, fall back to the screener's timeframes
-            if (suggestion.getAllTimeframes() == null || suggestion.getAllTimeframes().isBlank()) {
+            // If allTimeframes or primaryTimeframe is null/blank, fall back to the screener's timeframes
+            if (suggestion.getAllTimeframes() == null || suggestion.getAllTimeframes().isBlank()
+                    || suggestion.getPrimaryTimeframe() == null || suggestion.getPrimaryTimeframe().isBlank()) {
                 var screener = screenerRepository.findById(suggestion.getScreenerId()).orElse(null);
                 if (screener != null) {
-                    suggestion.setAllTimeframes(screener.getTimeframes());
-                    suggestion.setPrimaryTimeframe(
-                        screener.getPrimaryTimeframe() != null
-                            ? screener.getPrimaryTimeframe()
-                            : screener.getTimeframes().split(",")[0].trim()
-                    );
+                    if (suggestion.getAllTimeframes() == null || suggestion.getAllTimeframes().isBlank()) {
+                        suggestion.setAllTimeframes(screener.getTimeframes());
+                    }
+                    if (suggestion.getPrimaryTimeframe() == null || suggestion.getPrimaryTimeframe().isBlank()) {
+                        suggestion.setPrimaryTimeframe(
+                            screener.getPrimaryTimeframe() != null
+                                ? screener.getPrimaryTimeframe()
+                                : screener.getTimeframes().split(",")[0].trim()
+                        );
+                    }
                 }
             }
 

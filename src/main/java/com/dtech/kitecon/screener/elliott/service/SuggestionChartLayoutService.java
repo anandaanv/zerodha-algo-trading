@@ -98,11 +98,13 @@ public class SuggestionChartLayoutService {
 
         List<Map<String, Object>> hlines = new ArrayList<>();
 
-        if (!isPrimaryTf || series == null || series.getBarCount() == 0) {
+        if (!isPrimaryTf) {
             return hlines;
         }
 
-        long timeAnchor = series.getBar(series.getBarCount() - 1).getEndTime().getEpochSecond();
+        long timeAnchor = (series != null && series.getBarCount() > 0)
+                ? series.getBar(series.getBarCount() - 1).getEndTime().getEpochSecond()
+                : java.time.Instant.now().getEpochSecond();
 
         // Entry zone
         String entryZoneStr = suggestion.getEntryZone();
