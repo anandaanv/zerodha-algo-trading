@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 
 interface ScanResult {
   symbol?: string;
@@ -168,24 +169,54 @@ export default function ScanResultCard({ scan }: Props) {
 
       {/* Human readable */}
       {showHuman && result?.humanReadable && (
-        <pre style={{
+        <div style={{
           marginTop: 10, background: '#0d1117', border: '1px solid #333',
-          borderRadius: 4, padding: 10, fontSize: 11, color: '#c9d1d9',
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 300, overflow: 'auto',
+          borderRadius: 4, padding: '10px 16px', fontSize: 13, color: '#c9d1d9',
+          maxHeight: 400, overflow: 'auto', lineHeight: 1.6,
         }}>
-          {result.humanReadable}
-        </pre>
+          <ReactMarkdown
+            components={{
+              h1: ({children}) => <h1 style={{ color: '#90caf9', fontSize: 16, marginBottom: 8 }}>{children}</h1>,
+              h2: ({children}) => <h2 style={{ color: '#80cbc4', fontSize: 14, marginBottom: 6, marginTop: 14 }}>{children}</h2>,
+              h3: ({children}) => <h3 style={{ color: '#a5d6a7', fontSize: 13, marginBottom: 4, marginTop: 10 }}>{children}</h3>,
+              p: ({children}) => <p style={{ margin: '4px 0', color: '#c9d1d9' }}>{children}</p>,
+              strong: ({children}) => <strong style={{ color: '#ffd54f' }}>{children}</strong>,
+              li: ({children}) => <li style={{ marginBottom: 2, color: '#c9d1d9' }}>{children}</li>,
+              ul: ({children}) => <ul style={{ paddingLeft: 20, margin: '4px 0' }}>{children}</ul>,
+              ol: ({children}) => <ol style={{ paddingLeft: 20, margin: '4px 0' }}>{children}</ol>,
+              code: ({children}) => <code style={{ background: '#1a2a3a', padding: '1px 4px', borderRadius: 3, fontSize: 12, color: '#90caf9' }}>{children}</code>,
+              hr: () => <hr style={{ border: 'none', borderTop: '1px solid #333', margin: '8px 0' }} />,
+            }}
+          >
+            {result.humanReadable}
+          </ReactMarkdown>
+        </div>
       )}
 
       {/* Raw AI response */}
       {showRaw && result?.aiResponse && (
-        <pre style={{
+        <div style={{
           marginTop: 10, background: '#0d1117', border: '1px solid #333',
-          borderRadius: 4, padding: 10, fontSize: 11, color: '#8b949e',
-          whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 300, overflow: 'auto',
+          borderRadius: 4, padding: '10px 16px', fontSize: 13, color: '#8b949e',
+          maxHeight: 400, overflow: 'auto', lineHeight: 1.6,
         }}>
-          {result.aiResponse}
-        </pre>
+          <ReactMarkdown
+            components={{
+              h1: ({children}) => <h1 style={{ color: '#7986cb', fontSize: 16, marginBottom: 8 }}>{children}</h1>,
+              h2: ({children}) => <h2 style={{ color: '#9575cd', fontSize: 14, marginBottom: 6, marginTop: 14 }}>{children}</h2>,
+              h3: ({children}) => <h3 style={{ color: '#ba68c8', fontSize: 13, marginBottom: 4, marginTop: 10 }}>{children}</h3>,
+              p: ({children}) => <p style={{ margin: '4px 0', color: '#8b949e' }}>{children}</p>,
+              strong: ({children}) => <strong style={{ color: '#ce93d8' }}>{children}</strong>,
+              li: ({children}) => <li style={{ marginBottom: 2, color: '#8b949e' }}>{children}</li>,
+              ul: ({children}) => <ul style={{ paddingLeft: 20, margin: '4px 0' }}>{children}</ul>,
+              ol: ({children}) => <ol style={{ paddingLeft: 20, margin: '4px 0' }}>{children}</ol>,
+              code: ({children}) => <code style={{ background: '#1a1a3a', padding: '1px 4px', borderRadius: 3, fontSize: 12, color: '#7986cb' }}>{children}</code>,
+              hr: () => <hr style={{ border: 'none', borderTop: '1px solid #333', margin: '8px 0' }} />,
+            }}
+          >
+            {result.aiResponse}
+          </ReactMarkdown>
+        </div>
       )}
     </div>
   );

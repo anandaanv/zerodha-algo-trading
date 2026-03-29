@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { fetchScanLayouts } from '../../elliottScreener/api';
+import { fetchIntervalMapping } from '../../legacy-chart/proApi';
 import SingleChartPanel from '../../legacy-chart/SingleChartPanel';
 
 interface Layout {
@@ -17,15 +18,20 @@ export default function ScanChartView() {
   const symbol = searchParams.get('symbol') || '';
 
   const [layouts, setLayouts] = useState<Layout[]>([]);
+  const [mapping, setMapping] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!scanId) return;
-    fetchScanLayouts(Number(scanId))
-      .then(data => {
-        setLayouts(data);
+    Promise.all([
+      fetchScanLayouts(Number(scanId)),
+      fetchIntervalMapping(),
+    ])
+      .then(([layoutData, mappingData]) => {
+        setLayouts(layoutData);
+        setMapping(mappingData);
         setActiveTab(0);
         setLoading(false);
       })
@@ -76,7 +82,9 @@ export default function ScanChartView() {
         <SingleChartPanel
           key={activeLayout.timeframe}
           symbol={symbol}
-          interval={activeLayout.timeframe}
+          timeframe={activeLayout.timeframe}
+          mapping={mapping}
+          showIndicators={false}
           overlaysOverride={activeLayout.overlays}
           readonly={true}
         />

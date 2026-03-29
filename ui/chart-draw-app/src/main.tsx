@@ -67,7 +67,7 @@ root.render(
         <Route
           path="/chart"
           element={
-            <ProtectedRoute requiredRole="USER">
+            <ProtectedRoute requiredRole="ADMIN">
               <TVChartApp />
             </ProtectedRoute>
           }
@@ -75,7 +75,7 @@ root.render(
         <Route
           path="/prompt-builder"
           element={
-            <ProtectedRoute requiredRole="USER">
+            <ProtectedRoute requiredRole="ADMIN">
               <PromptBuilderPage />
             </ProtectedRoute>
           }
@@ -83,7 +83,7 @@ root.render(
         <Route
           path="/copilot"
           element={
-            <ProtectedRoute requiredRole="USER">
+            <ProtectedRoute requiredRole="ADMIN">
               <CopilotDashboard />
             </ProtectedRoute>
           }
@@ -91,7 +91,7 @@ root.render(
         <Route
           path="/skills"
           element={
-            <ProtectedRoute requiredRole="USER">
+            <ProtectedRoute requiredRole="ADMIN">
               <SkillBuilderPage />
             </ProtectedRoute>
           }
@@ -127,7 +127,7 @@ root.render(
             key={r.path}
             path={r.path}
             element={
-              <ProtectedRoute requiredRole="USER">{r.element}</ProtectedRoute>
+              <ProtectedRoute requiredRole="ADMIN">{r.element}</ProtectedRoute>
             }
           />
         ))}
