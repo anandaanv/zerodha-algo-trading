@@ -44,4 +44,20 @@ public class ScanGroupService {
     public List<ScanGroupMember> getMembers(Long groupId) {
         return memberRepository.findByGroupId(groupId);
     }
+
+    public boolean userHasScreenerAccess(Long userId) {
+        return memberRepository.findByUserId(userId).stream()
+                .map(m -> groupRepository.findById(m.getGroupId()))
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .anyMatch(ScanGroup::isScreenerAccess);
+    }
+
+    public ScanGroup updateGroup(Long groupId, Boolean screenerAccess, Integer maxScansPerHour) {
+        ScanGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new IllegalArgumentException("Group not found: " + groupId));
+        if (screenerAccess != null) group.setScreenerAccess(screenerAccess);
+        if (maxScansPerHour != null) group.setMaxScansPerHour(maxScansPerHour);
+        return groupRepository.save(group);
+    }
 }

@@ -7,8 +7,10 @@ import com.dtech.algo.screener.db.ScreenerRepository;
 import com.dtech.algo.screener.domain.Screener;
 import com.dtech.algo.screener.web.dto.ScreenerResponse;
 import com.dtech.algo.screener.web.dto.ScreenerUpsertRequest;
+import com.dtech.kitecon.screener.service.ScreenerAccessService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,9 +29,11 @@ public class ScreenerController {
     private final ScreenerService screenerService;
     private final com.dtech.algo.screener.ScreenerRegistryService screenerRegistryService;
     private final com.dtech.algo.screener.service.ScreenerManagerService screenerManagerService;
+    private final ScreenerAccessService screenerAccessService;
 
     @GetMapping
-    public List<ScreenerResponse> list() {
+    public List<ScreenerResponse> list(Authentication auth) {
+        screenerAccessService.requireScreenerAccess(auth);
         return screenerRepository.findAll().stream()
                 .map(e -> Screener.fromEntity(e, objectMapper))
                 .map(d -> ScreenerResponse.fromDomain(d, objectMapper))
@@ -37,7 +41,8 @@ public class ScreenerController {
     }
 
     @GetMapping("/{id}")
-    public ScreenerResponse get(@PathVariable long id) {
+    public ScreenerResponse get(@PathVariable long id, Authentication auth) {
+        screenerAccessService.requireScreenerAccess(auth);
         ScreenerEntity e = screenerRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + id));
         Screener d = Screener.fromEntity(e, objectMapper);
@@ -45,7 +50,8 @@ public class ScreenerController {
     }
 
     @PostMapping
-    public ScreenerResponse create(@RequestBody ScreenerUpsertRequest request) {
+    public ScreenerResponse create(@RequestBody ScreenerUpsertRequest request, Authentication auth) {
+        screenerAccessService.requireScreenerAccess(auth);
         Screener domain = buildDomainFromRequest(request, null);
         ScreenerEntity toSave = domain.toEntity(objectMapper);
         toSave.setDirty(true);
@@ -55,7 +61,8 @@ public class ScreenerController {
     }
 
     @PutMapping("/{id}")
-    public ScreenerResponse update(@PathVariable long id, @RequestBody ScreenerUpsertRequest request) {
+    public ScreenerResponse update(@PathVariable long id, @RequestBody ScreenerUpsertRequest request, Authentication auth) {
+        screenerAccessService.requireScreenerAccess(auth);
         ScreenerEntity existing = screenerRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Screener not found: " + id));
         Screener existingDomain = Screener.fromEntity(existing, objectMapper);
@@ -87,7 +94,9 @@ public class ScreenerController {
     public void run(@PathVariable long id,
                     @RequestParam String symbol,
                     @RequestParam int nowIndex,
-                    @RequestParam(required = false) String timeframe) throws Exception {
+                    @RequestParam(required = false) String timeframe,
+                    Authentication auth) throws Exception {
+        screenerAccessService.requireScreenerAccess(auth);
         screenerService.run(id, symbol, nowIndex, timeframe, null, 0L);
     }
 
@@ -95,7 +104,8 @@ public class ScreenerController {
      * Creates subscriptions for a screener based on its scheduling configuration.
      */
     @PostMapping("/{id}/subscribe")
-    public void createSubscriptions(@PathVariable long id) {
+    public void createSubscriptions(@PathVariable long id, Authentication auth) {
+        screenerAccessService.requireScreenerAccess(auth);
         screenerManagerService.createSubscriptionsForScreener(id);
     }
 

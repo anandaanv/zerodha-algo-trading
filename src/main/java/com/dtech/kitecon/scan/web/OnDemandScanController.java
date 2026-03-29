@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -80,6 +81,7 @@ public class OnDemandScanController {
     // --- Group management endpoints (admin) ---
 
     @PostMapping("/groups")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> createGroup(Authentication auth, @RequestBody GroupRequest request) {
         var group = groupService.createGroup(request.getName(), request.getMaxScansPerHour());
         return ResponseEntity.ok(group);
@@ -91,12 +93,14 @@ public class OnDemandScanController {
     }
 
     @PostMapping("/groups/{groupId}/members")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> addMember(@PathVariable Long groupId, @RequestBody MemberRequest request, Authentication auth) {
         groupService.addMember(groupId, request.getUserId());
         return ResponseEntity.ok(Map.of("status", "added"));
     }
 
     @DeleteMapping("/groups/{groupId}/members/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> removeMember(@PathVariable Long groupId, @PathVariable Long userId, Authentication auth) {
         groupService.removeMember(groupId, userId);
         return ResponseEntity.ok(Map.of("status", "removed"));
@@ -105,6 +109,13 @@ public class OnDemandScanController {
     @GetMapping("/groups/{groupId}/members")
     public ResponseEntity<?> getMembers(@PathVariable Long groupId, Authentication auth) {
         return ResponseEntity.ok(groupService.getMembers(groupId));
+    }
+
+    @PatchMapping("/groups/{groupId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> updateGroup(@PathVariable Long groupId, @RequestBody GroupUpdateRequest request, Authentication auth) {
+        var group = groupService.updateGroup(groupId, request.getScreenerAccess(), request.getMaxScansPerHour());
+        return ResponseEntity.ok(group);
     }
 
     // --- Helpers ---
@@ -155,5 +166,11 @@ public class OnDemandScanController {
     @lombok.Data
     public static class MemberRequest {
         private Long userId;
+    }
+
+    @lombok.Data
+    public static class GroupUpdateRequest {
+        private Boolean screenerAccess;
+        private Integer maxScansPerHour;
     }
 }

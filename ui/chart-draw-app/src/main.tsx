@@ -38,6 +38,9 @@ import ScanChartView from "./scan/pages/ScanChartView";
 // Kite Config Management
 import KiteConfigPage from './admin/kiteConfig/KiteConfigPage';
 
+// Group Management
+import GroupManagementPage from './admin/groups/GroupManagementPage';
+
 
 const root = createRoot(document.getElementById("root")!);
 root.render(
@@ -181,6 +184,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="ADMIN">
               <KiteConfigPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/groups"
+          element={
+            <ProtectedRoute requiredRole="ADMIN">
+              <GroupManagementPage />
             </ProtectedRoute>
           }
         />

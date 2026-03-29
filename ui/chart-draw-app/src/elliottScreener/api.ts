@@ -207,3 +207,15 @@ export async function fetchScanLayouts(scanId: number) {
   if (!res.ok) throw new Error('Failed to fetch scan layouts');
   return res.json();
 }
+
+export interface IndexInfo {
+  name: string;
+  displayName: string;
+  symbolCount: number;
+}
+
+export async function fetchIndices(): Promise<IndexInfo[]> {
+  const res = await apiFetch('/api/indices', withAuth());
+  if (!res.ok) return [];
+  return res.json();
+}
