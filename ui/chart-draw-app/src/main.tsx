@@ -29,6 +29,12 @@ import ScreenerDetailPage from "./screener/pages/ScreenerDetailPage";
 // Trades routes
 import { tradesRoutes } from "./trades";
 
+// Elliott Screener
+import ElliottScreenerPage from "./elliottScreener/pages/ElliottScreenerPage";
+import SuggestionChartView from "./elliottScreener/pages/SuggestionChartView";
+import ScanPage from "./scan/pages/ScanPage";
+import ScanChartView from "./scan/pages/ScanChartView";
+
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -61,7 +67,7 @@ root.render(
         <Route
           path="/chart"
           element={
-            <ProtectedRoute requiredRole="USER">
+            <ProtectedRoute requiredRole="ADMIN">
               <TVChartApp />
             </ProtectedRoute>
           }
@@ -69,7 +75,7 @@ root.render(
         <Route
           path="/prompt-builder"
           element={
-            <ProtectedRoute requiredRole="USER">
+            <ProtectedRoute requiredRole="ADMIN">
               <PromptBuilderPage />
             </ProtectedRoute>
           }
@@ -77,7 +83,7 @@ root.render(
         <Route
           path="/copilot"
           element={
-            <ProtectedRoute requiredRole="USER">
+            <ProtectedRoute requiredRole="ADMIN">
               <CopilotDashboard />
             </ProtectedRoute>
           }
@@ -85,7 +91,7 @@ root.render(
         <Route
           path="/skills"
           element={
-            <ProtectedRoute requiredRole="USER">
+            <ProtectedRoute requiredRole="ADMIN">
               <SkillBuilderPage />
             </ProtectedRoute>
           }
@@ -121,7 +127,7 @@ root.render(
             key={r.path}
             path={r.path}
             element={
-              <ProtectedRoute requiredRole="USER">{r.element}</ProtectedRoute>
+              <ProtectedRoute requiredRole="ADMIN">{r.element}</ProtectedRoute>
             }
           />
         ))}
@@ -131,6 +137,38 @@ root.render(
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/elliott-screener"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <ElliottScreenerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/suggestion-chart/:suggestionId"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <SuggestionChartView />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/scan"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <ScanPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/scan-chart/:scanId"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <ScanChartView />
             </ProtectedRoute>
           }
         />

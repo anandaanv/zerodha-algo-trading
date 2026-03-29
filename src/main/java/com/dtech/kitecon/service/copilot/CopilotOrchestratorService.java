@@ -134,8 +134,7 @@ public class CopilotOrchestratorService {
         boolean valid = false;
 
         try {
-            String rawResponse = aiService.call(userId, dummyContext,
-                    "Determine which skills to invoke for this investigation.");
+            String rawResponse = aiService.call(userId, instructions, dummyContext);
 
             // Strip markdown fences
             String json = rawResponse.trim();
@@ -283,6 +282,292 @@ public class CopilotOrchestratorService {
         }
 
         return sb.toString();
+    }
+
+    // ─── Scenario Evaluator (replaces 33-skill scan) ──────────────────────────
+
+    /**
+     * Build the single prompt that replaces the entire 33-skill scan phase.
+     *
+     * The Elliott Wave engine (Layers 4–7) has already:
+     * - Detected all chart patterns (BUILDING / WATCHING / CONFIRMED)
+     * - Generated all valid wave counts with Fibonacci scoring
+     * - Grouped them into directional scenarios with targets, invalidation, and evidence
+     *
+     * The AI's job here is NOT detection — it's evaluation and selection:
+     * 1. Rank the pre-computed scenarios by plausibility
+     * 2. Select the most likely scenario given the current context
+     * 3. Identify the most actionable setup (if any)
+     * 4. Return a FINDING with trade parameters
+     */
+    public String buildScenarioEvaluatorInstructions() {
+        return """
+            You are an expert Elliott Wave analyst and trader.
+            The market structure analysis engine has already computed ALL possible wave scenarios
+            with Fibonacci targets, invalidation levels, and supporting/contradicting evidence.
+
+            YOUR TASK:
+            1. Review all pre-computed scenarios below
+            2. Rank them by plausibility based on the evidence provided
+            3. Select the SINGLE most likely scenario
+            4. Identify the best trade setup within that scenario (if one exists now)
+            5. Return a FINDING response
+
+            CRITICAL RULES:
+            - Do NOT re-detect patterns or re-count waves — that is already done
+            - The scenarios contain ALL possibilities — your job is to CONFIRM one, not invent new ones
+            - If the pre-computed evidence is ambiguous, say so in confidenceLayers
+            - If no trade setup is actionable right now, say so clearly
+            - Always reference which scenario and hypothesis ID you are confirming
+            - The INDICATOR SNAPSHOT section (appended to the analysis data) shows actual RSI/MACD/EWO/
+              Bollinger/ADX/Volume readings at the last 1-2 pivots per timeframe. Use these to assess
+              momentum direction, divergences, and whether indicators confirm the wave structure before
+              selecting and sizing the best trade.
+
+            Return a JSON FINDING response:
+            {
+              "type": "FINDING",
+              "hypothesisLabel": "short label e.g. Wave 4 Triangle → Wave 5 Launch",
+              "hypothesisDescription": "detailed description of the confirmed scenario",
+              "waveContext": "which scenario/hypothesis you confirmed and why",
+              "pattern": "the key pattern driving the setup (or null)",
+              "currentStage": "WATCHING | ENTRY_READY | INVALIDATED",
+              "confidenceLayers": {
+                "waveStructure": "pass | fail | warning",
+                "patternConfluence": "pass | fail | warning",
+                "indicatorAlignment": "pass | fail | warning",
+                "crossTfAlignment": "pass | fail | warning",
+                "indicatorContext": "brief summary of RSI/MACD/EWO state and whether it confirms or contradicts the count"
+              },
+              "anticipatoryEntry": {
+                "direction": "LONG | SHORT",
+                "entryZone": "price or range",
+                "stopLoss": "price",
+                "target1": "price",
+                "target2": "price (optional)",
+                "rationale": "why this entry"
+              },
+              "confirmationEntry": {
+                "trigger": "what must happen to confirm full entry",
+                "entryZone": "price on breakout",
+                "stopLoss": "price",
+                "target1": "price"
+              },
+              "invalidationConditions": ["list of conditions that kill this hypothesis"],
+              "anomalyFlags": ["any ambiguities, conflicting signals, or warnings"],
+              "reasoning": "overall reasoning for your selection"
+            }
+            """;
+    }
+
+    public String buildScenarioEvaluatorData(CopilotInvestigation investigation) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("=== SYMBOL: ").append(investigation.getSymbol()).append(" ===\n");
+        sb.append("=== TIMEFRAMES: ").append(investigation.getTimeframesActive()).append(" ===\n\n");
+
+        if (investigation.getElliottAnalysisData() != null && !investigation.getElliottAnalysisData().isBlank()) {
+            sb.append(investigation.getElliottAnalysisData()).append("\n");
+        } else {
+            sb.append("⚠ No pre-computed Elliott analysis available. Use market structure below.\n\n");
+        }
+
+        if (investigation.getMarketStructureData() != null && !investigation.getMarketStructureData().isBlank()) {
+            sb.append("=== MARKET STRUCTURE (Dow Theory) ===\n");
+            sb.append(investigation.getMarketStructureData()).append("\n");
+        }
+
+        if (investigation.getDrawingsData() != null && !investigation.getDrawingsData().isBlank()) {
+            sb.append("=== EXPERT ANNOTATIONS ===\n");
+            sb.append("The expert has drawn the following on the chart. Give these maximum weight:\n");
+            sb.append(investigation.getDrawingsData()).append("\n");
+        }
+
+        if (Boolean.TRUE.equals(investigation.getWaveCountConfirmed())) {
+            sb.append("=== EXPERT CONFIRMATION ===\n");
+            sb.append("The expert has confirmed the wave count. Do not contradict it.\n\n");
+        }
+
+        return sb.toString();
+    }
+
+    // ─── Phase 1: Scan prompts ─────────────────────────────────────────────────
+
+    /**
+     * Build the system prompt for a Phase 1 scan skill invocation.
+     * Instructs AI to return OBSERVATION type — detect only, no trade proposals.
+     */
+    public String buildScanPrompt(String skillPrompt, CopilotInvestigation investigation) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("""
+            You are a specialised trading skill executing in SCAN MODE.
+            Your ONLY job is to observe and report. Do NOT propose trades or hypotheses.
+
+            SCAN FOR BOTH:
+            1. Patterns currently FORMING (still developing, not yet complete)
+            2. Patterns RECENTLY COMPLETED that may still have an active trade
+               (e.g., a double bottom that already broke the neckline — the pattern is confirmed
+               and a long trade may be running. Report it with the appropriate stage.)
+
+            Scan the ENTIRE pivot history provided, not just the most recent few pivots.
+            Patterns may have started forming 10-20+ pivots ago but are still relevant.
+
+            Return a JSON response with type "OBSERVATION":
+            {
+              "type": "OBSERVATION",
+              "patternDetected": true/false,
+              "patternType": "triangle",
+              "confidence": "HIGH" | "MEDIUM" | "LOW",
+              "structuralDetails": "description of what was observed",
+              "stage": "current stage or null",
+              "keyLevels": [{"price": 22450, "label": "E point projection"}],
+              "drawingPoints": [{"time": 1711234567, "price": 22100, "label": "A"}, ...],
+              "drawingType": "triangle_pattern",
+              "timeframe": "1h",
+              "contradictions": ["list of contradictions found"],
+              "reasoning": "brief explanation"
+            }
+
+            IMPORTANT:
+            - drawingPoints must be chronological time+price coordinates for drawing the pattern on chart
+            - Use UNIX TIMESTAMPS in seconds (epoch seconds) for the "time" field — take them directly
+              from the pivot timestamps provided in the data
+            - drawingType must be one of: triangle_pattern, elliott_impulse_wave, elliott_correction,
+              elliott_triangle_wave, head_and_shoulders, parallel_channel, fib_retracement,
+              xabcd_pattern, trend_line
+            - If pattern NOT present, return patternDetected=false with empty drawingPoints
+            - Do NOT suggest entries, SL, TP, or trade setups
+            - Report contradictions honestly
+
+            """);
+
+        sb.append(skillPrompt).append("\n\n");
+
+        appendInvestigationContext(sb, investigation);
+
+        return sb.toString();
+    }
+
+    // ─── Phase 2: Reasoning prompts ──────────────────────────────────────────
+
+    /**
+     * Build the prompt for a Phase 2 reasoning skill invocation.
+     * Input is observations summary, not raw market data.
+     */
+    public String buildReasoningPrompt(String skillPrompt, CopilotInvestigation investigation,
+                                        String observationsSummary, String drawingsJson,
+                                        String scenarioText, String priorHypothesesJson) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("""
+            You are a specialised trading skill executing analysis on scan observations.
+            Your job is to cross-correlate observations and determine if a tradeable setup exists.
+
+            You must return a JSON response matching exactly ONE of these types:
+            FINDING | NEEDS_EXPERT | INVALIDATED
+
+            Always include a "reasoning" field explaining your conclusion.
+
+            """);
+
+        sb.append(skillPrompt).append("\n\n");
+
+        if (investigation.getElliottAnalysisData() != null && !investigation.getElliottAnalysisData().isBlank()) {
+            sb.append("=== PRE-COMPUTED ELLIOTT ANALYSIS ===\n");
+            sb.append(investigation.getElliottAnalysisData()).append("\n");
+        }
+
+        if (investigation.getMarketStructureData() != null && !investigation.getMarketStructureData().isBlank()) {
+            sb.append("=== MARKET STRUCTURE (Dow Theory) ===\n");
+            sb.append(investigation.getMarketStructureData()).append("\n");
+        }
+
+        if (observationsSummary != null && !observationsSummary.isBlank()) {
+            sb.append(observationsSummary).append("\n");
+        }
+
+        if (drawingsJson != null && !drawingsJson.isBlank()) {
+            sb.append("=== EXPERT DRAWINGS ===\n");
+            sb.append(drawingsJson).append("\n\n");
+        }
+
+        if (scenarioText != null && !scenarioText.isBlank()) {
+            sb.append("=== USER SCENARIO ===\n");
+            sb.append(scenarioText).append("\n\n");
+        }
+
+        if (priorHypothesesJson != null && !priorHypothesesJson.isBlank()) {
+            sb.append("=== PRIOR HYPOTHESES ===\n");
+            sb.append(priorHypothesesJson).append("\n\n");
+        }
+
+        sb.append("=== INVESTIGATION CONTEXT ===\n");
+        sb.append("Symbol: ").append(investigation.getSymbol()).append("\n");
+        sb.append("Timeframes: ").append(investigation.getTimeframesActive()).append("\n");
+
+        return sb.toString();
+    }
+
+    /**
+     * Build the orchestrator prompt for Phase 2 — selects which reasoning skills to invoke.
+     */
+    public String buildReasoningOrchestratorPrompt(Long userId,
+                                                     List<CopilotSkill> reasoningSkills,
+                                                     CopilotInvestigation investigation,
+                                                     String observationsSummary) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(getInstructionsForUser(userId)).append("\n");
+
+        sb.append("=== AVAILABLE REASONING SKILLS ===\n");
+        for (CopilotSkill skill : reasoningSkills) {
+            sb.append(String.format("- %s (key: %s): %s\n",
+                    skill.getName(), skill.getSkillKey(), skill.getDescription()));
+        }
+
+        sb.append("\n").append(observationsSummary).append("\n");
+
+        if (investigation.getElliottAnalysisData() != null && !investigation.getElliottAnalysisData().isBlank()) {
+            sb.append("=== PRE-COMPUTED ELLIOTT ANALYSIS ===\n");
+            sb.append(investigation.getElliottAnalysisData()).append("\n");
+        }
+
+        if (investigation.getMarketStructureData() != null && !investigation.getMarketStructureData().isBlank()) {
+            sb.append("=== MARKET STRUCTURE (Dow Theory) ===\n");
+            sb.append(investigation.getMarketStructureData()).append("\n");
+        }
+
+        sb.append("=== INVESTIGATION CONTEXT ===\n");
+        sb.append("Symbol: ").append(investigation.getSymbol()).append("\n");
+        sb.append("Timeframes: ").append(investigation.getTimeframesActive()).append("\n");
+
+        return sb.toString();
+    }
+
+    // ─── Shared helpers ──────────────────────────────────────────────────────
+
+    private void appendInvestigationContext(StringBuilder sb, CopilotInvestigation investigation) {
+        sb.append("=== INVESTIGATION CONTEXT ===\n");
+        sb.append("Symbol: ").append(investigation.getSymbol()).append("\n");
+        sb.append("Timeframes: ").append(investigation.getTimeframesActive()).append("\n");
+        sb.append("Wave count confirmed: ").append(investigation.getWaveCountConfirmed()).append("\n");
+
+        if (investigation.getMarketStructureData() != null && !investigation.getMarketStructureData().isBlank()) {
+            sb.append("\n--- MARKET STRUCTURE ---\n");
+            sb.append(investigation.getMarketStructureData()).append("\n");
+        }
+
+        if (investigation.getDrawingsData() != null && !investigation.getDrawingsData().isBlank()) {
+            sb.append("\n--- EXPERT DRAWINGS ---\n");
+            sb.append(investigation.getDrawingsData()).append("\n");
+        }
+
+        if (investigation.getZigzagData() != null && !investigation.getZigzagData().isBlank()) {
+            sb.append("\n--- ZIGZAG PIVOTS ---\n");
+            sb.append(investigation.getZigzagData()).append("\n");
+        }
+
+        if (investigation.getElliottAnalysisData() != null && !investigation.getElliottAnalysisData().isBlank()) {
+            sb.append("\n--- ELLIOTT WAVE SCENARIOS (pre-computed) ---\n");
+            sb.append(investigation.getElliottAnalysisData()).append("\n");
+        }
     }
 
     // ─── Cycle detection ──────────────────────────────────────────────────────

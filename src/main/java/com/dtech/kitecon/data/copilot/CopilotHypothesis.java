@@ -31,7 +31,7 @@ public class CopilotHypothesis {
     private String symbol;
 
     /** Short label, e.g. "Wave 4 Triangle" */
-    @Column(nullable = false, length = 200)
+    @Column(nullable = false, length = 500)
     private String label;
 
     @Lob
@@ -39,7 +39,8 @@ public class CopilotHypothesis {
     private String description;
 
     /** wave_1 | wave_2 | wave_3 | wave_4 | wave_5 | wave_a | wave_b | wave_c */
-    @Column(name = "wave_context", length = 50)
+    @Lob
+    @Column(name = "wave_context", columnDefinition = "MEDIUMTEXT")
     private String waveContext;
 
     /** triangle | double_bottom | double_top | flat_abc | zigzag | flag | wedge | complex_wxyz */

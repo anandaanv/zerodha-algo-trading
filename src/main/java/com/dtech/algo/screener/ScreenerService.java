@@ -89,9 +89,9 @@ public class ScreenerService {
             tail = new OpenAIUOW(screener.getPromptJson(), null, runLogService, chartAnalysisService);
         }
 
-        UnitOfWork chain = hasOpenAI ? tail : null;
-        UnitOfWork head = new ScreenerUOW(kotlinScriptExecutor, entity.getScript(), chain, runLogService, script);
-        head.run(ctx);
+//        UnitOfWork chain = hasOpenAI ? tail : null;
+//        UnitOfWork head = new ScreenerUOW(kotlinScriptExecutor, entity.getScript(), chain, runLogService, script);
+//        head.run(ctx);
     }
 
     private OpenAIUOW getOpenAIUOW(Screener screener, UnitOfWork next) {

@@ -5,6 +5,8 @@ import com.dtech.kitecon.service.copilot.dto.MarketStructureData;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint.PivotType;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint.StructureLabel;
+import com.dtech.kitecon.service.copilot.dto.TrendSegment;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -22,6 +24,7 @@ import java.util.List;
  * This data replaces raw OHLCV in AI prompts. AI receives rich structural
  * context and can reason about Elliott Wave patterns without processing candles.
  */
+@Slf4j
 @Service
 public class MarketStructureService {
 
@@ -68,8 +71,17 @@ public class MarketStructureService {
         // Label lows: HL / LL
         labelLows(lows);
 
+        log.debug("[MarketStructure] {} — {} pivots ({} highs, {} lows) — last labels: {}",
+                timeframe, allLabelled.size(), highs.size(), lows.size(),
+                allLabelled.subList(Math.max(0, allLabelled.size() - 4), allLabelled.size())
+                        .stream().map(p -> p.getPivotType() + "(" + p.getStructureLabel() + ")")
+                        .toList());
+
         // Detect BOS and CHoCH events (modifies labels on the relevant points)
         detectStructureBreaks(allLabelled);
+
+        // Build coarse trend segments from labelled pivots (must run after detectStructureBreaks)
+        List<TrendSegment> trendSegments = buildTrendSegments(allLabelled);
 
         // Determine overall trend
         MarketStructureData.TrendDirection trend = deriveTrend(highs, lows);
@@ -99,6 +111,7 @@ public class MarketStructureService {
                 .prevSwingLow(prevLow)
                 .lastEventWasBOS(lastBOS)
                 .lastEventWasCHoCH(lastCHoCH)
+                .trendSegments(trendSegments)
                 .build();
     }
 
@@ -225,5 +238,85 @@ public class MarketStructureService {
             }
         }
         return count;
+    }
+
+    // ─── Trend segment building ───────────────────────────────────────────────
+
+    /**
+     * Groups the labeled swing points into coarse trend segments.
+     *
+     * A segment is a contiguous run of bullish labels (HH/HL/BOS_HIGH/CHOCH_HIGH → UPTREND)
+     * or bearish labels (LH/LL/BOS_LOW/CHOCH_LOW → DOWNTREND). Direction flips when the
+     * label stream changes polarity. Returns the last 6 segments (oldest first), with the
+     * last segment always marked ongoing=true.
+     *
+     * Must be called AFTER detectStructureBreaks() so BOS/CHoCH labels are set.
+     */
+    private List<TrendSegment> buildTrendSegments(List<MarketStructurePoint> allLabelled) {
+        List<TrendSegment> segments = new ArrayList<>();
+        List<MarketStructurePoint> currentPivots = new ArrayList<>();
+        TrendSegment.Direction currentDir = null;
+
+        for (MarketStructurePoint mp : allLabelled) {
+            StructureLabel lbl = mp.getStructureLabel();
+            if (lbl == StructureLabel.FIRST) continue;
+
+            TrendSegment.Direction pointDir = isBullishLabel(lbl)
+                    ? TrendSegment.Direction.UPTREND
+                    : TrendSegment.Direction.DOWNTREND;
+
+            if (currentDir == null) {
+                currentDir = pointDir;
+                currentPivots.add(mp);
+                continue;
+            }
+
+            if (pointDir != currentDir) {
+                // Direction flip — close the current segment
+                boolean endedByBOS = (lbl == StructureLabel.BOS_HIGH || lbl == StructureLabel.BOS_LOW);
+                TrendSegment seg = buildSegment(currentDir, currentPivots, false, endedByBOS);
+                if (seg != null) segments.add(seg);
+                currentDir = pointDir;
+                currentPivots = new ArrayList<>();
+            }
+            currentPivots.add(mp);
+        }
+
+        // Last segment is always ongoing
+        if (!currentPivots.isEmpty() && currentDir != null) {
+            TrendSegment seg = buildSegment(currentDir, currentPivots, true, false);
+            if (seg != null) segments.add(seg);
+        }
+
+        // Return last 6 segments
+        int start = Math.max(0, segments.size() - 6);
+        return new ArrayList<>(segments.subList(start, segments.size()));
+    }
+
+    private boolean isBullishLabel(StructureLabel lbl) {
+        return lbl == StructureLabel.HH || lbl == StructureLabel.HL
+                || lbl == StructureLabel.BOS_HIGH || lbl == StructureLabel.CHOCH_HIGH;
+    }
+
+    private TrendSegment buildSegment(TrendSegment.Direction direction,
+                                      List<MarketStructurePoint> pivots,
+                                      boolean ongoing, boolean endedByBOS) {
+        if (pivots.isEmpty()) return null;
+        MarketStructurePoint first = pivots.get(0);
+        MarketStructurePoint last  = pivots.get(pivots.size() - 1);
+        double startPrice = first.getPrice();
+        double endPrice   = last.getPrice();
+        double pct = startPrice > 0 ? (endPrice - startPrice) / startPrice * 100.0 : 0.0;
+        return TrendSegment.builder()
+                .direction(direction)
+                .startPrice(startPrice)
+                .startTime(first.getTimestamp())
+                .endPrice(endPrice)
+                .endTime(ongoing ? null : last.getTimestamp())
+                .ongoing(ongoing)
+                .pivotCount(pivots.size())
+                .priceChangePct(pct)
+                .endedByBOS(endedByBOS)
+                .build();
     }
 }

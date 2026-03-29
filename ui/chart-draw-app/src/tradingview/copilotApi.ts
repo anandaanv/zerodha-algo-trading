@@ -1,7 +1,9 @@
 import type {
-  CopilotSkill, CopilotActiveTrade,
+  CopilotSkill, CopilotActiveTrade, CopilotObservation,
   TriggerAnalysisResponse, DashboardResponse, BoardResponse, AiAssistResponse,
   OrchestratorConfig, OrchestratorValidateResult,
+  ScanResponse, ReasonResponse, ReasoningRequest, AdvancedElliottResult,
+  VerifiedElliottResult,
 } from './copilotTypes';
 
 const BASE = '/api';
@@ -37,6 +39,30 @@ export async function triggerAnalysis(
     method: 'POST',
     body: JSON.stringify({ layoutId, symbol, drawingsJson, timeframes, force }),
   });
+}
+
+export async function scanAnalysis(
+  layoutId: number,
+  symbol: string,
+  drawingsJson?: string,
+  timeframes?: string[],
+  force = false,
+): Promise<ScanResponse> {
+  return request('/analysis/scan', {
+    method: 'POST',
+    body: JSON.stringify({ layoutId, symbol, drawingsJson, timeframes, force }),
+  });
+}
+
+export async function reasonAnalysis(req: ReasoningRequest): Promise<ReasonResponse> {
+  return request('/analysis/reason', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  });
+}
+
+export async function getObservations(investigationId: number): Promise<CopilotObservation[]> {
+  return request(`/analysis/observations?investigationId=${investigationId}`);
 }
 
 // ─── Hypotheses ───────────────────────────────────────────────────────────────
@@ -211,4 +237,30 @@ export async function getOpenAiKeyStatus(): Promise<{ configured: boolean; model
 
 export async function deleteOpenAiKey(): Promise<void> {
   return request('/copilot/credentials', { method: 'DELETE' });
+}
+
+// ─── Advanced Elliott Analysis ────────────────────────────────────────────────
+
+export async function runFullElliott(
+  symbol: string,
+  primaryTimeframe: string,
+  timeframes: string,
+  aiRecommend = false,
+): Promise<AdvancedElliottResult> {
+  const params = new URLSearchParams({ symbol, primaryTimeframe, timeframes });
+  if (aiRecommend) params.set('aiRecommend', 'true');
+  return request<AdvancedElliottResult>(`/analysis/full-elliott?${params}`, {
+    method: 'POST',
+  });
+}
+
+export async function runFullElliottVerified(
+  symbol: string,
+  primaryTimeframe: string,
+  timeframes: string,
+): Promise<VerifiedElliottResult> {
+  const params = new URLSearchParams({ symbol, primaryTimeframe, timeframes });
+  return request<VerifiedElliottResult>(`/analysis/full-elliott-verified?${params}`, {
+    method: 'POST',
+  });
 }

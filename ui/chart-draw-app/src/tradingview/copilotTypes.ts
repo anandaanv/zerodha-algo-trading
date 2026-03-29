@@ -140,7 +140,63 @@ export interface OrchestratorTestResult {
   suggestedChanges: string;
 }
 
+// ─── Observation Types (Phase 1: Scan) ────────────────────────────────────────
+
+export interface KeyLevel {
+  price: number;
+  label: string;
+}
+
+export interface DrawingPoint {
+  time: number;  // unix timestamp in seconds
+  price: number;
+  label: string;
+}
+
+export interface CopilotObservation {
+  id: number;
+  investigationId: number;
+  skillKey: string;
+  patternDetected: boolean;
+  patternType: string | null;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  structuralDetails: string | null;
+  stage: string | null;
+  keyLevels: string | null;     // JSON string of KeyLevel[]
+  drawingPoints: string | null; // JSON string of DrawingPoint[]
+  drawingType: string | null;
+  timeframe: string | null;
+  contradictions: string | null; // JSON string of string[]
+  reasoning: string | null;
+  createdAt: string;
+}
+
+export interface ReasoningRequest {
+  investigationId: number;
+  observationIds?: number[];
+  drawingsJson?: string;
+  scenarioText?: string;
+  priorHypothesisIds?: number[];
+  reasoningSkillKeys?: string[];
+}
+
 // ─── API Response Shapes ──────────────────────────────────────────────────────
+
+export interface ScanResponse {
+  investigationId: number;
+  status: 'scanned';
+  observations: CopilotObservation[];
+  warning?: string;
+}
+
+export interface ReasonResponse {
+  investigationId: number;
+  status: 'reasoned';
+  hypotheses: CopilotHypothesis[];
+  flags: CopilotAnomalyFlag[];
+  observations: CopilotObservation[];
+  warning?: string;
+}
 
 export interface TriggerAnalysisResponse {
   investigationId: number;
@@ -149,6 +205,7 @@ export interface TriggerAnalysisResponse {
   warning?: string;
   hypotheses: CopilotHypothesis[];
   flags: CopilotAnomalyFlag[];
+  observations?: CopilotObservation[];
 }
 
 export interface DashboardResponse {
@@ -161,4 +218,192 @@ export interface DashboardResponse {
 export interface BoardResponse {
   hypotheses: CopilotHypothesis[];
   unacknowledgedFlags: CopilotAnomalyFlag[];
+}
+
+// ─── Advanced Elliott Analysis Types ─────────────────────────────────────────
+
+export type ScenarioStatus =
+  | 'LEADING'
+  | 'ACTIVE_ALTERNATE'
+  | 'WEAK_ALTERNATE'
+  | 'AWAITING_TRIGGER'
+  | 'INVALIDATED'
+  | 'COMPLETED';
+
+export type ElliottTriggerType =
+  | 'HAMMER'
+  | 'SHOOTING_STAR'
+  | 'BULLISH_ENGULFING'
+  | 'BEARISH_ENGULFING'
+  | 'LONG_LOWER_WICK_REJECTION'
+  | 'LONG_UPPER_WICK_REJECTION'
+  | 'NONE';
+
+export interface ElliottConfluenceZone {
+  id: string;
+  lowerPrice: number;
+  upperPrice: number;
+  midPrice: number;
+  factorCount: number;
+  factorDiversity: number;
+  score: number;
+  zoneType: string;
+  explanation: string[];
+}
+
+export interface ElliottEntryCandidate {
+  id: string;
+  symbol: string;
+  scenarioId: string;
+  hypothesisId: string;
+  bullish: boolean;
+  entryStyle: string;
+  triggerType: ElliottTriggerType;
+  entryPrice: number;
+  stopLoss: number;
+  target1: number;
+  target2: number;
+  riskRewardRatio: number;
+  rationale: string[];
+}
+
+export interface ElliottScenarioTransition {
+  scenarioId: string;
+  fromStatus: ScenarioStatus | null;
+  toStatus: ScenarioStatus;
+  timestamp: number;
+  reason: string;
+}
+
+export interface ElliottHypothesisSnapshot {
+  symbol: string;
+  primaryTimeframe: string;
+  snapshotTime: number;
+  transitions: ElliottScenarioTransition[];
+  relabelCount: number;
+  leadingScenarioId: string | null;
+}
+
+export interface ElliottScoredScenario {
+  status: ScenarioStatus;
+  totalScore: number;
+  statusReasons: string[];
+  scenario: {
+    id: string;
+    direction: string;
+    scenarioInvalidation: number;
+    hypotheses: Array<{
+      id: string;
+      currentPositionDescription: string;
+      nextMajorMoveUp: boolean;
+      totalScore: number;
+      invalidationLevel: number;
+      primaryTarget: { level: number; ratio: string; confidence: number } | null;
+    }>;
+  };
+}
+
+export interface AiTradeEntry {
+  direction?: string;
+  entryZone?: string;
+  stopLoss?: string;
+  target1?: string;
+  target2?: string;
+  rationale?: string;
+}
+
+export interface AiTradeRecommendation {
+  type: string;
+  hypothesisLabel?: string;
+  waveContext?: string;
+  pattern?: string;
+  currentStage?: string;
+  confidenceLayers?: Record<string, string>;
+  anticipatoryEntry?: AiTradeEntry;
+  confirmationEntry?: AiTradeEntry & { trigger?: string };
+  invalidationConditions?: string[];
+  anomalyFlags?: string[];
+  reasoning?: string;
+  error?: string;
+}
+
+export interface AdvancedElliottResult {
+  confluenceZones: ElliottConfluenceZone[];
+  scoredScenarios: ElliottScoredScenario[];
+  entryCandidates: ElliottEntryCandidate[];
+  hypothesisSnapshot: ElliottHypothesisSnapshot | null;
+  promptSummary: string;
+  aiRecommendation?: AiTradeRecommendation | null;
+}
+
+// ─── Second-Pass Filtering + AI Verification ─────────────────────────────────
+
+export interface FamilyScore {
+  structuralStrength: number;
+  confluenceStrength: number;
+  momentumAlignment: number;
+  ambiguityPenalty: number;
+  contradictionPenalty: number;
+  tradeUtility: number;
+  triggerReadiness: number;
+  finalRankScore: number;
+}
+
+export interface ScenarioFamilyCandidate {
+  id: string;
+  symbol: string;
+  anchorTimeframe: string;
+  familyType: string;
+  directionalBias: 'UP' | 'DOWN' | 'NEUTRAL';
+  supportingStructures: string[];
+  supportingPatterns: string[];
+  contradictingPatterns: string[];
+  primaryInvalidationLevel: number;
+  confirmationLevel: number;
+  decisionZoneNearby: boolean;
+  triggerEligible: boolean;
+  tradableNow: boolean;
+  status: ScenarioStatus;
+  score: FamilyScore;
+  explanation: string[];
+  reasonCodes: string[];
+}
+
+export interface ScenarioConflictSet {
+  symbol: string;
+  anchorTimeframe: string;
+  bullishFamilies: ScenarioFamilyCandidate[];
+  bearishFamilies: ScenarioFamilyCandidate[];
+  neutralFamilies: ScenarioFamilyCandidate[];
+  dominantConflictMode: string;
+  explanation: string[];
+}
+
+export interface HumanResearchSummary {
+  symbol: string;
+  anchorTimeframe: string;
+  marketStateSummary: string;
+  leadingScenarioSummary: string[];
+  alternateScenarioSummary: string[];
+  actionHandlingNotes: string[];
+  invalidationNotes: string[];
+}
+
+export interface FilteredScenarioSet {
+  symbol: string;
+  anchorTimeframe: string;
+  leadingScenario: ScenarioFamilyCandidate | null;
+  activeAlternates: ScenarioFamilyCandidate[];
+  weakAlternates: ScenarioFamilyCandidate[];
+  invalidatedFamilies: ScenarioFamilyCandidate[];
+  conflictSet: ScenarioConflictSet | null;
+  humanSummary: HumanResearchSummary | null;
+}
+
+export interface VerifiedElliottResult {
+  filteredScenarioSet: FilteredScenarioSet;
+  aiRawResponse: string | null;
+  aiConfirmed: boolean;
+  aiReasoning: string;
+  aiConfidence: number;
 }
