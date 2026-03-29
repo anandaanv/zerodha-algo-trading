@@ -42,7 +42,7 @@ public class SuggestionChartLayoutService {
         // Parse all timeframes
         String allTimeframesStr = suggestion.getAllTimeframes();
         if (allTimeframesStr == null || allTimeframesStr.isBlank()) {
-            log.warn("Suggestion {} has no timeframes configured", suggestion.getId());
+            log.warn("Suggestion {} has no allTimeframes set — skipping layout generation", suggestion.getId());
             return;
         }
 

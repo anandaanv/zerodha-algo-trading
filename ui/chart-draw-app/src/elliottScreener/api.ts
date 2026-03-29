@@ -168,3 +168,9 @@ export async function fetchSuggestionChartLayouts(suggestionId: number): Promise
   }
   return res.json();
 }
+
+export async function generateSuggestionChartLayout(suggestionId: number): Promise<{ layoutsCreated: number }> {
+  const res = await apiFetch(`/api/elliott-screener/suggestions/${suggestionId}/generate-charts`, withAuth({ method: 'POST' }));
+  if (!res.ok) throw new Error(`Failed to generate chart layout: ${res.status}`);
+  return await res.json();
+}

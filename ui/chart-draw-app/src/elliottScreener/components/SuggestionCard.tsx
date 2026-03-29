@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { ElliottTradeSuggestion } from '../types';
-import { acceptSuggestion, activateSuggestion, closeSuggestion, rejectSuggestion } from '../api';
+import { acceptSuggestion, activateSuggestion, closeSuggestion, rejectSuggestion, generateSuggestionChartLayout } from '../api';
 
 interface Props {
   suggestion: ElliottTradeSuggestion;
@@ -33,6 +33,7 @@ export default function SuggestionCard({ suggestion, onUpdated }: Props) {
   const [notes, setNotes] = useState('');
   const [acting, setActing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [chartGenerated, setChartGenerated] = useState(false);
 
   const handleAction = useCallback(
     async (action: string) => {
@@ -69,6 +70,19 @@ export default function SuggestionCard({ suggestion, onUpdated }: Props) {
     },
     [suggestion.id, notes, onUpdated]
   );
+
+  const handleGenerateChart = useCallback(async () => {
+    setActing(true);
+    setActionError(null);
+    try {
+      await generateSuggestionChartLayout(suggestion.id);
+      setChartGenerated(true);
+    } catch (e: any) {
+      setActionError(e.message);
+    } finally {
+      setActing(false);
+    }
+  }, [suggestion.id]);
 
   return (
     <div
@@ -230,23 +244,59 @@ export default function SuggestionCard({ suggestion, onUpdated }: Props) {
           )}
 
           {suggestion.symbol && (
-            <div style={{ marginBottom: 8 }}>
-              <a
-                href={`/suggestion-chart/${suggestion.id}?symbol=${encodeURIComponent(suggestion.symbol)}`}
-                target="_blank"
-                rel="noopener noreferrer"
+            <div style={{ marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button
+                onClick={handleGenerateChart}
+                disabled={acting}
                 style={{
-                  display: 'inline-block',
-                  background: '#1565c0',
+                  background: '#37474f',
                   color: '#fff',
+                  border: 'none',
                   padding: '6px 16px',
                   borderRadius: 4,
-                  textDecoration: 'none',
+                  cursor: 'pointer',
                   fontSize: 13,
                 }}
               >
-                View Chart
-              </a>
+                {acting ? 'Generating...' : 'Generate Chart'}
+              </button>
+              {chartGenerated && (
+                <a
+                  href={`/suggestion-chart/${suggestion.id}?symbol=${encodeURIComponent(suggestion.symbol)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-block',
+                    background: '#1565c0',
+                    color: '#fff',
+                    padding: '6px 16px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    fontSize: 13,
+                  }}
+                >
+                  View Chart ↗
+                </a>
+              )}
+              {!chartGenerated && (
+                <a
+                  href={`/suggestion-chart/${suggestion.id}?symbol=${encodeURIComponent(suggestion.symbol)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-block',
+                    background: '#1565c0',
+                    color: '#fff',
+                    padding: '6px 16px',
+                    borderRadius: 4,
+                    textDecoration: 'none',
+                    fontSize: 13,
+                    opacity: 0.6,
+                  }}
+                >
+                  View Chart ↗
+                </a>
+              )}
             </div>
           )}
 

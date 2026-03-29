@@ -6,7 +6,10 @@ import com.dtech.kitecon.screener.elliott.dto.*;
 import com.dtech.kitecon.screener.elliott.entity.SuggestionChartLayout;
 import com.dtech.kitecon.screener.elliott.repository.ElliottScreenerRunRepository;
 import com.dtech.kitecon.screener.elliott.repository.SuggestionChartLayoutRepository;
+import com.dtech.kitecon.screener.elliott.repository.ElliottTradeSuggestionRepository;
+import com.dtech.kitecon.screener.elliott.repository.ElliottScreenerRepository;
 import com.dtech.kitecon.screener.elliott.service.ElliottScreenerService;
+import com.dtech.kitecon.screener.elliott.service.SuggestionChartLayoutService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +31,9 @@ public class ElliottScreenerController {
     private final SuggestionChartLayoutRepository layoutRepository;
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final ElliottTradeSuggestionRepository suggestionRepository;
+    private final ElliottScreenerRepository screenerRepository;
+    private final SuggestionChartLayoutService layoutService;
 
     @GetMapping
     public ResponseEntity<?> list(Authentication auth) {
@@ -114,8 +120,35 @@ public class ElliottScreenerController {
     public ResponseEntity<?> generateSuggestionCharts(
             @PathVariable Long suggestionId,
             Authentication auth) {
-        return ResponseEntity.status(501)
-                .body(Map.of("message", "Chart generation happens automatically on suggestion creation"));
+        try {
+            // Load suggestion
+            var suggestion = suggestionRepository.findById(suggestionId).orElse(null);
+            if (suggestion == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            // If allTimeframes is null/blank, fall back to the screener's timeframes
+            if (suggestion.getAllTimeframes() == null || suggestion.getAllTimeframes().isBlank()) {
+                var screener = screenerRepository.findById(suggestion.getScreenerId()).orElse(null);
+                if (screener != null) {
+                    suggestion.setAllTimeframes(screener.getTimeframes());
+                    suggestion.setPrimaryTimeframe(
+                        screener.getPrimaryTimeframe() != null
+                            ? screener.getPrimaryTimeframe()
+                            : screener.getTimeframes().split(",")[0].trim()
+                    );
+                }
+            }
+
+            // Generate layouts with empty analysis maps (produces hlines only for now)
+            layoutService.generateAndSaveLayouts(suggestion, java.util.Map.of(), java.util.Map.of());
+
+            long count = layoutRepository.findBySuggestionIdOrderByTabOrder(suggestionId).size();
+            return ResponseEntity.ok(Map.of("layoutsCreated", count));
+        } catch (Exception e) {
+            log.error("Failed to generate chart layouts for suggestion {}: {}", suggestionId, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
     }
 
     private Long resolveUserId(Authentication auth) {
