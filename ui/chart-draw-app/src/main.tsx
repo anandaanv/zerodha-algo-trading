@@ -35,6 +35,10 @@ import SuggestionChartView from "./elliottScreener/pages/SuggestionChartView";
 import ScanPage from "./scan/pages/ScanPage";
 import ScanChartView from "./scan/pages/ScanChartView";
 
+// Kite Config Management
+import KiteConfigPage from './admin/kiteConfig/KiteConfigPage';
+
+
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -169,6 +173,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="USER">
               <ScanChartView />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/kite-config"
+          element={
+            <ProtectedRoute requiredRole="ADMIN">
+              <KiteConfigPage />
             </ProtectedRoute>
           }
         />
