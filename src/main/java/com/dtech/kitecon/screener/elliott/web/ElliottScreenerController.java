@@ -10,6 +10,7 @@ import com.dtech.kitecon.screener.elliott.repository.ElliottTradeSuggestionRepos
 import com.dtech.kitecon.screener.elliott.repository.ElliottScreenerRepository;
 import com.dtech.kitecon.screener.elliott.service.ElliottScreenerService;
 import com.dtech.kitecon.screener.elliott.service.SuggestionChartLayoutService;
+import com.dtech.kitecon.screener.service.ScreenerAccessService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,21 +35,25 @@ public class ElliottScreenerController {
     private final ElliottTradeSuggestionRepository suggestionRepository;
     private final ElliottScreenerRepository screenerRepository;
     private final SuggestionChartLayoutService layoutService;
+    private final ScreenerAccessService screenerAccessService;
 
     @GetMapping
     public ResponseEntity<?> list(Authentication auth) {
+        screenerAccessService.requireScreenerAccess(auth);
         Long userId = resolveUserId(auth);
         return ResponseEntity.ok(screenerService.listScreeners(userId));
     }
 
     @PostMapping
     public ResponseEntity<?> create(Authentication auth, @RequestBody ElliottScreenerRequest request) {
+        screenerAccessService.requireScreenerAccess(auth);
         Long userId = resolveUserId(auth);
         return ResponseEntity.ok(screenerService.createScreener(userId, request));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> get(Authentication auth, @PathVariable Long id) {
+        screenerAccessService.requireScreenerAccess(auth);
         Long userId = resolveUserId(auth);
         return ResponseEntity.ok(screenerService.getScreener(userId, id));
     }
@@ -56,12 +61,14 @@ public class ElliottScreenerController {
     @PutMapping("/{id}")
     public ResponseEntity<?> update(Authentication auth, @PathVariable Long id,
                                      @RequestBody ElliottScreenerRequest request) {
+        screenerAccessService.requireScreenerAccess(auth);
         Long userId = resolveUserId(auth);
         return ResponseEntity.ok(screenerService.updateScreener(userId, id, request));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(Authentication auth, @PathVariable Long id) {
+        screenerAccessService.requireScreenerAccess(auth);
         Long userId = resolveUserId(auth);
         screenerService.deleteScreener(userId, id);
         return ResponseEntity.ok(Map.of("status", "disabled"));
@@ -69,6 +76,7 @@ public class ElliottScreenerController {
 
     @PostMapping("/{id}/run")
     public ResponseEntity<?> triggerRun(Authentication auth, @PathVariable Long id) {
+        screenerAccessService.requireScreenerAccess(auth);
         Long userId = resolveUserId(auth);
         ElliottScreenerRunResponse response = screenerService.triggerNow(userId, id);
         return ResponseEntity.ok(response);

@@ -63,12 +63,15 @@ public class SecurityConfig {
                                 "/copilot", "/skills", "/kite-success",
                                 "/elliott-screener", "/elliott-screener/**",
                                 "/scan", "/scan-chart/**",
-                                "/admin/kite-config"
+                                "/admin/kite-config",
+                                "/admin/groups"
                         ).permitAll()
 
                         // Role-based access control
                         // DELETE operations require MODERATOR/ADMIN
                         .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/api/chart-state", "/api/layouts/**").hasAnyRole("MODERATOR", "ADMIN")
+                        // Indices endpoints
+                        .requestMatchers("/api/indices", "/api/indices/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
                         // Chart operations allow USER
                         .requestMatchers("/api/symbols", "/api/ohlc", "/api/chart-state/**", "/api/layouts/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/drawings/**", "/api/intervals/**").hasAnyRole("USER", "MODERATOR", "ADMIN")

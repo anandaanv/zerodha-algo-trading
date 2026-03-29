@@ -1,5 +1,6 @@
 package com.dtech.kitecon.auth;
 
+import com.dtech.kitecon.scan.service.ScanGroupService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtUtil jwtUtil;
+    private final ScanGroupService scanGroupService;
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
@@ -77,10 +79,13 @@ public class AuthController {
         String username = authentication.getName();
         User user = authService.getUserByUsername(username);
 
+        boolean screenerAccess = user.getRole() == User.Role.ADMIN || user.getRole() == User.Role.MODERATOR
+                || scanGroupService.userHasScreenerAccess(user.getId());
         return ResponseEntity.ok(new UserResponse(
                 user.getId(),
                 user.getUsername(),
-                user.getRole().name()
+                user.getRole().name(),
+                screenerAccess
         ));
     }
 
@@ -109,6 +114,7 @@ public class AuthController {
         private final Long id;
         private final String username;
         private final String role;
+        private final boolean screenerAccess;
     }
 
     @Data

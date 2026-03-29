@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ElliottScreener, CreateScreenerRequest } from '../types';
 import { createScreener, updateScreener, triggerRun } from '../api';
+import IndexSymbolPicker from './IndexSymbolPicker';
 
 interface Props {
   screener?: ElliottScreener;
@@ -49,6 +50,16 @@ export default function ScreenerConfigPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(!screener);
   const [running, setRunning] = useState(false);
+
+  const handleAddIndex = (token: string) => {
+    setSymbols(prev => {
+      const parts = prev.split(',').map(s => s.trim()).filter(Boolean);
+      if (!parts.map(p => p.toUpperCase()).includes(token.toUpperCase())) {
+        parts.push(token);
+      }
+      return parts.join(',');
+    });
+  };
 
   const handlePresetChange = (value: string) => {
     setSelectedPreset(value);
@@ -162,14 +173,17 @@ export default function ScreenerConfigPanel({
               />
             </div>
             <div>
-              <label style={{ color: '#aaa', fontSize: 13 }}>
-                Symbols (comma-separated)
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                <label style={{ color: '#aaa', fontSize: 13 }}>
+                  Symbols (comma-separated)
+                </label>
+                <IndexSymbolPicker currentSymbols={symbols} onAdd={handleAddIndex} />
+              </div>
               <textarea
                 value={symbols}
                 onChange={(e) => setSymbols(e.target.value)}
                 rows={3}
-                placeholder="e.g. RELIANCE,INFY,TCS"
+                placeholder="e.g. RELIANCE,INFY,TCS or INDEX-NIFTY50"
                 style={{
                   display: 'block',
                   width: '100%',

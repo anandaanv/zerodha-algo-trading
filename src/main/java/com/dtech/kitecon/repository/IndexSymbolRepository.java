@@ -26,4 +26,16 @@ public interface IndexSymbolRepository extends JpaRepository<IndexSymbol, Long> 
    * Checks if a given index name exists.
    */
   boolean existsByIndexName(String indexName);
+
+  /**
+   * Finds all distinct index names, ordered alphabetically.
+   */
+  @Query("SELECT DISTINCT s.indexName FROM IndexSymbol s ORDER BY s.indexName")
+  List<String> findDistinctIndexNames();
+
+  /**
+   * Counts the number of symbols for the given index name.
+   */
+  @Query("SELECT COUNT(s) FROM IndexSymbol s WHERE s.indexName = :indexName")
+  long countByIndexName(String indexName);
 }

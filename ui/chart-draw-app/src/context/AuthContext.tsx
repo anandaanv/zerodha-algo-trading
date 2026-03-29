@@ -14,6 +14,7 @@ interface AuthContextType {
 interface User {
   username: string;
   role: string;
+  screenerAccess: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser({
         username: "service-account",
         role: "MODERATOR",
+        screenerAccess: true,
       });
       setLoading(false);
       return;
@@ -51,7 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (storedToken && storedUser) {
       setToken(storedToken);
-      setUser(JSON.parse(storedUser));
+      const parsed = JSON.parse(storedUser);
+      setUser({ screenerAccess: false, ...parsed });
     }
     setLoading(false);
   }, []);
@@ -71,9 +74,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await response.json();
+    // Fetch full profile to get screenerAccess
+    const meRes = await apiFetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${data.token}` },
+    });
+    const meData = meRes.ok ? await meRes.json() : {};
     const userData: User = {
       username: data.username,
       role: data.role,
+      screenerAccess: meData.screenerAccess ?? false,
     };
 
     setToken(data.token);
@@ -98,9 +107,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const data = await response.json();
+    // Fetch full profile to get screenerAccess
+    const meRes = await apiFetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${data.token}` },
+    });
+    const meData = meRes.ok ? await meRes.json() : {};
     const userData: User = {
       username: data.username,
       role: data.role,
+      screenerAccess: meData.screenerAccess ?? false,
     };
 
     setToken(data.token);

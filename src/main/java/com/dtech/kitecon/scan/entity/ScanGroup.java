@@ -20,4 +20,8 @@ public class ScanGroup {
 
     @Column(name = "max_scans_per_hour")
     private Integer maxScansPerHour;
+
+    @Column(name = "screener_access", nullable = false)
+    @Builder.Default
+    private boolean screenerAccess = false;
 }
