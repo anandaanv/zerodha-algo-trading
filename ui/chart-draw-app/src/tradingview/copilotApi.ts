@@ -1,8 +1,7 @@
 import type {
-  CopilotSkill, CopilotActiveTrade, CopilotObservation,
+  CopilotSkill, CopilotActiveTrade,
   TriggerAnalysisResponse, DashboardResponse, BoardResponse, AiAssistResponse,
   OrchestratorConfig, OrchestratorValidateResult,
-  ScanResponse, ReasonResponse, ReasoningRequest,
 } from './copilotTypes';
 
 const BASE = '/api';
@@ -38,30 +37,6 @@ export async function triggerAnalysis(
     method: 'POST',
     body: JSON.stringify({ layoutId, symbol, drawingsJson, timeframes, force }),
   });
-}
-
-export async function scanAnalysis(
-  layoutId: number,
-  symbol: string,
-  drawingsJson?: string,
-  timeframes?: string[],
-  force = false,
-): Promise<ScanResponse> {
-  return request('/analysis/scan', {
-    method: 'POST',
-    body: JSON.stringify({ layoutId, symbol, drawingsJson, timeframes, force }),
-  });
-}
-
-export async function reasonAnalysis(req: ReasoningRequest): Promise<ReasonResponse> {
-  return request('/analysis/reason', {
-    method: 'POST',
-    body: JSON.stringify(req),
-  });
-}
-
-export async function getObservations(investigationId: number): Promise<CopilotObservation[]> {
-  return request(`/analysis/observations?investigationId=${investigationId}`);
 }
 
 // ─── Hypotheses ───────────────────────────────────────────────────────────────

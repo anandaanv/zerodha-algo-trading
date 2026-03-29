@@ -39,7 +39,6 @@ public class AIResponseParser {
                 case ENTRY_SIGNAL -> objectMapper.treeToValue(root, EntrySignalResponse.class);
                 case MONITORING   -> objectMapper.treeToValue(root, MonitoringResponse.class);
                 case INVALIDATED  -> objectMapper.treeToValue(root, InvalidatedResponse.class);
-                case OBSERVATION  -> objectMapper.treeToValue(root, ObservationResponse.class);
             };
         } catch (Exception e) {
             log.warn("Failed to parse AI response: {} | raw: {}", e.getMessage(),
