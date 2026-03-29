@@ -36,8 +36,9 @@ public class SuggestionChartLayoutService {
             return;
         }
 
-        // Delete existing layouts
+        // Delete existing layouts and flush so inserts below don't hit duplicate key
         layoutRepository.deleteBySuggestionId(suggestion.getId());
+        layoutRepository.flush();
 
         // Parse all timeframes
         String allTimeframesStr = suggestion.getAllTimeframes();
@@ -50,6 +51,9 @@ public class SuggestionChartLayoutService {
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .toList();
+
+        log.info("Generating layouts for suggestion {} timeframes={} primaryTf={}",
+            suggestion.getId(), timeframes, suggestion.getPrimaryTimeframe());
 
         // Generate layouts for each timeframe
         for (int idx = 0; idx < timeframes.size(); idx++) {
@@ -70,8 +74,8 @@ public class SuggestionChartLayoutService {
 
                 layoutRepository.save(layout);
             } catch (Exception e) {
-                log.warn("Failed to generate chart layout for suggestion {} timeframe {}: {}",
-                        suggestion.getId(), tf, e.getMessage());
+                log.error("Failed to generate chart layout for suggestion {} timeframe {}: {}",
+                        suggestion.getId(), tf, e.getMessage(), e);
             }
         }
     }
