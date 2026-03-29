@@ -1,8 +1,11 @@
 package com.dtech.kitecon.auth;
 
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -17,8 +20,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.CorsFilter;
 
 import java.util.Arrays;
+import java.util.EnumSet;
 
 @Configuration
 @EnableWebSecurity
@@ -46,7 +51,7 @@ public class SecurityConfig {
                         .requestMatchers("/terms-of-service", "/terms-of-service.html", "/terms").permitAll()
 
                         // Kite OAuth callbacks — no JWT present (redirected from Kite servers)
-                        .requestMatchers("/kite-login", "/app", "/app/**", "/update-token").permitAll()
+                        .requestMatchers("/kite-login", "/app", "/app/**", "/update-token", "/kite-callback/config/**").permitAll()
 
                         // SPA frontend routes — served as index.html, React Router handles them.
                         // ALL non-API GET paths must be permitAll so the browser can load index.html
@@ -57,7 +62,8 @@ public class SecurityConfig {
                                 "/screener", "/screener/**", "/trades", "/trades/**",
                                 "/copilot", "/skills", "/kite-success",
                                 "/elliott-screener", "/elliott-screener/**",
-                                "/scan", "/scan-chart/**"
+                                "/scan", "/scan-chart/**",
+                                "/admin/kite-config"
                         ).permitAll()
 
                         // Role-based access control
@@ -108,6 +114,14 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
+    }
+
+    @Bean
+    public FilterRegistrationBean<CorsFilter> corsFilterRegistration() {
+        FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(new CorsFilter(corsConfigurationSource()));
+        bean.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        bean.setDispatcherTypes(EnumSet.of(DispatcherType.REQUEST, DispatcherType.ASYNC, DispatcherType.ERROR));
+        return bean;
     }
 
     @Bean
