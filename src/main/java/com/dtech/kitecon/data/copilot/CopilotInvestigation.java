@@ -104,14 +104,6 @@ public class CopilotInvestigation {
     private Instant expiresAt;
 
     /**
-     * PENDING → SCANNED → REASONED
-     * Tracks which phase of the two-phase analysis has completed.
-     */
-    @Column(name = "phase", nullable = false, length = 20)
-    @Builder.Default
-    private String phase = "PENDING";
-
-    /**
      * ACTIVE | EXPIRED | SUPERSEDED
      * SUPERSEDED: a newer investigation replaced this one for the same layout+user
      */
