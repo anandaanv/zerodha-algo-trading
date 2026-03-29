@@ -3,8 +3,11 @@ package com.dtech.kitecon.screener.elliott.web;
 import com.dtech.kitecon.auth.User;
 import com.dtech.kitecon.auth.UserRepository;
 import com.dtech.kitecon.screener.elliott.dto.*;
+import com.dtech.kitecon.screener.elliott.entity.SuggestionChartLayout;
 import com.dtech.kitecon.screener.elliott.repository.ElliottScreenerRunRepository;
+import com.dtech.kitecon.screener.elliott.repository.SuggestionChartLayoutRepository;
 import com.dtech.kitecon.screener.elliott.service.ElliottScreenerService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +25,8 @@ public class ElliottScreenerController {
 
     private final ElliottScreenerService screenerService;
     private final ElliottScreenerRunRepository runRepository;
+    private final SuggestionChartLayoutRepository layoutRepository;
+    private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
 
     @GetMapping
@@ -72,6 +77,45 @@ public class ElliottScreenerController {
                 .map(ElliottScreenerRunResponse::from)
                 .toList();
         return ResponseEntity.ok(runs);
+    }
+
+    @GetMapping("/suggestions/{suggestionId}/chart-layouts")
+    public ResponseEntity<?> getSuggestionChartLayouts(
+            @PathVariable Long suggestionId,
+            Authentication auth) {
+        Long userId = resolveUserId(auth);
+        List<SuggestionChartLayout> layouts = layoutRepository
+                .findBySuggestionIdOrderByTabOrder(suggestionId);
+
+        List<Map<String, Object>> response = layouts.stream().map(layout -> {
+            Map<String, Object> dto = new java.util.LinkedHashMap<>();
+            dto.put("id", layout.getId());
+            dto.put("suggestionId", layout.getSuggestionId());
+            dto.put("timeframe", layout.getTimeframe());
+            dto.put("tabOrder", layout.getTabOrder());
+
+            try {
+                Map<String, Object> overlays = layout.getOverlaysJson() != null
+                        ? objectMapper.readValue(layout.getOverlaysJson(), Map.class)
+                        : new java.util.LinkedHashMap<>();
+                dto.put("overlays", overlays);
+            } catch (Exception e) {
+                log.warn("Failed to parse overlays_json for layout {}: {}", layout.getId(), e.getMessage());
+                dto.put("overlays", new java.util.LinkedHashMap<>());
+            }
+
+            return dto;
+        }).toList();
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/suggestions/{suggestionId}/generate-charts")
+    public ResponseEntity<?> generateSuggestionCharts(
+            @PathVariable Long suggestionId,
+            Authentication auth) {
+        return ResponseEntity.status(501)
+                .body(Map.of("message", "Chart generation happens automatically on suggestion creation"));
     }
 
     private Long resolveUserId(Authentication auth) {

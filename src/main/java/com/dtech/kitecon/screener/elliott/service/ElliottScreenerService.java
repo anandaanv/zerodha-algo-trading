@@ -9,6 +9,7 @@ import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.screener.elliott.dto.*;
 import com.dtech.kitecon.screener.elliott.entity.*;
 import com.dtech.kitecon.screener.elliott.repository.*;
+import com.dtech.kitecon.screener.elliott.service.*;
 import com.dtech.kitecon.service.copilot.*;
 import com.dtech.kitecon.service.copilot.dto.*;
 import com.dtech.ta.elliott.*;
@@ -42,6 +43,7 @@ public class ElliottScreenerService {
     private final AIResponseParser responseParser;
     private final InstrumentRepository instrumentRepository;
     private final ObjectMapper objectMapper;
+    private final SuggestionChartLayoutService layoutService;
 
     public ElliottScreenerResponse createScreener(Long userId, ElliottScreenerRequest request) {
         Instant nextRunAt = computeNextRunAt(request.getScheduleCron());
@@ -231,8 +233,22 @@ public class ElliottScreenerService {
                 .invalidationConditionsJson(objectMapper.writeValueAsString(finding.getInvalidationConditions()))
                 .anomalyFlagsJson(objectMapper.writeValueAsString(finding.getAnomalyFlags()))
                 .rawAiResponse(rawResponse)
+                .primaryTimeframe(primaryTf)
+                .allTimeframes(String.join(",", orderedTfs))
                 .build();
-        suggestionRepository.save(suggestion);
+        suggestion = suggestionRepository.save(suggestion);
+
+        // Generate and save chart layouts
+        try {
+            Map<String, ElliottWaveAnalysis> analysisByTf = new LinkedHashMap<>();
+            for (String tf : orderedTfs) {
+                analysisByTf.put(tf, advResult.getWaveAnalysis());
+            }
+            layoutService.generateAndSaveLayouts(suggestion, analysisByTf, seriesByTf);
+        } catch (Exception e) {
+            log.warn("Failed to generate chart layouts for suggestion {}: {}", suggestion.getId(), e.getMessage(), e);
+        }
+
         return true;
     }
 

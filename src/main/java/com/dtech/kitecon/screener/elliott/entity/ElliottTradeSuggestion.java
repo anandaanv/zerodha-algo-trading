@@ -37,6 +37,12 @@ public class ElliottTradeSuggestion {
     @Column(length = 128, nullable = false)
     private String symbol;
 
+    @Column(name = "primary_timeframe", length = 64)
+    private String primaryTimeframe;
+
+    @Column(name = "all_timeframes", length = 255)
+    private String allTimeframes;
+
     @Column(length = 16, nullable = false)
     private String direction;
 

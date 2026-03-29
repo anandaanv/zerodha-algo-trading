@@ -229,6 +229,27 @@ export default function SuggestionCard({ suggestion, onUpdated }: Props) {
             <div style={{ marginBottom: 8, color: '#ffcc80' }}>Notes: {suggestion.userNotes}</div>
           )}
 
+          {suggestion.symbol && (
+            <div style={{ marginBottom: 8 }}>
+              <a
+                href={`/suggestion-chart/${suggestion.id}?symbol=${encodeURIComponent(suggestion.symbol)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  background: '#1565c0',
+                  color: '#fff',
+                  padding: '6px 16px',
+                  borderRadius: 4,
+                  textDecoration: 'none',
+                  fontSize: 13,
+                }}
+              >
+                View Chart
+              </a>
+            </div>
+          )}
+
           {['PROPOSED', 'ANTICIPATORY', 'ACTIVE'].includes(suggestion.state) && (
             <textarea
               placeholder="Add notes (optional)..."

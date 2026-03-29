@@ -151,3 +151,20 @@ export async function rejectSuggestion(id: number, notes?: string): Promise<Elli
   }
   return res.json();
 }
+
+export interface SuggestionChartLayoutDto {
+  id: number;
+  suggestionId: number;
+  timeframe: string;
+  tabOrder: number;
+  overlays: Record<string, any[]>;
+}
+
+export async function fetchSuggestionChartLayouts(suggestionId: number): Promise<SuggestionChartLayoutDto[]> {
+  const res = await apiFetch(`/api/elliott-screener/suggestions/${suggestionId}/chart-layouts`, withAuth());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Failed to fetch chart layouts: ${res.status}`);
+  }
+  return res.json();
+}

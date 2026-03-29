@@ -31,6 +31,7 @@ import { tradesRoutes } from "./trades";
 
 // Elliott Screener
 import ElliottScreenerPage from "./elliottScreener/pages/ElliottScreenerPage";
+import SuggestionChartView from "./elliottScreener/pages/SuggestionChartView";
 
 const root = createRoot(document.getElementById("root")!);
 root.render(
@@ -142,6 +143,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="USER">
               <ElliottScreenerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/suggestion-chart/:suggestionId"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <SuggestionChartView />
             </ProtectedRoute>
           }
         />

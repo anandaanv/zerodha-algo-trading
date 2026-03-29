@@ -76,3 +76,20 @@ CREATE TABLE IF NOT EXISTS elliott_trade_suggestion (
     INDEX idx_ets_user_state            (user_id, state),
     INDEX idx_ets_run_id                (run_id)
 );
+
+-- 4. Suggestion Chart Layout (for multi-timeframe chart views)
+CREATE TABLE IF NOT EXISTS suggestion_chart_layout (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    suggestion_id BIGINT NOT NULL,
+    timeframe VARCHAR(64) NOT NULL,
+    tab_order INT NOT NULL DEFAULT 0,
+    overlays_json MEDIUMTEXT,
+    created_at DATETIME(6) NOT NULL,
+    UNIQUE KEY uk_scl_suggestion_tf (suggestion_id, timeframe),
+    KEY idx_scl_suggestion_id (suggestion_id)
+);
+
+-- 5. Add timeframe columns to elliott_trade_suggestion
+ALTER TABLE elliott_trade_suggestion
+    ADD COLUMN primary_timeframe VARCHAR(64) NULL,
+    ADD COLUMN all_timeframes VARCHAR(255) NULL;

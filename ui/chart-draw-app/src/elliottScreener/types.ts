@@ -56,6 +56,8 @@ export interface ElliottTradeSuggestion {
   invalidationConditions: string[] | null;
   anomalyFlags: string[] | null;
   userNotes: string | null;
+  primaryTimeframe: string | null;
+  allTimeframes: string | null;
   proposedAt: string | null;
   acceptedAt: string | null;
   activatedAt: string | null;
