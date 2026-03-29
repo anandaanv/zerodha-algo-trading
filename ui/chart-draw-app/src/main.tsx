@@ -38,6 +38,7 @@ import ScanChartView from "./scan/pages/ScanChartView";
 // Kite Config Management
 import KiteConfigPage from './admin/kiteConfig/KiteConfigPage';
 
+
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
