@@ -5,6 +5,7 @@ import com.dtech.kitecon.config.KiteConnectPool;
 import com.dtech.kitecon.kite.entity.UserKiteConfig;
 import com.dtech.kitecon.kite.repository.UserKiteConfigRepository;
 import com.zerodhatech.kiteconnect.KiteConnect;
+import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -70,7 +71,12 @@ public class UserKiteConfigService {
         KiteConnect kc = new KiteConnect(config.getApiKey());
         if (config.getKiteUserId() != null) kc.setUserId(config.getKiteUserId());
 
-        com.zerodhatech.models.User kiteUser = kc.generateSession(requestToken, config.getApiSecret());
+        com.zerodhatech.models.User kiteUser = null;
+        try {
+            kiteUser = kc.generateSession(requestToken, config.getApiSecret());
+        } catch (KiteException e) {
+            throw new Exception(e);
+        }
         kc.setAccessToken(kiteUser.accessToken);
         kc.setPublicToken(kiteUser.publicToken);
 
