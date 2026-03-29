@@ -106,7 +106,8 @@ public class PatternMatch {
         return switch (type) {
             case DOUBLE_BOTTOM, TRIPLE_BOTTOM, INVERTED_HEAD_AND_SHOULDERS,
                  CUP_AND_HANDLE, ROUNDING_BOTTOM, ASCENDING_TRIANGLE,
-                 BULL_FLAG, BULL_PENNANT, FALLING_WEDGE, BROADENING_BOTTOM -> true;
+                 BULL_FLAG, BULL_PENNANT, FALLING_WEDGE, BROADENING_BOTTOM,
+                 LEADING_DIAGONAL -> true;
             default -> false;
         };
     }

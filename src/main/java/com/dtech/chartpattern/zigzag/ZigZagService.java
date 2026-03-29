@@ -18,6 +18,7 @@ import org.ta4j.core.BarSeries;
 import org.ta4j.core.BaseBarSeriesBuilder;
 import org.ta4j.core.num.DoubleNumFactory;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -28,6 +29,18 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class ZigZagService {
+
+    private static final Map<Interval, Duration> PIVOT_TTL = Map.ofEntries(
+            Map.entry(Interval.OneMinute,      Duration.ofMinutes(1)),
+            Map.entry(Interval.ThreeMinute,    Duration.ofMinutes(3)),
+            Map.entry(Interval.FiveMinute,     Duration.ofMinutes(5)),
+            Map.entry(Interval.FifteenMinute,  Duration.ofMinutes(15)),
+            Map.entry(Interval.ThirtyMinute,   Duration.ofMinutes(30)),
+            Map.entry(Interval.OneHour,        Duration.ofMinutes(60)),
+            Map.entry(Interval.FourHours,      Duration.ofMinutes(240)),
+            Map.entry(Interval.Day,            Duration.ofHours(24)),
+            Map.entry(Interval.Week,           Duration.ofDays(7))
+    );
 
     private final ZigZagConfigRepository configRepository;
     private final ZigZagSnapshotRepository snapshotRepository;
@@ -283,6 +296,11 @@ public class ZigZagService {
                 .build();
     }
 
+    private boolean isFresh(ZigZagSnapshot snap, Interval interval) {
+        Duration ttl = PIVOT_TTL.getOrDefault(interval, Duration.ofMinutes(15));
+        return snap.getUpdatedAt().isAfter(LocalDateTime.now().minus(ttl));
+    }
+
     public List<ZigZagPoint> detectAndPersist(String tradingSymbol, Instrument instrument, Interval interval, boolean persist) {
         ZigZagParams params = resolveParams(tradingSymbol, interval);
 
@@ -330,6 +348,11 @@ public class ZigZagService {
     public List<ZigZagPoint> getOrComputePivots(String tradingSymbol, Instrument instrument, Interval interval) {
         return snapshotRepository.findByTradingSymbolAndInterval(tradingSymbol, interval)
                 .map(snap -> {
+                    if (!isFresh(snap, interval)) {
+                        log.info("[ZigZag] Stale snapshot for {} {} (updated {}), recomputing",
+                                tradingSymbol, interval, snap.getUpdatedAt());
+                        return detectAndPersist(tradingSymbol, instrument, interval, true);
+                    }
                     try {
                         return fromJson(snap.getPivotsJson());
                     } catch (Exception e) {
@@ -384,6 +407,91 @@ public class ZigZagService {
             case ThreeMinute  -> now.minus(21,       ChronoUnit.DAYS);
             case OneMinute    -> now.minus(7,        ChronoUnit.DAYS);
         };
+    }
+
+    /**
+     * Appends (or extends) a synthetic LTP pivot to make the ZigZag analysis real-time aware.
+     *
+     * The last confirmed ZigZag pivot is always at least one reversal-threshold behind the
+     * current market price. This method adds the current LTP as an in-progress leg endpoint:
+     *
+     *  - If last pivot is HIGH and LTP >= last.value  → replace last with new HIGH at LTP
+     *    (up-leg is still extending)
+     *  - If last pivot is HIGH and LTP < last.value   → append new LOW at LTP
+     *    (down-leg has started but not yet confirmed as pivot)
+     *  - If last pivot is LOW  and LTP <= last.value  → replace last with new LOW at LTP
+     *    (down-leg is still extending)
+     *  - If last pivot is LOW  and LTP > last.value   → append new HIGH at LTP
+     *    (up-leg has started but not yet confirmed as pivot)
+     *
+     * Returns a new list; the original is NOT modified. The synthetic pivot is NOT persisted.
+     * Pivot metrics (retracement/extension) are recomputed on the returned list.
+     */
+    public List<ZigZagPoint> withLtpPivot(List<ZigZagPoint> pivots, BarSeries series) {
+        if (pivots == null || pivots.isEmpty() || series == null || series.isEmpty()) {
+            return pivots == null ? new ArrayList<>() : new ArrayList<>(pivots);
+        }
+
+        Bar lastBar = series.getBar(series.getBarCount() - 1);
+        double ltp = lastBar.getClosePrice().doubleValue();
+        Instant ltpTime = lastBar.getEndTime();
+
+        List<ZigZagPoint> result = new ArrayList<>(pivots);
+        ZigZagPoint last = result.get(result.size() - 1);
+
+        ZigZagPoint synthetic;
+        if (last.isHigh()) {
+            if (ltp >= last.getValue()) {
+                // Up-leg still extending — replace last HIGH with new high at LTP
+                synthetic = ZigZagPoint.builder()
+                        .type(ZigZagPoint.Type.HIGH)
+                        .timestamp(ltpTime)
+                        .sequence(ltpTime.getEpochSecond())
+                        .value(ltp)
+                        .atrAtPivot(last.getAtrAtPivot())
+                        .build();
+                result.set(result.size() - 1, synthetic);
+            } else {
+                // Down-leg started — append new LOW at LTP
+                synthetic = ZigZagPoint.builder()
+                        .type(ZigZagPoint.Type.LOW)
+                        .timestamp(ltpTime)
+                        .sequence(ltpTime.getEpochSecond())
+                        .value(ltp)
+                        .atrAtPivot(last.getAtrAtPivot())
+                        .build();
+                result.add(synthetic);
+            }
+        } else { // last is LOW
+            if (ltp <= last.getValue()) {
+                // Down-leg still extending — replace last LOW with new low at LTP
+                synthetic = ZigZagPoint.builder()
+                        .type(ZigZagPoint.Type.LOW)
+                        .timestamp(ltpTime)
+                        .sequence(ltpTime.getEpochSecond())
+                        .value(ltp)
+                        .atrAtPivot(last.getAtrAtPivot())
+                        .build();
+                result.set(result.size() - 1, synthetic);
+            } else {
+                // Up-leg started — append new HIGH at LTP
+                synthetic = ZigZagPoint.builder()
+                        .type(ZigZagPoint.Type.HIGH)
+                        .timestamp(ltpTime)
+                        .sequence(ltpTime.getEpochSecond())
+                        .value(ltp)
+                        .atrAtPivot(last.getAtrAtPivot())
+                        .build();
+                result.add(synthetic);
+            }
+        }
+
+        // Recompute retracement/extension metrics with the synthetic pivot included
+        computePivotMetrics(result);
+        log.debug("[ZigZag] withLtpPivot: ltp={} last={}@{} → result has {} pivots (last {}@{})",
+                ltp, last.getType(), last.getValue(),
+                result.size(), result.get(result.size() - 1).getType(), result.get(result.size() - 1).getValue());
+        return result;
     }
 
     private String toJson(List<ZigZagPoint> pivots) {

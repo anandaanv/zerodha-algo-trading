@@ -22,9 +22,9 @@ public class ChartPatternProperties {
     @Data
     public static class ZigZagDefaults {
         private int atrLength = 14;
-        private double atrMult = 2.0;
+        private double atrMult = 0.5;
         private double pctMin = 0.03;
-        private double hysteresis = 1.6;
+        private double hysteresis = 1.1;
         private int minBarsBetweenPivots = 3;
         private String mode = "LIVE"; // LIVE or BACKTEST
         private boolean dynamicPctEnabled = true;

@@ -64,6 +64,7 @@ export default function CopilotChartPanel({
   const [expandedObsId, setExpandedObsId] = useState<number | null>(null);
   const [scenarioText, setScenarioText] = useState('');
   const [elliottResult, setElliottResult] = useState<AdvancedElliottResult | null>(null);
+  const [elliottAiRecommend, setElliottAiRecommend] = useState(false);
   const [elliottLoading, setElliottLoading] = useState(false);
   const [elliottError, setElliottError] = useState<string | null>(null);
 
@@ -169,14 +170,14 @@ export default function CopilotChartPanel({
     try {
       const primaryTf = timeframes[0] ?? '1D';
       const tfParam = timeframes.join(',');
-      const result = await runFullElliott(symbol, primaryTf, tfParam);
+      const result = await runFullElliott(symbol, primaryTf, tfParam, elliottAiRecommend);
       setElliottResult(result);
     } catch (e: any) {
       setElliottError(e.message ?? 'Elliott analysis failed');
     } finally {
       setElliottLoading(false);
     }
-  }, [symbol, timeframes]);
+  }, [symbol, timeframes, elliottAiRecommend]);
 
   const handleConfirm = async (id: number, entryType: string) => {
     try {
@@ -255,17 +256,28 @@ export default function CopilotChartPanel({
         >
           {loadingAction === 'full' ? 'Running...' : 'Full'}
         </button>
-        <button
-          onClick={handleFullElliott}
-          disabled={elliottLoading}
-          style={{
-            padding: '4px 10px', fontSize: 12, cursor: 'pointer',
-            background: elliottLoading ? '#37474f' : '#1a237e',
-            color: '#fff', border: 'none', borderRadius: 3,
-          }}
-        >
-          {elliottLoading ? '…' : 'Elliott'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            onClick={handleFullElliott}
+            disabled={elliottLoading}
+            style={{
+              padding: '4px 10px', fontSize: 12, cursor: 'pointer',
+              background: elliottLoading ? '#37474f' : '#1a237e',
+              color: '#fff', border: 'none', borderRadius: 3,
+            }}
+          >
+            {elliottLoading ? '…' : 'Elliott'}
+          </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, color: '#90caf9', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={elliottAiRecommend}
+              onChange={e => setElliottAiRecommend(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            AI
+          </label>
+        </div>
         {state.investigationId && (
           <button
             onClick={() => state.investigationId && refresh(state.investigationId)}

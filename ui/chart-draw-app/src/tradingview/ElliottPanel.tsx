@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type {
   AdvancedElliottResult,
+  AiTradeRecommendation,
   ElliottEntryCandidate,
   ElliottScoredScenario,
   ElliottConfluenceZone,
@@ -41,6 +42,7 @@ export default function ElliottPanel({
   const [promptOpen, setPromptOpen] = useState(false);
   const [expandedScenarioId, setExpandedScenarioId] = useState<string | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiRecOpen, setAiRecOpen] = useState(true);
 
   if (loading) {
     return (
@@ -60,7 +62,7 @@ export default function ElliottPanel({
 
   if (!result) return null;
 
-  const { entryCandidates, scoredScenarios, confluenceZones, hypothesisSnapshot, promptSummary } = result;
+  const { entryCandidates, scoredScenarios, confluenceZones, hypothesisSnapshot, promptSummary, aiRecommendation } = result;
 
   return (
     <div style={{ padding: '8px 12px', fontSize: 12, color: '#e0e0e0' }}>
@@ -138,6 +140,11 @@ export default function ElliottPanel({
             </div>
           ))}
         </div>
+      )}
+
+      {/* ── Section E: AI Trade Recommendation ── */}
+      {aiRecommendation && (
+        <AiRecommendationPanel rec={aiRecommendation} open={aiRecOpen} onToggle={() => setAiRecOpen(o => !o)} />
       )}
 
       {/* ── Section E: Prompt Summary ── */}
@@ -403,6 +410,150 @@ function ZoneRow({ zone }: { zone: ElliottConfluenceZone }) {
       </span>
       <span style={{ color: '#757575', fontSize: 10 }}>{zone.factorCount}f</span>
       <span style={{ color: '#757575', fontSize: 10, flex: 1 }}>{zone.zoneType}</span>
+    </div>
+  );
+}
+
+// ── AI Recommendation Panel ──────────────────────────────────────────────────
+
+function AiRecommendationPanel({
+  rec, open, onToggle,
+}: { rec: AiTradeRecommendation; open: boolean; onToggle: () => void }) {
+  if (rec.error) {
+    return (
+      <div style={{ marginBottom: 12, padding: '6px 10px', background: '#1a0000', borderRadius: 4, borderLeft: '3px solid #b71c1c' }}>
+        <span style={{ color: '#ef9a9a', fontSize: 11 }}>AI recommendation error: {rec.error}</span>
+      </div>
+    );
+  }
+
+  const stage = rec.currentStage ?? 'UNKNOWN';
+  const stageColor = stage === 'ENTRY_READY' ? '#a5d6a7' : stage === 'WATCHING' ? '#fff176' : '#ef9a9a';
+  const isLong = rec.anticipatoryEntry?.direction === 'LONG';
+  const isShort = rec.anticipatoryEntry?.direction === 'SHORT';
+  const dirColor = isLong ? '#a5d6a7' : isShort ? '#ef9a9a' : '#bdbdbd';
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      {/* Header row */}
+      <div
+        onClick={onToggle}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+          background: '#0d1b0d', borderRadius: 4, padding: '5px 10px',
+          borderLeft: '3px solid #66bb6a',
+        }}
+      >
+        <span style={{ fontWeight: 700, color: '#66bb6a', fontSize: 13 }}>AI Recommendation</span>
+        <span style={{
+          background: stageColor, color: '#000', fontSize: 10, fontWeight: 700,
+          padding: '1px 6px', borderRadius: 10,
+        }}>{stage}</span>
+        {rec.anticipatoryEntry?.direction && (
+          <span style={{ color: dirColor, fontWeight: 700, fontSize: 12 }}>
+            {rec.anticipatoryEntry.direction}
+          </span>
+        )}
+        <span style={{ marginLeft: 'auto', color: '#757575' }}>{open ? '▾' : '▸'}</span>
+      </div>
+
+      {open && (
+        <div style={{ background: '#111', borderRadius: '0 0 4px 4px', padding: '8px 10px', fontSize: 11, color: '#e0e0e0' }}>
+
+          {/* Hypothesis label */}
+          {rec.hypothesisLabel && (
+            <div style={{ color: '#fff176', fontWeight: 600, marginBottom: 4 }}>{rec.hypothesisLabel}</div>
+          )}
+
+          {/* Confidence layers */}
+          {rec.confidenceLayers && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 8 }}>
+              {Object.entries(rec.confidenceLayers).map(([k, v]) => {
+                const bg = v === 'pass' ? '#1b5e20' : v === 'fail' ? '#b71c1c' : v === 'warning' ? '#e65100' : '#1a1a2e';
+                return (
+                  <span key={k} style={{ background: bg, color: '#fff', padding: '1px 6px', borderRadius: 3, fontSize: 10 }}>
+                    {k}: {v}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Anticipatory entry */}
+          {rec.anticipatoryEntry && (
+            <div style={{ marginBottom: 8, padding: '6px 8px', background: '#0a1a0a', borderRadius: 4, borderLeft: '2px solid #388e3c' }}>
+              <div style={{ color: '#66bb6a', fontWeight: 600, marginBottom: 4 }}>
+                Anticipatory Entry ({rec.anticipatoryEntry.direction})
+              </div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {rec.anticipatoryEntry.entryZone && (
+                  <span>Entry: <b style={{ color: '#fff176' }}>{rec.anticipatoryEntry.entryZone}</b></span>
+                )}
+                {rec.anticipatoryEntry.stopLoss && (
+                  <span>SL: <b style={{ color: '#ef9a9a' }}>{rec.anticipatoryEntry.stopLoss}</b></span>
+                )}
+                {rec.anticipatoryEntry.target1 && (
+                  <span>T1: <b style={{ color: '#a5d6a7' }}>{rec.anticipatoryEntry.target1}</b></span>
+                )}
+                {rec.anticipatoryEntry.target2 && (
+                  <span>T2: <b style={{ color: '#80cbc4' }}>{rec.anticipatoryEntry.target2}</b></span>
+                )}
+              </div>
+              {rec.anticipatoryEntry.rationale && (
+                <div style={{ color: '#9e9e9e', marginTop: 4 }}>{rec.anticipatoryEntry.rationale}</div>
+              )}
+            </div>
+          )}
+
+          {/* Confirmation entry */}
+          {rec.confirmationEntry && (
+            <div style={{ marginBottom: 8, padding: '6px 8px', background: '#0a0a1a', borderRadius: 4, borderLeft: '2px solid #1565c0' }}>
+              <div style={{ color: '#90caf9', fontWeight: 600, marginBottom: 4 }}>Confirmation Entry</div>
+              {rec.confirmationEntry.trigger && (
+                <div style={{ color: '#fff176', marginBottom: 4 }}>Trigger: {rec.confirmationEntry.trigger}</div>
+              )}
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                {rec.confirmationEntry.entryZone && (
+                  <span>Entry: <b style={{ color: '#fff176' }}>{rec.confirmationEntry.entryZone}</b></span>
+                )}
+                {rec.confirmationEntry.stopLoss && (
+                  <span>SL: <b style={{ color: '#ef9a9a' }}>{rec.confirmationEntry.stopLoss}</b></span>
+                )}
+                {rec.confirmationEntry.target1 && (
+                  <span>T1: <b style={{ color: '#a5d6a7' }}>{rec.confirmationEntry.target1}</b></span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Invalidation conditions */}
+          {rec.invalidationConditions && rec.invalidationConditions.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ color: '#ef9a9a', fontWeight: 600, marginBottom: 2 }}>Invalidation</div>
+              {rec.invalidationConditions.map((c, i) => (
+                <div key={i} style={{ color: '#bdbdbd' }}>• {c}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Anomaly flags */}
+          {rec.anomalyFlags && rec.anomalyFlags.length > 0 && (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ color: '#fff176', fontWeight: 600, marginBottom: 2 }}>Anomalies</div>
+              {rec.anomalyFlags.map((f, i) => (
+                <div key={i} style={{ color: '#bdbdbd' }}>⚠ {f}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Reasoning */}
+          {rec.reasoning && (
+            <div style={{ color: '#9e9e9e', borderTop: '1px solid #222', paddingTop: 6, marginTop: 4 }}>
+              {rec.reasoning}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

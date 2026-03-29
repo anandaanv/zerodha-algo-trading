@@ -62,6 +62,7 @@ public class CopilotAnalysisController {
     private final MarketStructureService marketStructureService;
     private final ZigZagService zigzagService;
     private final ElliottWaveAnalyzer elliottWaveAnalyzer;
+    private final com.dtech.kitecon.analysis.AnalysisProcessService analysisProcessService;
     private final AdvancedElliottService advancedElliottService;
     private final ElliottVerificationService elliottVerificationService;
     private final InstrumentRepository instrumentRepository;
@@ -453,17 +454,23 @@ public class CopilotAnalysisController {
                 List<ZigZagPoint> pivots = zigzagService.getOrComputePivots(symbol, instrument, interval);
                 log.info("[Copilot] Got {} ZigZag pivots for {} {}", pivots.size(), symbol, tf);
 
-                MarketStructureData msd = marketStructureService.analyse(pivots, tf);
+                // Fetch BarSeries first so we can inject LTP as a synthetic last pivot
+                BarSeries series = zigzagService.getBarSeries(symbol, instrument, interval);
+
+                // Append/replace last pivot with current LTP to make analysis real-time aware
+                List<ZigZagPoint> pivotsWithLtp = zigzagService.withLtpPivot(pivots, series);
+
+                MarketStructureData msd = marketStructureService.analyse(pivotsWithLtp, tf);
                 msdSummary.append(msd.toPromptSummary()).append("\n");
 
-                // Zigzag summary: last 30 pivots
-                if (!pivots.isEmpty()) {
+                // Zigzag summary: last 30 pivots (with LTP synthetic pivot)
+                if (!pivotsWithLtp.isEmpty()) {
                     zigzagSummary.append("=== ").append(tf).append(" ===\n");
-                    zigzagSummary.append(String.format("  Total pivots: %d (showing last %d)%n",
-                            pivots.size(), Math.min(30, pivots.size())));
-                    int start = Math.max(0, pivots.size() - 30);
-                    for (int i = start; i < pivots.size(); i++) {
-                        ZigZagPoint p = pivots.get(i);
+                    zigzagSummary.append(String.format("  Total pivots: %d (showing last %d, last is LTP-synthetic)%n",
+                            pivotsWithLtp.size(), Math.min(30, pivotsWithLtp.size())));
+                    int start = Math.max(0, pivotsWithLtp.size() - 30);
+                    for (int i = start; i < pivotsWithLtp.size(); i++) {
+                        ZigZagPoint p = pivotsWithLtp.get(i);
                         zigzagSummary.append(String.format("  [%d] %s %.2f @ %s retr=%.1f%% ext=%.1f%%%n",
                                 i, p.isHigh() ? "HIGH" : "LOW", p.getValue(), p.getTimestamp(),
                                 p.getRetracementPct() != null ? p.getRetracementPct() : 0.0,
@@ -471,9 +478,8 @@ public class CopilotAnalysisController {
                     }
                 }
 
-                // Collect for Elliott Wave engine
-                BarSeries series = zigzagService.getBarSeries(symbol, instrument, interval);
-                pivotsByTf.put(tf, pivots);
+                // Collect for Elliott Wave engine (use LTP-adjusted pivots)
+                pivotsByTf.put(tf, pivotsWithLtp);
                 structureByTf.put(tf, msd);
                 seriesByTf.put(tf, series);
                 orderedTfs.add(tf);
@@ -505,10 +511,24 @@ public class CopilotAnalysisController {
                 ElliottWaveAnalysis analysis = elliottWaveAnalyzer.analyze(
                         pivotsByTf, structureByTf, seriesByTf, orderedTfs, detailTf);
 
-                String promptSummary = analysis.toPromptSummary();
+                // Derive current price from last bar of the most detailed TF series
+                org.ta4j.core.BarSeries detailSeries = seriesByTf.get(detailTf);
+                double currentPrice = (detailSeries != null && detailSeries.getBarCount() > 0)
+                        ? detailSeries.getLastBar().getClosePrice().doubleValue()
+                        : 0.0;
+
+                // Run processing pipeline: dedup + restructure + AI payload
+                com.dtech.kitecon.analysis.dto.ProcessAnalysisResponse processed =
+                        analysisProcessService.process(analysis, symbol, currentPrice, detailTf);
+
+                // Store the restructured human-readable text (replaces raw toPromptSummary)
+                String promptSummary = processed.getHumanReadable();
                 investigationService.updateElliottData(investigationId, promptSummary);
-                log.info("[Copilot] Stored Elliott Wave analysis ({} chars, {} scenarios) for investigation #{}",
-                        promptSummary.length(), analysis.getScenarios().size(), investigationId);
+                log.info("[Copilot] Stored processed Elliott analysis ({} chars, patterns {}->{}) for investigation #{}",
+                        promptSummary.length(),
+                        processed.getProcessingStats().getPatternsBefore(),
+                        processed.getProcessingStats().getPatternsAfter(),
+                        investigationId);
                 log.info("[Copilot] Elliott analysis ready: primaryTf={}, waveCounts={}, patterns={}, scenarios={}",
                         analysis.getPrimaryTimeframe(),
                         analysis.getWaveCounts() != null ? analysis.getWaveCounts().size() : 0,
@@ -654,7 +674,9 @@ public class CopilotAnalysisController {
     public ResponseEntity<?> fullElliottAnalysis(
             @RequestParam String symbol,
             @RequestParam String primaryTimeframe,
-            @RequestParam(defaultValue = "daily,weekly") String timeframes) {
+            @RequestParam(defaultValue = "daily,weekly") String timeframes,
+            @RequestParam(defaultValue = "false") boolean aiRecommend,
+            Authentication auth) {
 
         List<String> tfList = Arrays.stream(timeframes.split(","))
                 .map(String::trim)
@@ -683,9 +705,10 @@ public class CopilotAnalysisController {
             }
             try {
                 List<ZigZagPoint> pivots = zigzagService.getOrComputePivots(symbol, instrument, interval);
-                MarketStructureData msd = marketStructureService.analyse(pivots, tf);
                 BarSeries series = zigzagService.getBarSeries(symbol, instrument, interval);
-                pivotsByTf.put(tf, pivots);
+                List<ZigZagPoint> pivotsWithLtp = zigzagService.withLtpPivot(pivots, series);
+                MarketStructureData msd = marketStructureService.analyse(pivotsWithLtp, tf);
+                pivotsByTf.put(tf, pivotsWithLtp);
                 structureByTf.put(tf, msd);
                 seriesByTf.put(tf, series);
                 orderedTfs.add(tf);
@@ -703,6 +726,49 @@ public class CopilotAnalysisController {
         try {
             AdvancedElliottAnalysisResult result = advancedElliottService.analyze(
                     seriesByTf, pivotsByTf, structureByTf, orderedTfs, symbol, resolvedPrimaryTf);
+
+            // Run processing pipeline and replace raw promptSummary with deduplicated output
+            if (result.getWaveAnalysis() != null) {
+                BarSeries primarySeries = seriesByTf.get(resolvedPrimaryTf);
+                double currentPrice = (primarySeries != null && primarySeries.getBarCount() > 0)
+                        ? primarySeries.getLastBar().getClosePrice().doubleValue() : 0.0;
+                com.dtech.kitecon.analysis.dto.ProcessAnalysisResponse processed =
+                        analysisProcessService.process(result.getWaveAnalysis(), symbol, currentPrice, resolvedPrimaryTf);
+                result.setPromptSummary(processed.getHumanReadable());
+
+                // Optional AI recommendation pass
+                if (aiRecommend) {
+                    try {
+                        Long userId = resolveUserId(auth);
+                        String instructions = orchestratorService.buildScenarioEvaluatorInstructions();
+
+                        // Build data: Elliott analysis (with indicator snapshot) + market structure
+                        StringBuilder data = new StringBuilder();
+                        data.append("=== SYMBOL: ").append(symbol).append(" ===\n");
+                        data.append("=== TIMEFRAMES: ").append(String.join(",", orderedTfs)).append(" ===\n\n");
+                        data.append(processed.getHumanReadable()).append("\n\n");
+
+                        // Append market structure summary
+                        for (Map.Entry<String, MarketStructureData> e : structureByTf.entrySet()) {
+                            String msdText = e.getValue().toPromptSummary();
+                            if (msdText != null && !msdText.isBlank()) {
+                                data.append("=== MARKET STRUCTURE (").append(e.getKey()).append(") ===\n");
+                                data.append(msdText).append("\n");
+                            }
+                        }
+
+                        String rawAiResponse = aiService.call(userId, instructions, data.toString());
+                        log.info("[FullElliott] AI recommendation raw response: {}", rawAiResponse);
+
+                        Object parsedResponse = responseParser.parse(rawAiResponse);
+                        result.setAiRecommendation(parsedResponse);
+                    } catch (Exception aiEx) {
+                        log.error("[FullElliott] AI recommendation failed for {}: {}", symbol, aiEx.getMessage(), aiEx);
+                        result.setAiRecommendation(Map.of("error", aiEx.getMessage()));
+                    }
+                }
+            }
+
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("[AdvancedElliott] Analysis failed for {}: {}", symbol, e.getMessage(), e);

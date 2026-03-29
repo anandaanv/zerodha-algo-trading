@@ -29,6 +29,9 @@ import ScreenerDetailPage from "./screener/pages/ScreenerDetailPage";
 // Trades routes
 import { tradesRoutes } from "./trades";
 
+// Elliott Screener
+import ElliottScreenerPage from "./elliottScreener/pages/ElliottScreenerPage";
+
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -131,6 +134,14 @@ root.render(
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/elliott-screener"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <ElliottScreenerPage />
             </ProtectedRoute>
           }
         />

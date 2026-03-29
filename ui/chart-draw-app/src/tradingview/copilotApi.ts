@@ -245,8 +245,10 @@ export async function runFullElliott(
   symbol: string,
   primaryTimeframe: string,
   timeframes: string,
+  aiRecommend = false,
 ): Promise<AdvancedElliottResult> {
   const params = new URLSearchParams({ symbol, primaryTimeframe, timeframes });
+  if (aiRecommend) params.set('aiRecommend', 'true');
   return request<AdvancedElliottResult>(`/analysis/full-elliott?${params}`, {
     method: 'POST',
   });

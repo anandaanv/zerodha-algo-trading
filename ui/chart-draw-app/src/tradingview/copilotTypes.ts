@@ -303,12 +303,37 @@ export interface ElliottScoredScenario {
   };
 }
 
+export interface AiTradeEntry {
+  direction?: string;
+  entryZone?: string;
+  stopLoss?: string;
+  target1?: string;
+  target2?: string;
+  rationale?: string;
+}
+
+export interface AiTradeRecommendation {
+  type: string;
+  hypothesisLabel?: string;
+  waveContext?: string;
+  pattern?: string;
+  currentStage?: string;
+  confidenceLayers?: Record<string, string>;
+  anticipatoryEntry?: AiTradeEntry;
+  confirmationEntry?: AiTradeEntry & { trigger?: string };
+  invalidationConditions?: string[];
+  anomalyFlags?: string[];
+  reasoning?: string;
+  error?: string;
+}
+
 export interface AdvancedElliottResult {
   confluenceZones: ElliottConfluenceZone[];
   scoredScenarios: ElliottScoredScenario[];
   entryCandidates: ElliottEntryCandidate[];
   hypothesisSnapshot: ElliottHypothesisSnapshot | null;
   promptSummary: string;
+  aiRecommendation?: AiTradeRecommendation | null;
 }
 
 // ─── Second-Pass Filtering + AI Verification ─────────────────────────────────

@@ -21,6 +21,7 @@ import java.util.List;
  *  - Bull / Bear Flag and Pennant
  *  - Ascending / Descending Channel
  *  - Elliott corrective patterns (Zigzag, Flat, Expanded Flat)
+ *  - Diagonal patterns (Leading Diagonal, Ending Diagonal / EDT)
  */
 @Service
 public class PivotPatternDetector {
@@ -34,6 +35,8 @@ public class PivotPatternDetector {
     /** Fibonacci zones for B-wave to distinguish zigzag from flat */
     private static final double FLAT_B_RETRACE_MIN = 0.90;
     private static final double ZIGZAG_B_RETRACE_MAX = 0.786;
+
+    private final DiagonalPatternDetector diagonalDetector = new DiagonalPatternDetector();
 
     public List<PatternMatch> detect(List<EnrichedPivot> pivots, String timeframe) {
         List<PatternMatch> results = new ArrayList<>();
@@ -49,6 +52,7 @@ public class PivotPatternDetector {
         results.addAll(detectFlags(pivots, timeframe));
         results.addAll(detectChannels(pivots, timeframe));
         results.addAll(detectCorrectivePatterns(pivots, timeframe));
+        results.addAll(diagonalDetector.detect(pivots, timeframe));
 
         return results;
     }
@@ -249,6 +253,40 @@ public class PivotPatternDetector {
                     .impliedNextWave(WaveLabel.W5)
                     .probability(0.70)
                     .narrative("Expanded flat = W4 correction where B exceeds W3 high. Indicates strong bull trend — W5 extension likely.")
+                    .build()
+            );
+
+            case LEADING_DIAGONAL -> List.of(
+                WaveContextHint.builder()
+                    .impliedCurrentPosition(WaveLabel.W1)
+                    .impliedNextWave(WaveLabel.W2)
+                    .probability(0.65)
+                    .confirmationLevel(confirmationLevel)
+                    .confirmationDescription("Wave 4 support holds → wave 5 of diagonal completing; then sharp Wave 2 pullback before Wave 3")
+                    .narrative("Leading diagonal = Wave 1 of new impulse. Expect deep Wave 2 retrace (50–78.6%) before Wave 3 extends.")
+                    .build(),
+                WaveContextHint.builder()
+                    .impliedCurrentPosition(WaveLabel.WA)
+                    .impliedNextWave(WaveLabel.WB)
+                    .probability(0.35)
+                    .narrative("Leading diagonal as Wave A of corrective zigzag — Wave B bounce imminent after completion.")
+                    .build()
+            );
+
+            case ENDING_DIAGONAL -> List.of(
+                WaveContextHint.builder()
+                    .impliedCurrentPosition(WaveLabel.WC)
+                    .impliedNextWave(WaveLabel.UNKNOWN)
+                    .probability(0.70)
+                    .confirmationLevel(confirmationLevel)
+                    .confirmationDescription("Break above wave 4 high of diagonal confirms EDT complete — sharp reversal rally begins")
+                    .narrative("Ending diagonal at Wave C: terminal exhaustion structure. Completion followed by sharp reversal.")
+                    .build(),
+                WaveContextHint.builder()
+                    .impliedCurrentPosition(WaveLabel.W5)
+                    .impliedNextWave(WaveLabel.UNKNOWN)
+                    .probability(0.30)
+                    .narrative("Ending diagonal at Wave 5: impulse terminal. Full A-B-C correction begins on breakdown.")
                     .build()
             );
 

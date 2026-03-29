@@ -131,11 +131,21 @@ public class PivotIndicatorEnricher {
             macdAmplitudes[i] = Math.abs(h);
         }
 
+        // Build timestamp → bar index map for correct per-pivot indicator lookup.
+        // ZigZagPoint.barIndex is always 0 (Lombok builder bypasses the private setSequence()),
+        // so we resolve the correct bar position by matching timestamps instead.
+        Map<java.time.Instant, Integer> tsToBarIdx = new java.util.HashMap<>(totalBars * 2);
+        for (int i = 0; i < totalBars; i++) {
+            tsToBarIdx.put(series.getBar(i).getEndTime(), i);
+        }
+
         // ── Enrich each pivot ─────────────────────────────────────────────────
         List<EnrichedPivot> enriched = new ArrayList<>();
 
         for (ZigZagPoint zp : zigzagPoints) {
-            int idx = zp.getBarIndex();
+            Integer foundIdx = tsToBarIdx.get(zp.getTimestamp());
+            if (foundIdx == null) continue;  // pivot timestamp not in series — stale snapshot
+            int idx = foundIdx;
             if (idx < 0 || idx >= totalBars) continue;
 
             double price    = zp.getValue();

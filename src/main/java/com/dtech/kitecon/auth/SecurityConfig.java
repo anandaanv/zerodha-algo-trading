@@ -55,7 +55,8 @@ public class SecurityConfig {
                                 "/login",
                                 "/dashboard", "/chart", "/chart-legacy", "/prompt-builder",
                                 "/screener", "/screener/**", "/trades", "/trades/**",
-                                "/copilot", "/skills", "/kite-success"
+                                "/copilot", "/skills", "/kite-success",
+                                "/elliott-screener", "/elliott-screener/**"
                         ).permitAll()
 
                         // Role-based access control
@@ -76,6 +77,12 @@ public class SecurityConfig {
                                 "/api/hypotheses/**", "/api/monitor/**",
                                 "/api/copilot/skills/**", "/api/copilot/**",
                                 "/api/trades/**"
+                        ).hasAnyRole("USER", "MODERATOR", "ADMIN")
+
+                        // Elliott Screener endpoints — USER role
+                        .requestMatchers(
+                                "/api/elliott-screener/**",
+                                "/api/elliott-suggestions/**"
                         ).hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // All other endpoints require authentication

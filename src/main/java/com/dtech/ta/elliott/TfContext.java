@@ -59,6 +59,17 @@ public class TfContext {
     /** Narrative summary for use in prompt */
     private String narrative;
 
+    /**
+     * Number of trend segments seen in this TF since the first detected pivot.
+     * Rough wave-position proxy (populated by enrichTfContextsWithSegments):
+     *   1 segment  = early Wave 1/A territory
+     *   2 segments = potential Wave 1-2 or A-B
+     *   3 segments = Wave 1-2-3 or ABC complete
+     *   4 segments = Wave 1-2-3-4 or post-ABC
+     *   5+ segments = full impulse candidate
+     */
+    private int segmentCount;
+
     /** Score boosts earned from child TF confirmations (populated bottom-up) */
     @Builder.Default
     private int childConfirmationBonus = 0;

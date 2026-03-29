@@ -319,6 +319,10 @@ public class CopilotOrchestratorService {
             - If the pre-computed evidence is ambiguous, say so in confidenceLayers
             - If no trade setup is actionable right now, say so clearly
             - Always reference which scenario and hypothesis ID you are confirming
+            - The INDICATOR SNAPSHOT section (appended to the analysis data) shows actual RSI/MACD/EWO/
+              Bollinger/ADX/Volume readings at the last 1-2 pivots per timeframe. Use these to assess
+              momentum direction, divergences, and whether indicators confirm the wave structure before
+              selecting and sizing the best trade.
 
             Return a JSON FINDING response:
             {
@@ -332,7 +336,8 @@ public class CopilotOrchestratorService {
                 "waveStructure": "pass | fail | warning",
                 "patternConfluence": "pass | fail | warning",
                 "indicatorAlignment": "pass | fail | warning",
-                "crossTfAlignment": "pass | fail | warning"
+                "crossTfAlignment": "pass | fail | warning",
+                "indicatorContext": "brief summary of RSI/MACD/EWO state and whether it confirms or contradicts the count"
               },
               "anticipatoryEntry": {
                 "direction": "LONG | SHORT",

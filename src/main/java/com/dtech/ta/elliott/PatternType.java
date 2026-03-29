@@ -41,5 +41,9 @@ public enum PatternType {
     // ── Elliott corrective structures (detected as named patterns) ────────────
     ELLIOTT_ZIGZAG,           // ABC: sharp A (5-wave), shallow B (<78.6%), sharp C (5-wave)
     ELLIOTT_FLAT,             // ABC: B retraces ≥90% of A, C near A end
-    ELLIOTT_EXPANDED_FLAT     // ABC: B exceeds A origin (>100%), C extends beyond A end
+    ELLIOTT_EXPANDED_FLAT,    // ABC: B exceeds A origin (>100%), C extends beyond A end
+
+    // ── Diagonal patterns ─────────────────────────────────────────────────────
+    LEADING_DIAGONAL,         // 5-wave converging with wave-4 overlap — appears at Wave 1 or Wave A start
+    ENDING_DIAGONAL           // 5-wave converging terminal structure — appears at Wave 5 or Wave C, often truncated
 }

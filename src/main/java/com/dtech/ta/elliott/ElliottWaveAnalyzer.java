@@ -2,10 +2,12 @@ package com.dtech.ta.elliott;
 
 import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import com.dtech.kitecon.service.copilot.dto.MarketStructureData;
+import com.dtech.kitecon.service.copilot.dto.TrendSegment;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -63,8 +65,14 @@ public class ElliottWaveAnalyzer {
         // Layer 7: Scenarios
         List<WaveScenario> scenarios = scenarioBuilder.build(waveCounts, patterns, primaryTf);
 
+        // Phase 2b: segment proportionality bonus on wave counts (before scenario ranking)
+        applySegmentProportionalityBonus(waveCounts, structureByTf);
+
         // TfContext: top-down extraction
         Map<String, TfContext> tfContexts = buildTfContexts(tfOrder, waveCounts);
+
+        // Phase 2a: enrich TfContext with segment data (correctionOrigin, segmentCount, narrative)
+        enrichTfContextsWithSegments(tfContexts, structureByTf);
 
         // Bottom-up: child TF confirmations boost parent scores
         applyBottomUpBoosts(tfContexts, tfOrder, waveCounts);
@@ -383,6 +391,143 @@ public class ElliottWaveAnalyzer {
         private String description;
         private Double target;
         private Double confidence;
+    }
+
+    // ─── Phase 2a: TfContext enrichment from trend segments ───────────────────
+
+    /**
+     * Enriches each TfContext with structural data derived from trend segments:
+     * - Sets correctionOrigin if the ongoing segment is a downtrend and wave count didn't set it
+     * - Overrides bullishContext when structural trend evidence is independently strong
+     * - Sets segmentCount (rough wave-position proxy)
+     * - Appends segment narrative to existing TfContext narrative
+     */
+    private void enrichTfContextsWithSegments(Map<String, TfContext> tfContexts,
+                                               Map<String, MarketStructureData> structureByTf) {
+        for (Map.Entry<String, TfContext> entry : tfContexts.entrySet()) {
+            String tf = entry.getKey();
+            TfContext ctx = entry.getValue();
+            MarketStructureData msd = structureByTf.get(tf);
+            if (msd == null || msd.getTrendSegments() == null || msd.getTrendSegments().isEmpty()) continue;
+
+            List<TrendSegment> segments = msd.getTrendSegments();
+            TrendSegment current = segments.get(segments.size() - 1);
+
+            // Segment count — rough wave position proxy
+            ctx.setSegmentCount(segments.size());
+
+            // Fill correctionOrigin from segment if wave count didn't set it
+            if (ctx.getCorrectionOrigin() == null
+                    && current.getDirection() == TrendSegment.Direction.DOWNTREND) {
+                ctx.setCorrectionOrigin(current.getStartPrice());
+            }
+
+            // Override bullishContext when structural trend independently confirms uptrend
+            if (!ctx.isBullishContext()
+                    && msd.getTrendDirection() == MarketStructureData.TrendDirection.UPTREND
+                    && msd.getTrendStrength() >= 2) {
+                ctx.setBullishContext(true);
+            }
+
+            // Append segment narrative
+            String segNarrative = buildSegmentNarrative(tf, segments);
+            if (segNarrative != null && ctx.getNarrative() != null) {
+                ctx.setNarrative(ctx.getNarrative() + " | " + segNarrative);
+            }
+        }
+    }
+
+    private String buildSegmentNarrative(String tf, List<TrendSegment> segments) {
+        if (segments.isEmpty()) return null;
+        TrendSegment current = segments.get(segments.size() - 1);
+        int count = segments.size();
+        String pos = switch (count) {
+            case 1 -> "1 segment — early W1/A territory";
+            case 2 -> "2 segments — W1-2 or A-B";
+            case 3 -> "3 segments — W1-2-3 or ABC";
+            case 4 -> "4 segments — W1-2-3-4 or post-ABC";
+            case 5 -> "5 segments — full impulse candidate";
+            default -> count + " segments";
+        };
+        return String.format("%s: %s | current %s %+.1f%% over %d pivots",
+                tf, pos, current.getDirection(), current.getPriceChangePct(), current.getPivotCount());
+    }
+
+    // ─── Phase 2b: segment proportionality bonus on wave counts ──────────────
+
+    /**
+     * Post-processing pass: awards a proportionality bonus (max +15 to indicatorScore)
+     * to IMPULSE wave counts where the segment structure matches Elliott expectations:
+     *
+     *  +6  W3 is in the longest segment (highest absolute price change among all segments)
+     *  +5  W2 and W4 correction segments have different depths (>20% difference — alternation)
+     *  +4  W5 segment is weaker than W3 segment (momentum divergence — terminal signal)
+     */
+    private void applySegmentProportionalityBonus(List<WaveCount> waveCounts,
+                                                   Map<String, MarketStructureData> structureByTf) {
+        for (WaveCount wc : waveCounts) {
+            if (wc.getWaveType() != WaveCount.WaveType.IMPULSE) continue;
+            if (wc.getPivots() == null || wc.getPivots().size() < 5) continue;
+
+            MarketStructureData msd = structureByTf.get(wc.getPrimaryTimeframe());
+            if (msd == null || msd.getTrendSegments() == null || msd.getTrendSegments().isEmpty()) continue;
+
+            List<TrendSegment> segments = msd.getTrendSegments();
+            List<EnrichedPivot> pivots = wc.getPivots();
+
+            // Locate the segment each wave body falls in (by midpoint timestamp)
+            TrendSegment w1Seg = segmentAt(segments, midpoint(pivots.get(0), pivots.get(1)));
+            TrendSegment w2Seg = segmentAt(segments, midpoint(pivots.get(1), pivots.get(2)));
+            TrendSegment w3Seg = segmentAt(segments, midpoint(pivots.get(2), pivots.get(3)));
+            TrendSegment w4Seg = segmentAt(segments, midpoint(pivots.get(3), pivots.get(4)));
+            TrendSegment w5Seg = pivots.size() >= 6
+                    ? segmentAt(segments, midpoint(pivots.get(4), pivots.get(5)))
+                    : null;
+
+            int bonus = 0;
+
+            // +6: W3 is in the segment with the largest absolute price change
+            if (w3Seg != null) {
+                double w3Change = Math.abs(w3Seg.getPriceChangePct());
+                boolean w3IsLongest = segments.stream()
+                        .allMatch(s -> s == w3Seg || Math.abs(s.getPriceChangePct()) <= w3Change);
+                if (w3IsLongest) bonus += 6;
+            }
+
+            // +5: W2 and W4 have different correction depths (>20% relative diff — alternation)
+            if (w2Seg != null && w4Seg != null) {
+                double d2 = Math.abs(w2Seg.getPriceChangePct());
+                double d4 = Math.abs(w4Seg.getPriceChangePct());
+                double deeper = Math.max(d2, d4);
+                if (deeper > 0 && Math.abs(d2 - d4) / deeper > 0.20) bonus += 5;
+            }
+
+            // +4: W5 segment weaker than W3 (divergence)
+            if (w3Seg != null && w5Seg != null
+                    && Math.abs(w5Seg.getPriceChangePct()) < Math.abs(w3Seg.getPriceChangePct())) {
+                bonus += 4;
+            }
+
+            if (bonus > 0) {
+                wc.setIndicatorScore(Math.min(wc.getIndicatorScore() + bonus, 45));
+            }
+        }
+    }
+
+    /** Returns the segment whose time range contains the given instant (by midpoint lookup). */
+    private TrendSegment segmentAt(List<TrendSegment> segments, Instant instant) {
+        for (TrendSegment seg : segments) {
+            Instant start = seg.getStartTime();
+            Instant end   = seg.getEndTime() != null ? seg.getEndTime() : Instant.MAX;
+            if (!instant.isBefore(start) && !instant.isAfter(end)) return seg;
+        }
+        return null;
+    }
+
+    /** Midpoint instant between two enriched pivots. */
+    private Instant midpoint(EnrichedPivot a, EnrichedPivot b) {
+        return Instant.ofEpochSecond(
+                (a.getTimestamp().getEpochSecond() + b.getTimestamp().getEpochSecond()) / 2);
     }
 
     private String fmt(double v) { return String.format("%.2f", v); }
