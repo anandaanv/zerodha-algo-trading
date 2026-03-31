@@ -17,4 +17,5 @@ public interface ElliottTradeSuggestionRepository extends JpaRepository<ElliottT
     boolean existsByScreenerIdAndSymbolAndDirectionAndStateIn(Long screenerId, String symbol, String direction, List<SuggestionState> states);
     List<ElliottTradeSuggestion> findByUserIdAndSymbolAndStateIn(Long userId, String symbol, List<SuggestionState> states);
     Optional<ElliottTradeSuggestion> findByIdAndUserId(Long id, Long userId);
+    List<ElliottTradeSuggestion> findByScreenerIdAndSymbolAndStateIn(Long screenerId, String symbol, List<SuggestionState> states);
 }

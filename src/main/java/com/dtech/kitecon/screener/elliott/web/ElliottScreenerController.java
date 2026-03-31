@@ -5,6 +5,7 @@ import com.dtech.kitecon.auth.UserRepository;
 import com.dtech.kitecon.screener.elliott.dto.*;
 import com.dtech.kitecon.screener.elliott.entity.SuggestionChartLayout;
 import com.dtech.kitecon.screener.elliott.repository.ElliottScreenerRunRepository;
+import com.dtech.kitecon.screener.elliott.repository.ElliottScreenerRunResultRepository;
 import com.dtech.kitecon.screener.elliott.repository.SuggestionChartLayoutRepository;
 import com.dtech.kitecon.screener.elliott.repository.ElliottTradeSuggestionRepository;
 import com.dtech.kitecon.screener.elliott.repository.ElliottScreenerRepository;
@@ -36,6 +37,7 @@ public class ElliottScreenerController {
     private final ElliottScreenerRepository screenerRepository;
     private final SuggestionChartLayoutService layoutService;
     private final ScreenerAccessService screenerAccessService;
+    private final ElliottScreenerRunResultRepository runResultRepository;
 
     @GetMapping
     public ResponseEntity<?> list(Authentication auth) {
@@ -91,6 +93,35 @@ public class ElliottScreenerController {
                 .map(ElliottScreenerRunResponse::from)
                 .toList();
         return ResponseEntity.ok(runs);
+    }
+
+    @GetMapping("/{id}/runs/{runId}/results")
+    public ResponseEntity<?> getRunResults(Authentication auth, @PathVariable Long id, @PathVariable Long runId) {
+        Long userId = resolveUserId(auth);
+        screenerAccessService.requireScreenerAccess(auth);
+        List<Map<String, Object>> results = runResultRepository.findByRunIdOrderByScannedAt(runId)
+                .stream()
+                .map(r -> {
+                    Map<String, Object> dto = new java.util.LinkedHashMap<>();
+                    dto.put("id", r.getId());
+                    dto.put("runId", r.getRunId());
+                    dto.put("screenerId", r.getScreenerId());
+                    dto.put("symbol", r.getSymbol());
+                    dto.put("status", r.getStatus());
+                    dto.put("errorMessage", r.getErrorMessage());
+                    dto.put("suggestionId", r.getSuggestionId());
+                    dto.put("processingMs", r.getProcessingMs());
+                    dto.put("scannedAt", r.getScannedAt());
+                    return dto;
+                })
+                .toList();
+        return ResponseEntity.ok(results);
+    }
+
+    @GetMapping("/{id}/symbol-status")
+    public ResponseEntity<?> getSymbolStatus(Authentication auth, @PathVariable Long id) {
+        screenerAccessService.requireScreenerAccess(auth);
+        return ResponseEntity.ok(screenerService.getSymbolStatus(id));
     }
 
     @GetMapping("/suggestions/{suggestionId}/chart-layouts")

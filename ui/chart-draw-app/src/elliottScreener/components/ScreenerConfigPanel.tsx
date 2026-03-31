@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ElliottScreener, CreateScreenerRequest } from '../types';
 import { createScreener, updateScreener, triggerRun } from '../api';
 import IndexSymbolPicker from './IndexSymbolPicker';
+import RunResultsPanel from './RunResultsPanel';
 
 interface Props {
   screener?: ElliottScreener;
@@ -50,6 +51,7 @@ export default function ScreenerConfigPanel({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(!screener);
   const [running, setRunning] = useState(false);
+  const [showRuns, setShowRuns] = useState(false);
 
   const handleAddIndex = (token: string) => {
     setSymbols(prev => {
@@ -332,7 +334,44 @@ export default function ScreenerConfigPanel({
                 Cancel
               </button>
             )}
+            {screener && (
+              <button
+                onClick={() => setShowRuns(s => !s)}
+                style={{
+                  background: '#333',
+                  color: '#aaa',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+              >
+                {showRuns ? 'Hide History' : 'Run History'}
+              </button>
+            )}
+            {screener && (
+              <button
+                onClick={() => window.location.href = `/elliott-screener/${screener.id}/status`}
+                style={{
+                  background: '#333',
+                  color: '#90caf9',
+                  border: '1px solid #42a5f5',
+                  padding: '8px 16px',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                }}
+              >
+                View Status
+              </button>
+            )}
           </div>
+
+          {screener && showRuns && (
+            <div style={{ marginTop: 16 }}>
+              <RunResultsPanel screenerId={screener.id} />
+            </div>
+          )}
         </div>
       )}
     </div>
