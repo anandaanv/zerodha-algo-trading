@@ -9,6 +9,7 @@ import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.screener.elliott.dto.*;
 import com.dtech.kitecon.screener.elliott.entity.*;
 import com.dtech.kitecon.screener.elliott.repository.*;
+import com.dtech.kitecon.screener.elliott.repository.ElliottScreenerRunResultRepository;
 import com.dtech.kitecon.screener.elliott.service.*;
 import com.dtech.kitecon.service.copilot.*;
 import com.dtech.kitecon.service.copilot.dto.*;
@@ -24,6 +25,7 @@ import org.ta4j.core.BarSeries;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.*;
+import com.dtech.kitecon.screener.elliott.dto.SymbolStatusDto;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +46,8 @@ public class ElliottScreenerService {
     private final InstrumentRepository instrumentRepository;
     private final ObjectMapper objectMapper;
     private final SuggestionChartLayoutService layoutService;
+    private final ElliottSymbolScanService symbolScanService;
+    private final ElliottScreenerRunResultRepository runResultRepository;
 
     public ElliottScreenerResponse createScreener(Long userId, ElliottScreenerRequest request) {
         Instant nextRunAt = computeNextRunAt(request.getScheduleCron());
@@ -115,14 +119,12 @@ public class ElliottScreenerService {
         StringBuilder errors = new StringBuilder();
 
         for (String symbol : symbolList) {
-            try {
-                boolean suggestionCreated = runForSymbol(screener, run.getId(), userId, symbol);
-                if (suggestionCreated) created++;
-                else skipped++;
-            } catch (Exception e) {
-                log.error("[ElliottScreener] Error processing symbol {} for screener {}: {}",
-                        symbol, screener.getId(), e.getMessage(), e);
-                errors.append(symbol).append(": ").append(e.getMessage()).append("\n");
+            String status = symbolScanService.scanSymbol(screener, run.getId(), userId, symbol);
+            switch (status) {
+                case "PASSED" -> created++;
+                case "SKIPPED" -> skipped++;
+                case "ERROR" -> errors.append(symbol).append(": error\n");
+                // FAILED = no setup found, counted in processed only
             }
             processed++;
             run.setProcessedSymbols(processed);
@@ -299,6 +301,48 @@ public class ElliottScreenerService {
         }
 
         layoutService.generateAndSaveLayouts(suggestion, analysisByTf, seriesByTf);
+    }
+
+    public List<SymbolStatusDto> getSymbolStatus(Long screenerId) {
+        ElliottScreener screener = screenerRepository.findById(screenerId)
+                .orElseThrow(() -> new IllegalStateException("Screener not found: " + screenerId));
+
+        List<String> symbolList = Arrays.stream(screener.getSymbols().split(","))
+                .map(String::trim).filter(s -> !s.isBlank()).toList();
+
+        List<SuggestionState> activeStates = List.of(
+                SuggestionState.PROPOSED, SuggestionState.ANTICIPATORY, SuggestionState.ACTIVE);
+
+        return symbolList.stream().map(symbol -> {
+            var latestResult = runResultRepository.findTopByScreenerIdAndSymbolOrderByScannedAtDesc(screenerId, symbol);
+            var activeSuggestions = suggestionRepository.findByScreenerIdAndSymbolAndStateIn(screenerId, symbol, activeStates);
+            var activeSuggestion = activeSuggestions.stream().findFirst().orElse(null);
+
+            // Prefer the suggestion from the latest result if present
+            Long suggestionId = null;
+            String suggestionState = null;
+            String suggestionDirection = null;
+            if (latestResult.isPresent() && latestResult.get().getSuggestionId() != null) {
+                suggestionId = latestResult.get().getSuggestionId();
+                suggestionRepository.findById(suggestionId).ifPresent(s -> {});
+            }
+            if (activeSuggestion != null) {
+                suggestionId = activeSuggestion.getId();
+                suggestionState = activeSuggestion.getState().name();
+                suggestionDirection = activeSuggestion.getDirection();
+            }
+
+            return SymbolStatusDto.builder()
+                    .symbol(symbol)
+                    .lastStatus(latestResult.map(r -> r.getStatus()).orElse(null))
+                    .lastScannedAt(latestResult.map(r -> r.getScannedAt()).orElse(null))
+                    .processingMs(latestResult.map(r -> r.getProcessingMs()).orElse(null))
+                    .suggestionId(suggestionId)
+                    .suggestionState(suggestionState)
+                    .suggestionDirection(suggestionDirection)
+                    .runId(latestResult.map(r -> r.getRunId()).orElse(null))
+                    .build();
+        }).toList();
     }
 
     private String deriveDirection(FindingResponse finding) {

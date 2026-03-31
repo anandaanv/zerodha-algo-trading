@@ -1,6 +1,6 @@
 import { apiFetch } from "../config/api";
 import { withAuth } from "../utils/apiHelper";
-import { ElliottScreener, ElliottScreenerRun, ElliottTradeSuggestion, CreateScreenerRequest, SuggestionState } from './types';
+import { ElliottScreener, ElliottScreenerRun, ElliottTradeSuggestion, CreateScreenerRequest, SuggestionState, ElliottScreenerRunResult, SymbolStatus } from './types';
 
 export async function listScreeners(): Promise<ElliottScreener[]> {
   const res = await apiFetch('/api/elliott-screener', withAuth());
@@ -65,6 +65,24 @@ export async function triggerRun(id: number): Promise<ElliottScreenerRun> {
 
 export async function getRunHistory(id: number): Promise<ElliottScreenerRun[]> {
   const res = await apiFetch(`/api/elliott-screener/${id}/runs`, withAuth());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchRunResults(screenerId: number, runId: number): Promise<ElliottScreenerRunResult[]> {
+  const res = await apiFetch(`/api/elliott-screener/${screenerId}/runs/${runId}/results`, withAuth());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchSymbolStatus(screenerId: number): Promise<SymbolStatus[]> {
+  const res = await apiFetch(`/api/elliott-screener/${screenerId}/symbol-status`, withAuth());
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);

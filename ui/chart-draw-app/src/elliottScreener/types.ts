@@ -73,3 +73,30 @@ export interface CreateScreenerRequest {
   primaryTimeframe?: string;
   scheduleCron: string;
 }
+
+export type RunResultStatus = 'PASSED' | 'SKIPPED' | 'FAILED' | 'ERROR';
+
+export interface ElliottScreenerRunResult {
+  id: number;
+  runId: number;
+  screenerId: number;
+  symbol: string;
+  status: RunResultStatus;
+  errorMessage: string | null;
+  suggestionId: number | null;
+  processingMs: number | null;
+  scannedAt: string;
+}
+
+export type SymbolLastStatus = 'PASSED' | 'FAILED' | 'SKIPPED' | 'ERROR' | null;
+
+export interface SymbolStatus {
+  symbol: string;
+  lastStatus: SymbolLastStatus;
+  lastScannedAt: string | null;
+  processingMs: number | null;
+  suggestionId: number | null;
+  suggestionState: string | null;
+  suggestionDirection: string | null;
+  runId: number | null;
+}

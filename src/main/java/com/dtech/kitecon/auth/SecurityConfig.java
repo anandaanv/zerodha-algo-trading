@@ -64,7 +64,8 @@ public class SecurityConfig {
                                 "/elliott-screener", "/elliott-screener/**",
                                 "/scan", "/scan-chart/**",
                                 "/admin/kite-config",
-                                "/admin/groups"
+                                "/admin/groups",
+                                "/elliott-screener/*/status"
                         ).permitAll()
 
                         // Role-based access control
