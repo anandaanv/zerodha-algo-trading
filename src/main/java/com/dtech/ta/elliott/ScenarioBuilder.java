@@ -191,6 +191,7 @@ public class ScenarioBuilder {
         scoreBreakdown.put("crossTf",         wc.getCrossTfScore());
         scoreBreakdown.put("alternation",     wc.getAlternationScore());
         scoreBreakdown.put("patternConfluence", Math.min(patternBonus, 25));
+        scoreBreakdown.put("proportionality", wc.getProportionalityBonus());
 
         boolean nextUp = direction == WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
                 || direction == WaveScenario.ScenarioDirection.BULLISH_REVERSAL;

@@ -26,7 +26,7 @@ public class UserOpenAiCredential {
     private Long userId;
 
     /** AES-encrypted OpenAI API key */
-    @Column(name = "api_key_encrypted", nullable = false, length = 1024)
+    @Column(name = "api_key_encrypted", nullable = true, length = 1024)
     private String apiKeyEncrypted;
 
     /** Optional: user can override the model (defaults to gpt-4.1-mini) */
@@ -38,6 +38,14 @@ public class UserOpenAiCredential {
     @Column(name = "base_url", length = 255)
     @Builder.Default
     private String baseUrl = "https://api.openai.com/v1";
+
+    /**
+     * When true, this is a local LLM endpoint (llama.cpp, Ollama, LM Studio, vLLM etc).
+     * Local providers: use Chat Completions API, no real API key required.
+     */
+    @Column(name = "local_provider", nullable = false)
+    @Builder.Default
+    private boolean localProvider = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

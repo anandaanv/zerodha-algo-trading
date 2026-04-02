@@ -63,6 +63,15 @@ export async function triggerRun(id: number): Promise<ElliottScreenerRun> {
   return res.json();
 }
 
+export async function triggerRunForSymbol(screenerId: number, symbol: string): Promise<ElliottScreenerRun> {
+  const res = await apiFetch(`/api/elliott-screener/${screenerId}/run/${encodeURIComponent(symbol)}`, withAuth({ method: 'POST' }));
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function getRunHistory(id: number): Promise<ElliottScreenerRun[]> {
   const res = await apiFetch(`/api/elliott-screener/${id}/runs`, withAuth());
   if (!res.ok) {

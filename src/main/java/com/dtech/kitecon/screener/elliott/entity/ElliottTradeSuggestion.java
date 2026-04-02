@@ -71,6 +71,18 @@ public class ElliottTradeSuggestion {
     @Column(length = 256)
     private String target1;
 
+    @Column(name = "entry_low", precision = 15, scale = 2)
+    private java.math.BigDecimal entryLow;
+
+    @Column(name = "entry_high", precision = 15, scale = 2)
+    private java.math.BigDecimal entryHigh;
+
+    @Column(name = "stop_loss_price", precision = 15, scale = 2)
+    private java.math.BigDecimal stopLossPrice;
+
+    @Column(name = "target1_price", precision = 15, scale = 2)
+    private java.math.BigDecimal target1Price;
+
     @Column(name = "trigger_description", length = 1024)
     private String triggerDescription;
 

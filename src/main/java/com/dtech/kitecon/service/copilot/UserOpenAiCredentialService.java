@@ -18,11 +18,11 @@ public class UserOpenAiCredentialService {
 
     /**
      * Save or update the user's OpenAI API key.
-     * The key is encrypted before storage.
+     * The key is encrypted before storage. For local providers, the key is optional.
      */
     @Transactional
-    public void saveCredential(Long userId, String apiKey, String model, String baseUrl) {
-        String encrypted = encryptionService.encrypt(apiKey);
+    public void saveCredential(Long userId, String apiKey, String model, String baseUrl, boolean localProvider) {
+        String encrypted = (apiKey != null && !apiKey.isBlank()) ? encryptionService.encrypt(apiKey) : null;
 
         Optional<UserOpenAiCredential> existing = credentialRepository.findByUserId(userId);
         if (existing.isPresent()) {
@@ -30,6 +30,7 @@ public class UserOpenAiCredentialService {
             cred.setApiKeyEncrypted(encrypted);
             if (model != null) cred.setModel(model);
             if (baseUrl != null) cred.setBaseUrl(baseUrl);
+            cred.setLocalProvider(localProvider);
             credentialRepository.save(cred);
         } else {
             credentialRepository.save(UserOpenAiCredential.builder()
@@ -37,6 +38,7 @@ public class UserOpenAiCredentialService {
                     .apiKeyEncrypted(encrypted)
                     .model(model != null ? model : "gpt-4.1-mini")
                     .baseUrl(baseUrl != null ? baseUrl : "https://api.openai.com/v1")
+                    .localProvider(localProvider)
                     .build());
         }
     }
@@ -74,5 +76,12 @@ public class UserOpenAiCredentialService {
     @Transactional
     public void deleteCredential(Long userId) {
         credentialRepository.findByUserId(userId).ifPresent(credentialRepository::delete);
+    }
+
+    /** Returns true if the user has configured a local LLM provider. */
+    public boolean isLocalProvider(Long userId) {
+        return credentialRepository.findByUserId(userId)
+                .map(UserOpenAiCredential::isLocalProvider)
+                .orElse(false);
     }
 }

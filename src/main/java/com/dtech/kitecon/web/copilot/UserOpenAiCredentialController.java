@@ -13,6 +13,7 @@ import java.util.Map;
 /**
  * Allows users to save their own OpenAI API key via the UI.
  * Keys are stored encrypted per user — never in application.properties.
+ * Also supports local LLM endpoints (llama.cpp, Ollama, LM Studio, vLLM).
  */
 @RestController
 @RequestMapping("/api/copilot/credentials")
@@ -22,20 +23,28 @@ public class UserOpenAiCredentialController {
     private final UserOpenAiCredentialService credentialService;
     private final UserRepository userRepository;
 
-    /** Save or update the user's OpenAI API key */
+    record SaveCredentialRequest(String apiKey, String model, String baseUrl, boolean localProvider) {}
+
+    /** Save or update the user's OpenAI API key or local LLM endpoint */
     @PostMapping
     public ResponseEntity<?> saveCredential(Authentication auth,
-                                             @RequestBody Map<String, String> body) {
+                                             @RequestBody SaveCredentialRequest request) {
         Long userId = resolveUserId(auth);
-        String apiKey = body.get("apiKey");
-        String model = body.getOrDefault("model", "gpt-4.1-mini");
-        String baseUrl = body.getOrDefault("baseUrl", "https://api.openai.com/v1");
+        String apiKey = request.apiKey();
+        String model = request.model();
+        String baseUrl = request.baseUrl();
+        boolean localProvider = request.localProvider();
 
-        if (apiKey == null || apiKey.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "apiKey is required"));
+        // API key is required for OpenAI, optional for local providers
+        if (!localProvider && (apiKey == null || apiKey.isBlank())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "apiKey is required for OpenAI"));
         }
-        credentialService.saveCredential(userId, apiKey, model, baseUrl);
-        return ResponseEntity.ok(Map.of("status", "saved", "model", model, "baseUrl", baseUrl));
+
+        credentialService.saveCredential(userId, apiKey,
+                model != null ? model : "gpt-4.1-mini",
+                baseUrl != null ? baseUrl : "https://api.openai.com/v1",
+                localProvider);
+        return ResponseEntity.ok(Map.of("status", "saved", "model", model, "baseUrl", baseUrl, "localProvider", localProvider));
     }
 
     /** Check if user has configured their API key (returns masked status — never the key itself) */
