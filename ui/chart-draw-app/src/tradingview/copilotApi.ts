@@ -224,14 +224,19 @@ export async function testOrchestrator(
 
 // ─── OpenAI Credentials ───────────────────────────────────────────────────────
 
-export async function saveOpenAiKey(apiKey: string, model?: string): Promise<void> {
+export async function saveOpenAiKey(
+  apiKey: string,
+  model?: string,
+  baseUrl?: string,
+  localProvider?: boolean,
+): Promise<void> {
   return request('/copilot/credentials', {
     method: 'POST',
-    body: JSON.stringify({ apiKey, model }),
+    body: JSON.stringify({ apiKey, model, baseUrl, localProvider: localProvider ?? false }),
   });
 }
 
-export async function getOpenAiKeyStatus(): Promise<{ configured: boolean; model?: string; baseUrl?: string }> {
+export async function getOpenAiKeyStatus(): Promise<{ configured: boolean; model?: string; baseUrl?: string; localProvider?: boolean }> {
   return request('/copilot/credentials/status');
 }
 

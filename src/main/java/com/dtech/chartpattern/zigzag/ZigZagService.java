@@ -363,6 +363,15 @@ public class ZigZagService {
                 .orElseGet(() -> detectAndPersist(tradingSymbol, instrument, interval, true));
     }
 
+    /**
+     * Invalidates the ZigZag snapshot cache for the given symbol+interval.
+     * Called after a BOS or CHoCH event is detected, so the next scan uses fresh pivots.
+     */
+    public void invalidateCache(String tradingSymbol, Interval interval) {
+        snapshotRepository.deleteByTradingSymbolAndInterval(tradingSymbol, interval);
+        log.info("[ZigZag] Cache invalidated for {} {} (BOS/CHoCH triggered)", tradingSymbol, interval);
+    }
+
     public void persistSnapshot(String tradingSymbol, Interval interval, List<ZigZagPoint> pivots) {
         try {
             String json = toJson(pivots);

@@ -10,6 +10,7 @@ import com.dtech.kitecon.data.Subscription;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.repository.SubscriptionRepository;
+import com.dtech.kitecon.screener.elliott.service.ElliottTradeMonitoringService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -47,6 +48,7 @@ public class CandleCloseScheduler {
     private final MarketDataWebSocketService webSocketService;
     private final InstrumentRepository instrumentRepository;
     private final CandleRepository candleRepository;
+    private final ElliottTradeMonitoringService elliottTradeMonitoringService;
 
     @Scheduled(cron = "1 * * * * *") // fires at :01 of every minute
     public void onMinuteClose() {
@@ -94,6 +96,13 @@ public class CandleCloseScheduler {
         // ── Hourly boundary: broadcast ────────────────────────────────────
         if (closedMinute == 59 || closedMinute == 29) {
             broadcastInterval(active, Interval.OneHour);
+        }
+
+        // ── Elliott trade monitoring ──────────────────────────────────────────────
+        try {
+            elliottTradeMonitoringService.checkOpenSuggestions();
+        } catch (Exception e) {
+            log.warn("Error in Elliott trade monitoring: {}", e.getMessage());
         }
     }
 

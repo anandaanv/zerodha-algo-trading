@@ -84,6 +84,14 @@ public class ElliottScreenerController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/{id}/run/{symbol}")
+    public ResponseEntity<?> triggerRunForSymbol(Authentication auth, @PathVariable Long id, @PathVariable String symbol) {
+        screenerAccessService.requireScreenerAccess(auth);
+        Long userId = resolveUserId(auth);
+        ElliottScreenerRunResponse response = screenerService.triggerNowForSymbol(userId, id, symbol);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/{id}/runs")
     public ResponseEntity<?> getRuns(Authentication auth, @PathVariable Long id) {
         Long userId = resolveUserId(auth);

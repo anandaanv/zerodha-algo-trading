@@ -9,4 +9,5 @@ import java.util.Optional;
 @Repository
 public interface ZigZagSnapshotRepository extends JpaRepository<ZigZagSnapshot, Long> {
     Optional<ZigZagSnapshot> findByTradingSymbolAndInterval(String tradingSymbol, Interval interval);
+    void deleteByTradingSymbolAndInterval(String tradingSymbol, Interval interval);
 }

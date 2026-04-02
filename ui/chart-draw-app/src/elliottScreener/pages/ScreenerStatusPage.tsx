@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SymbolStatus, ElliottScreener, ElliottTradeSuggestion } from '../types';
-import { fetchSymbolStatus, getScreener, triggerRun, getSuggestion } from '../api';
+import { fetchSymbolStatus, getScreener, triggerRun, getSuggestion, triggerRunForSymbol } from '../api';
 import SuggestionCard from '../components/SuggestionCard';
 
 const STATUS_COLOR: Record<string, string> = {
@@ -54,6 +54,7 @@ export default function ScreenerStatusPage() {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [runningSymbol, setRunningSymbol] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('ALL');
 
   // Expanded suggestion state: symbol -> full suggestion (loaded lazily)
@@ -122,6 +123,19 @@ export default function ScreenerStatusPage() {
       setRunError(e.message);
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleRunSymbol = async (symbol: string) => {
+    setRunningSymbol(symbol);
+    setRunError(null);
+    try {
+      await triggerRunForSymbol(screenerId, symbol);
+      await load();
+    } catch (e: any) {
+      setRunError(e.message);
+    } finally {
+      setRunningSymbol(null);
     }
   };
 
@@ -257,7 +271,25 @@ export default function ScreenerStatusPage() {
                     {s.suggestionDirection ?? '—'}
                   </div>
                   <div style={colStyle}>
-                    {loadingSuggestion === s.symbol && <span style={{ color: '#666', fontSize: 11 }}>Loading...</span>}
+                    {loadingSuggestion === s.symbol ? (
+                      <span style={{ color: '#666', fontSize: 11 }}>Loading...</span>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRunSymbol(s.symbol); }}
+                        disabled={runningSymbol === s.symbol}
+                        style={{
+                          background: runningSymbol === s.symbol ? '#333' : '#0d2137',
+                          color: '#90caf9',
+                          border: '1px solid #1565c0',
+                          borderRadius: 3,
+                          padding: '3px 10px',
+                          cursor: runningSymbol === s.symbol ? 'default' : 'pointer',
+                          fontSize: 11,
+                        }}
+                      >
+                        {runningSymbol === s.symbol ? '...' : '▶ Run'}
+                      </button>
+                    )}
                   </div>
                 </div>
 

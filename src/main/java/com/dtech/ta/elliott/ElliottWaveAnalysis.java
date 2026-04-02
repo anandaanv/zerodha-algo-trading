@@ -137,8 +137,16 @@ public class ElliottWaveAnalysis {
         for (WaveScenario s : scenarios) {
             sb.append("[").append(s.getId()).append("] ").append(s.getDirectionLabel()).append("\n");
             for (WaveHypothesis h : s.getHypotheses()) {
-                sb.append("  [").append(h.getId()).append("] score=").append(h.getTotalScore())
-                  .append(" | ").append(h.getCurrentPositionDescription()).append("\n");
+                sb.append("  [").append(h.getId()).append("] score=").append(h.getTotalScore());
+                if (h.getScoreBreakdown() != null && !h.getScoreBreakdown().isEmpty()) {
+                    sb.append(" [");
+                    h.getScoreBreakdown().forEach((k, v) -> sb.append(k).append("=").append(v).append(" "));
+                    // trim trailing space and close bracket
+                    int len = sb.length();
+                    if (sb.charAt(len - 1) == ' ') sb.setCharAt(len - 1, ']');
+                    else sb.append("]");
+                }
+                sb.append(" | ").append(h.getCurrentPositionDescription()).append("\n");
                 if (h.getPrimaryTarget() != null)
                     sb.append("    Target: ").append(fmt(h.getPrimaryTarget().getLevel()))
                       .append(" (").append(h.getPrimaryTarget().getRatio()).append(")\n");

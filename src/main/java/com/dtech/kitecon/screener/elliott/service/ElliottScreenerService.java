@@ -101,6 +101,34 @@ public class ElliottScreenerService {
         return runScreener(screener, userId);
     }
 
+    public ElliottScreenerRunResponse triggerNowForSymbol(Long userId, Long screenerId, String symbol) {
+        ElliottScreener screener = screenerRepository.findByIdAndUserId(screenerId, userId)
+                .orElseThrow(() -> new IllegalStateException("Screener not found or access denied"));
+
+        ElliottScreenerRun run = ElliottScreenerRun.builder()
+                .screenerId(screener.getId())
+                .status("RUNNING")
+                .startedAt(Instant.now())
+                .totalSymbols(1)
+                .build();
+        run = runRepository.save(run);
+
+        String status = symbolScanService.scanSymbol(screener, run.getId(), userId, symbol);
+
+        run.setStatus("COMPLETED");
+        run.setCompletedAt(Instant.now());
+        run.setProcessedSymbols(1);
+        run.setSuggestionsCreated("PASSED".equals(status) ? 1 : 0);
+        run.setDuplicatesSkipped("SKIPPED".equals(status) ? 1 : 0);
+        run.setErrorSummary("ERROR".equals(status) ? symbol + ": error" : null);
+        run = runRepository.save(run);
+
+        screener.setLastRunAt(Instant.now());
+        screenerRepository.save(screener);
+
+        return ElliottScreenerRunResponse.from(run);
+    }
+
     public ElliottScreenerRunResponse runScreener(ElliottScreener screener, Long userId) {
         ElliottScreenerRun run = ElliottScreenerRun.builder()
                 .screenerId(screener.getId())

@@ -5,12 +5,10 @@ interface Props {
   onClose: () => void;
 }
 
-const MODELS = [
-  // GPT-4.1 family (1M context window — recommended)
+const OPENAI_MODELS = [
   'gpt-4.1',
   'gpt-4.1-mini',
   'gpt-4.1-nano',
-  // GPT-4o family (128k context)
   'gpt-4o',
   'gpt-4o-mini',
 ];
@@ -20,23 +18,49 @@ export default function CopilotSettingsModal({ onClose }: Props) {
   const [currentModel, setCurrentModel] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [model, setModel] = useState('gpt-4.1-mini');
+  const [baseUrl, setBaseUrl] = useState('https://api.openai.com/v1');
+  const [localProvider, setLocalProvider] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     getOpenAiKeyStatus()
-      .then(s => { setHasKey(s.configured); setCurrentModel(s.model ?? null); if (s.model) setModel(s.model); })
+      .then(s => {
+        setHasKey(s.configured);
+        setCurrentModel(s.model ?? null);
+        if (s.model) setModel(s.model);
+        if (s.baseUrl) setBaseUrl(s.baseUrl);
+        if (s.localProvider) setLocalProvider(s.localProvider);
+      })
       .catch(() => setHasKey(false));
   }, []);
 
+  // When toggling to local, pre-fill sensible defaults
+  const handleLocalToggle = (checked: boolean) => {
+    setLocalProvider(checked);
+    if (checked && baseUrl === 'https://api.openai.com/v1') {
+      setBaseUrl('http://localhost:8080/v1');
+      setModel('');
+    } else if (!checked) {
+      setBaseUrl('https://api.openai.com/v1');
+      setModel('gpt-4.1-mini');
+    }
+  };
+
   const save = async () => {
-    if (!apiKey.trim()) { setError('API key is required'); return; }
+    if (!localProvider && !apiKey.trim() && !hasKey) {
+      setError('API key is required for OpenAI providers');
+      return;
+    }
+    if (!model.trim()) { setError('Model name is required'); return; }
     setSaving(true); setError(null); setSuccess(null);
     try {
-      await saveOpenAiKey(apiKey.trim(), model);
-      setHasKey(true); setCurrentModel(model); setApiKey('');
-      setSuccess('API key saved. Analysis will now use your key.');
+      await saveOpenAiKey(apiKey.trim(), model.trim(), baseUrl.trim(), localProvider);
+      setHasKey(true);
+      setCurrentModel(model.trim());
+      setApiKey('');
+      setSuccess(localProvider ? 'Local LLM configured.' : 'API key saved. Analysis will now use your key.');
     } catch (e) {
       setError(String(e));
     } finally {
@@ -45,10 +69,10 @@ export default function CopilotSettingsModal({ onClose }: Props) {
   };
 
   const remove = async () => {
-    if (!confirm('Remove your OpenAI API key? The system fallback key will be used.')) return;
+    if (!confirm('Remove your AI configuration? The system fallback will be used.')) return;
     try {
       await deleteOpenAiKey();
-      setHasKey(false); setCurrentModel(null); setSuccess('Key removed.');
+      setHasKey(false); setCurrentModel(null); setSuccess('Configuration removed.');
     } catch (e) {
       setError(String(e));
     }
@@ -60,12 +84,12 @@ export default function CopilotSettingsModal({ onClose }: Props) {
       background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{
-        background: '#fff', borderRadius: 12, padding: 28, width: 440,
+        background: '#fff', borderRadius: 12, padding: 28, width: 460,
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#1a237e' }}>
-            🔑 Co-Pilot AI Settings
+            AI Provider Settings
           </h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999' }}>×</button>
         </div>
@@ -79,12 +103,12 @@ export default function CopilotSettingsModal({ onClose }: Props) {
           {hasKey === null && <span style={{ color: '#888', fontSize: 13 }}>Checking…</span>}
           {hasKey === true && (
             <span style={{ fontSize: 13, color: '#2e7d32' }}>
-              ✓ Personal API key active · Model: <strong>{currentModel ?? model}</strong>
+              ✓ {localProvider ? 'Local LLM' : 'Personal API key'} active · Model: <strong>{currentModel ?? model}</strong>
             </span>
           )}
           {hasKey === false && (
             <span style={{ fontSize: 13, color: '#f57f17' }}>
-              ⚠ Using system fallback key. Add your own for better control.
+              No personal configuration. Using system fallback.
             </span>
           )}
         </div>
@@ -92,35 +116,86 @@ export default function CopilotSettingsModal({ onClose }: Props) {
         {error && <div style={{ background: '#ffebee', border: '1px solid #ef9a9a', borderRadius: 6, padding: '8px 12px', marginBottom: 14, color: '#c62828', fontSize: 13 }}>{error}</div>}
         {success && <div style={{ background: '#e8f5e9', border: '1px solid #a5d6a7', borderRadius: 6, padding: '8px 12px', marginBottom: 14, color: '#2e7d32', fontSize: 13 }}>{success}</div>}
 
-        <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>OpenAI API Key</label>
+        {/* Local provider toggle */}
+        <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
           <input
-            type="password"
-            placeholder={hasKey ? '••••••••••••••••  (leave blank to keep existing)' : 'sk-...'}
-            value={apiKey}
-            onChange={e => setApiKey(e.target.value)}
-            style={inputStyle}
+            type="checkbox"
+            id="localProvider"
+            checked={localProvider}
+            onChange={e => handleLocalToggle(e.target.checked)}
+            style={{ width: 16, height: 16, cursor: 'pointer' }}
           />
+          <label htmlFor="localProvider" style={{ fontSize: 13, fontWeight: 600, color: '#333', cursor: 'pointer' }}>
+            Local LLM (llama.cpp / Ollama / LM Studio / vLLM)
+          </label>
         </div>
 
-        <div style={{ marginBottom: 20 }}>
-          <label style={labelStyle}>Model</label>
-          <select value={model} onChange={e => setModel(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
-            {MODELS.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+        {/* Base URL */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Base URL</label>
+          <input
+            type="text"
+            placeholder={localProvider ? 'http://localhost:8080/v1' : 'https://api.openai.com/v1'}
+            value={baseUrl}
+            onChange={e => setBaseUrl(e.target.value)}
+            style={inputStyle}
+          />
+          {localProvider && (
+            <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+              llama.cpp: <code>http://localhost:8080/v1</code> · Ollama: <code>http://localhost:11434/v1</code>
+            </div>
+          )}
         </div>
+
+        {/* Model */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>Model</label>
+          {localProvider ? (
+            <input
+              type="text"
+              placeholder="e.g. qwen3-coder-30b, llama3.1:70b"
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              style={inputStyle}
+            />
+          ) : (
+            <select value={model} onChange={e => setModel(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+              {OPENAI_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          )}
+        </div>
+
+        {/* API Key — hidden for local */}
+        {!localProvider && (
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>OpenAI API Key</label>
+            <input
+              type="password"
+              placeholder={hasKey ? '••••••••••••••••  (leave blank to keep existing)' : 'sk-...'}
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+        )}
+
+        {localProvider && (
+          <div style={{ marginBottom: 20, padding: '8px 12px', background: '#f3f4f6', borderRadius: 6, fontSize: 12, color: '#555' }}>
+            No API key needed for local providers. The system will use the Chat Completions API (<code>/v1/chat/completions</code>).
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           {hasKey && (
             <button onClick={remove} style={{ padding: '8px 16px', background: '#fff', color: '#c62828', border: '1px solid #c62828', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
-              Remove Key
+              Remove
             </button>
           )}
           <button onClick={onClose} style={{ padding: '8px 16px', background: '#fff', color: '#666', border: '1px solid #ccc', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
             Cancel
           </button>
           <button onClick={save} disabled={saving} style={{ padding: '8px 20px', background: '#1a237e', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
-            {saving ? 'Saving…' : 'Save Key'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>

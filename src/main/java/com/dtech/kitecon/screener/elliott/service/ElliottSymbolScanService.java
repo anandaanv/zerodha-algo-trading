@@ -101,6 +101,11 @@ public class ElliottSymbolScanService {
                 BarSeries series = zigzagService.getBarSeries(symbol, instrument, interval);
                 List<ZigZagPoint> pivotsWithLtp = zigzagService.withLtpPivot(pivots, series);
                 MarketStructureData msd = marketStructureService.analyse(pivotsWithLtp, tf);
+                // If BOS or CHoCH detected, invalidate the ZigZag snapshot so next scan uses fresh pivots
+                if (msd.isLastEventWasBOS() || msd.isLastEventWasCHoCH()) {
+                    log.debug("[ElliottScreener] BOS/CHoCH detected for {} {}, invalidating ZigZag cache", symbol, tf);
+                    zigzagService.invalidateCache(symbol, interval);
+                }
                 msdSummary.append(msd.toPromptSummary()).append("\n");
                 pivotsByTf.put(tf, pivotsWithLtp);
                 structureByTf.put(tf, msd);
@@ -168,6 +173,7 @@ public class ElliottSymbolScanService {
                 .primaryTimeframe(primaryTf)
                 .allTimeframes(String.join(",", orderedTfs))
                 .build();
+        populateNumericPrices(suggestion);
         suggestion = suggestionRepository.save(suggestion);
         result.setSuggestionId(suggestion.getId());
 
@@ -192,5 +198,37 @@ public class ElliottSymbolScanService {
         if (lower.contains("long") || lower.contains("buy") || lower.contains("bullish") || lower.contains("bull")) return "LONG";
         if (lower.contains("short") || lower.contains("sell") || lower.contains("bearish") || lower.contains("bear")) return "SHORT";
         return null;
+    }
+
+    private void populateNumericPrices(ElliottTradeSuggestion s) {
+        // Parse entryZone: supports "41000-41500", "41000", "41000 - 41500"
+        if (s.getEntryZone() != null && !s.getEntryZone().isBlank()) {
+            try {
+                String ez = s.getEntryZone().trim().replaceAll("[^0-9.\\-]", "");
+                int dash = ez.lastIndexOf('-');
+                if (dash > 0) {
+                    s.setEntryLow(new java.math.BigDecimal(ez.substring(0, dash).trim()));
+                    s.setEntryHigh(new java.math.BigDecimal(ez.substring(dash + 1).trim()));
+                } else {
+                    java.math.BigDecimal val = new java.math.BigDecimal(ez);
+                    s.setEntryLow(val);
+                    s.setEntryHigh(val);
+                }
+            } catch (Exception ignored) {}
+        }
+        // Parse stopLoss
+        if (s.getStopLoss() != null && !s.getStopLoss().isBlank()) {
+            try {
+                String sl = s.getStopLoss().trim().replaceAll("[^0-9.]", "");
+                if (!sl.isBlank()) s.setStopLossPrice(new java.math.BigDecimal(sl));
+            } catch (Exception ignored) {}
+        }
+        // Parse target1
+        if (s.getTarget1() != null && !s.getTarget1().isBlank()) {
+            try {
+                String t1 = s.getTarget1().trim().replaceAll("[^0-9.]", "");
+                if (!t1.isBlank()) s.setTarget1Price(new java.math.BigDecimal(t1));
+            } catch (Exception ignored) {}
+        }
     }
 }
