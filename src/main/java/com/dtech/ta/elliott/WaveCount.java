@@ -74,9 +74,27 @@ public class WaveCount {
     /** 0–10: whether Wave 2/4 alternate in type (sharp vs flat, time, depth) */
     private int alternationScore;
 
-    /** Combined score: fibonacciScore + indicatorScore + crossTfScore + alternationScore */
+    /** Bonus points awarded by segment proportionality analysis (+0 to +15). Tracked separately for transparency. */
+    private int proportionalityBonus;
+
+    /** Combined score: fibonacciScore + indicatorScore + crossTfScore + alternationScore + proportionalityBonus */
     public int totalScore() {
-        return fibonacciScore + indicatorScore + crossTfScore + alternationScore;
+        return fibonacciScore + indicatorScore + crossTfScore + alternationScore + proportionalityBonus;
+    }
+
+    /**
+     * Returns a breakdown of the total score by component.
+     *
+     * @return an ordered map with keys: fib, indicators, crossTf, alternation, proportionality
+     */
+    public java.util.Map<String, Integer> getScoreBreakdown() {
+        java.util.Map<String, Integer> m = new java.util.LinkedHashMap<>();
+        m.put("fib", fibonacciScore);
+        m.put("indicators", indicatorScore);
+        m.put("crossTf", crossTfScore);
+        m.put("alternation", alternationScore);
+        m.put("proportionality", proportionalityBonus);
+        return m;
     }
 
     // ── Key Fibonacci measurements ────────────────────────────────────────────
@@ -114,6 +132,13 @@ public class WaveCount {
 
     // ── Rule violations (if any — should be empty for valid counts) ───────────
     private List<String> ruleViolations;
+
+    /**
+     * True if this count was accepted on structural rules only (no Fibonacci ratio validation).
+     * These counts represent geometrically-valid but Fibonacci-loose patterns (e.g., extended W3 > 2.618×W1).
+     * Scored lower than normal counts; label as "structural-only candidate" in prompt output.
+     */
+    private boolean structuralOnly;
 
     public boolean isValid() {
         return ruleViolations == null || ruleViolations.isEmpty();

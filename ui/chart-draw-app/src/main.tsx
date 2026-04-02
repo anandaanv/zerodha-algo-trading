@@ -42,6 +42,11 @@ import KiteConfigPage from './admin/kiteConfig/KiteConfigPage';
 // Group Management
 import GroupManagementPage from './admin/groups/GroupManagementPage';
 
+// Settings
+import SettingsPage from './settings/SettingsPage';
+
+// Trade Alerts
+import TradeAlertToast from './elliottScreener/components/TradeAlertToast';
 
 const root = createRoot(document.getElementById("root")!);
 root.render(
@@ -49,6 +54,7 @@ root.render(
     <BrowserRouter>
       <AuthProvider>
         <Layout>
+          <TradeAlertToast />
           <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login />} />
@@ -201,6 +207,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="ADMIN">
               <GroupManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <SettingsPage />
             </ProtectedRoute>
           }
         />

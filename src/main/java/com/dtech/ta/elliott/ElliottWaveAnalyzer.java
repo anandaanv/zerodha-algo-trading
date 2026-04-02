@@ -523,7 +523,7 @@ public class ElliottWaveAnalyzer {
             }
 
             if (bonus > 0) {
-                wc.setIndicatorScore(Math.min(wc.getIndicatorScore() + bonus, 45));
+                wc.setProportionalityBonus(Math.min(wc.getProportionalityBonus() + bonus, 15));
             }
         }
     }

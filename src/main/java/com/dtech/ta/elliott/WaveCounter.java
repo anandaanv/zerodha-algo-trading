@@ -77,6 +77,27 @@ public class WaveCounter {
         }
         allCounts.addAll(postCorrs);
 
+        // Structural-only pass: re-scan without Fibonacci filtering to catch extended W3 patterns
+        // These get structuralOnly=true and are only included if no Fibonacci count covers the same pivots
+        List<WaveCount> structuralCandidates = new ArrayList<>();
+        for (String tf : tfOrder) {
+            List<EnrichedPivot> pivots = pivotsByTf.get(tf);
+            if (pivots == null || pivots.size() < 6) continue;
+            structuralCandidates.addAll(scanImpulseStructuralOnly(pivots, tf));
+        }
+        // De-duplicate: remove structural candidates whose W1-start and W5-end match an existing count
+        for (WaveCount sc : structuralCandidates) {
+            boolean duplicate = allCounts.stream().anyMatch(existing ->
+                !existing.isStructuralOnly()
+                && existing.getPivots() != null && sc.getPivots() != null
+                && existing.getPivots().size() >= 2 && sc.getPivots().size() >= 2
+                && existing.getPivots().get(0).getBarIndex() == sc.getPivots().get(0).getBarIndex()
+                && existing.getPivots().get(existing.getPivots().size() - 1).getBarIndex()
+                   == sc.getPivots().get(sc.getPivots().size() - 1).getBarIndex()
+            );
+            if (!duplicate) allCounts.add(sc);
+        }
+
         // Cross-TF validation: boost scores where parent/child TF structures agree
         if (tfOrder.size() >= 2) {
             crossTfValidate(allCounts, pivotsByTf, tfOrder);
@@ -684,10 +705,16 @@ public class WaveCounter {
     private int scoreIndicatorsImpulseUp(EnrichedPivot w1e, EnrichedPivot w2e, EnrichedPivot w3e,
                                           EnrichedPivot w4e, EnrichedPivot w5e) {
         int score = 0;
-        // W3 should have the highest EWO — momentum peak (adds probability)
-        if (w3e.getEwo() > w1e.getEwo() && w3e.getEwo() > w5e.getEwo()) score += 8;
-        // W5 should show MACD divergence vs W3 — exhaustion (adds probability)
-        if (w5e.getMacdHistogram() < w3e.getMacdHistogram()) score += 8;
+        // W3 EWO peak — magnitude-weighted (0–10 points)
+        if (w3e.getEwo() > w1e.getEwo() && w3e.getEwo() > w5e.getEwo() && w3e.getEwo() != 0) {
+            double ewoLead = (w3e.getEwo() - Math.max(w1e.getEwo(), w5e.getEwo())) / Math.abs(w3e.getEwo());
+            score += (int) Math.min(Math.round(ewoLead * 10), 10);
+        }
+        // W5 MACD divergence — magnitude-weighted (0–10 points based on how strong the divergence is)
+        if (w3e.getMacdHistogram() != 0 && w5e.getMacdHistogram() < w3e.getMacdHistogram()) {
+            double macdDiv = (w3e.getMacdHistogram() - w5e.getMacdHistogram()) / Math.abs(w3e.getMacdHistogram());
+            score += (int) Math.min(Math.round(macdDiv * 10), 10);
+        }
         // W3 Bollinger walk — momentum confirmation (adds probability)
         if (w3e.isBollingerWalk()) score += 7;
         // W4 stochastic oversold — correction exhaustion (adds probability)
@@ -697,18 +724,42 @@ public class WaveCounter {
         if (w4MacdContracting) score += 8;
         // W4 MACD near zero — consolidation oscillation signature (adds probability)
         if (w4e.isMacdNearZero()) score += 7;
+        // W3 volume expansion (relative volume) — confirms impulse momentum
+        if (w3e.getRelativeVolume() > 0 && w1e.getRelativeVolume() > 0
+                && w3e.getRelativeVolume() > w1e.getRelativeVolume()) {
+            score += 4;
+        }
+        // W5 volume diminishing vs W3 — exhaustion / divergence confirmation
+        if (w3e.getRelativeVolume() > 0 && w5e.getRelativeVolume() > 0
+                && w5e.getRelativeVolume() < w3e.getRelativeVolume()) {
+            score += 4;
+        }
         return score; // max ~45 with new signals
     }
 
     private int scoreIndicatorsImpulseDown(EnrichedPivot w1e, EnrichedPivot w2e, EnrichedPivot w3e,
                                             EnrichedPivot w4e, EnrichedPivot w5e) {
         int score = 0;
-        if (w3e.getEwo() < w1e.getEwo() && w3e.getEwo() < w5e.getEwo()) score += 8;
-        if (w5e.getMacdHistogram() > w3e.getMacdHistogram()) score += 8;
+        if (w3e.getEwo() < w1e.getEwo() && w3e.getEwo() < w5e.getEwo() && w3e.getEwo() != 0) {
+            double ewoLead = (Math.min(w1e.getEwo(), w5e.getEwo()) - w3e.getEwo()) / Math.abs(w3e.getEwo());
+            score += (int) Math.min(Math.round(ewoLead * 10), 10);
+        }
+        if (w3e.getMacdHistogram() != 0 && w5e.getMacdHistogram() > w3e.getMacdHistogram()) {
+            double macdDiv = (w5e.getMacdHistogram() - w3e.getMacdHistogram()) / Math.abs(w3e.getMacdHistogram());
+            score += (int) Math.min(Math.round(macdDiv * 10), 10);
+        }
         if (w4e.getStochK() > 70) score += 7;
         boolean w4MacdContracting = w4e.getMacdHistogramAmplitude() < w3e.getMacdHistogramAmplitude() * 0.5;
         if (w4MacdContracting) score += 8;
         if (w4e.isMacdNearZero()) score += 7;
+        if (w3e.getRelativeVolume() > 0 && w1e.getRelativeVolume() > 0
+                && w3e.getRelativeVolume() > w1e.getRelativeVolume()) {
+            score += 4;
+        }
+        if (w3e.getRelativeVolume() > 0 && w5e.getRelativeVolume() > 0
+                && w5e.getRelativeVolume() < w3e.getRelativeVolume()) {
+            score += 4;
+        }
         return score;
     }
 
@@ -856,4 +907,126 @@ public class WaveCounter {
     }
 
     private String fmt(double v) { return String.format("%.2f", v); }
+
+    /**
+     * Structural-only impulse scan: validates hard geometric rules only (no Fibonacci ratios).
+     * Catches extended Wave 3 (> 2.0×W1), running corrections, and unusual extensions
+     * that fail the ±15% Fibonacci tolerance but are geometrically valid impulses.
+     */
+    private List<WaveCount> scanImpulseStructuralOnly(List<EnrichedPivot> pivots, String tf) {
+        List<WaveCount> results = new ArrayList<>();
+        for (int start = 0; start < pivots.size() - 5; start++) {
+            EnrichedPivot p0 = pivots.get(start);
+            if (p0.isLow()) {
+                WaveCount up = tryFitImpulseUpStructuralOnly(pivots, start, tf);
+                if (up != null) results.add(up);
+            }
+            if (p0.isHigh()) {
+                WaveCount down = tryFitImpulseDownStructuralOnly(pivots, start, tf);
+                if (down != null) results.add(down);
+            }
+        }
+        return results;
+    }
+
+    private WaveCount tryFitImpulseUpStructuralOnly(List<EnrichedPivot> pivots, int startIdx, String tf) {
+        List<EnrichedPivot> remaining = pivots.subList(startIdx, pivots.size());
+        List<EnrichedPivot> lows  = remaining.stream().filter(EnrichedPivot::isLow).toList();
+        List<EnrichedPivot> highs = remaining.stream().filter(EnrichedPivot::isHigh).toList();
+        if (highs.size() < 3 || lows.size() < 2) return null;
+
+        EnrichedPivot w1Start = remaining.get(0);
+        EnrichedPivot w1End   = highs.get(0);
+        EnrichedPivot w2End   = lows.get(0);
+        EnrichedPivot w3End   = highs.get(1);
+        EnrichedPivot w4End   = lows.get(1);
+        EnrichedPivot w5End   = highs.size() >= 3 ? highs.get(2) : null;
+        if (w5End == null) return null;
+
+        // Hard structural rules only
+        double w1Len = w1End.getPrice() - w1Start.getPrice();
+        if (w1Len <= 0) return null;
+        if (w2End.getPrice() <= w1Start.getPrice()) return null;         // W2 > 100% retrace
+        if (w3End.getPrice() <= w1End.getPrice()) return null;           // W3 must exceed W1 end
+        if (w4End.getPrice() <= w1End.getPrice()) return null;           // W4 must stay above W1 end
+        double w3Len = w3End.getPrice() - w2End.getPrice();
+        double w5Len = w5End.getPrice() - w4End.getPrice();
+        if (w3Len < w1Len && w3Len < w5Len) return null;                // W3 not shortest
+
+        Map<Integer, WaveLabel> labels = new LinkedHashMap<>();
+        labels.put(w1Start.getBarIndex(), WaveLabel.W1);
+        labels.put(w1End.getBarIndex(), WaveLabel.W1);
+        labels.put(w2End.getBarIndex(), WaveLabel.W2);
+        labels.put(w3End.getBarIndex(), WaveLabel.W3);
+        labels.put(w4End.getBarIndex(), WaveLabel.W4);
+        labels.put(w5End.getBarIndex(), WaveLabel.W5);
+
+        return WaveCount.builder()
+                .waveType(WaveCount.WaveType.IMPULSE)
+                .primaryTimeframe(tf)
+                .bullish(true)
+                .pivotToWave(labels)
+                .pivots(java.util.Arrays.asList(w1Start, w1End, w2End, w3End, w4End, w5End))
+                .currentWaveInProgress(WaveLabel.UNKNOWN)
+                .currentPositionDescription("Structural-only impulse up (extended W3 " + fmt(w3Len / w1Len) + "×W1)")
+                .fibonacciScore(0)
+                .indicatorScore(scoreIndicatorsImpulseUp(w1End, w2End, w3End, w4End, w5End))
+                .crossTfScore(0)
+                .alternationScore(0)
+                .structuralOnly(true)
+                .supportingEvidence(new ArrayList<>())
+                .contradictingEvidence(new ArrayList<>())
+                .ruleViolations(new ArrayList<>())
+                .build();
+    }
+
+    private WaveCount tryFitImpulseDownStructuralOnly(List<EnrichedPivot> pivots, int startIdx, String tf) {
+        List<EnrichedPivot> remaining = pivots.subList(startIdx, pivots.size());
+        List<EnrichedPivot> highs = remaining.stream().filter(EnrichedPivot::isHigh).toList();
+        List<EnrichedPivot> lows  = remaining.stream().filter(EnrichedPivot::isLow).toList();
+        if (lows.size() < 3 || highs.size() < 2) return null;
+
+        EnrichedPivot w1Start = remaining.get(0);
+        EnrichedPivot w1End   = lows.get(0);
+        EnrichedPivot w2End   = highs.get(0);
+        EnrichedPivot w3End   = lows.get(1);
+        EnrichedPivot w4End   = highs.get(1);
+        EnrichedPivot w5End   = lows.size() >= 3 ? lows.get(2) : null;
+        if (w5End == null) return null;
+
+        double w1Len = w1Start.getPrice() - w1End.getPrice();
+        if (w1Len <= 0) return null;
+        if (w2End.getPrice() >= w1Start.getPrice()) return null;
+        if (w3End.getPrice() >= w1End.getPrice()) return null;
+        if (w4End.getPrice() >= w1End.getPrice()) return null;
+        double w3Len = w2End.getPrice() - w3End.getPrice();
+        double w5Len = w4End.getPrice() - w5End.getPrice();
+        if (w3Len < w1Len && w3Len < w5Len) return null;
+
+        Map<Integer, WaveLabel> labels = new LinkedHashMap<>();
+        labels.put(w1Start.getBarIndex(), WaveLabel.W1);
+        labels.put(w1End.getBarIndex(), WaveLabel.W1);
+        labels.put(w2End.getBarIndex(), WaveLabel.W2);
+        labels.put(w3End.getBarIndex(), WaveLabel.W3);
+        labels.put(w4End.getBarIndex(), WaveLabel.W4);
+        labels.put(w5End.getBarIndex(), WaveLabel.W5);
+
+        return WaveCount.builder()
+                .waveType(WaveCount.WaveType.IMPULSE)
+                .primaryTimeframe(tf)
+                .bullish(false)
+                .pivotToWave(labels)
+                .pivots(java.util.Arrays.asList(w1Start, w1End, w2End, w3End, w4End, w5End))
+                .currentWaveInProgress(WaveLabel.UNKNOWN)
+                .currentPositionDescription("Structural-only impulse down (extended W3 " + fmt(w3Len / w1Len) + "×W1)")
+                .fibonacciScore(0)
+                .indicatorScore(scoreIndicatorsImpulseDown(w1End, w2End, w3End, w4End, w5End))
+                .crossTfScore(0)
+                .alternationScore(0)
+                .structuralOnly(true)
+                .supportingEvidence(new ArrayList<>())
+                .contradictingEvidence(new ArrayList<>())
+                .ruleViolations(new ArrayList<>())
+                .build();
+    }
 }

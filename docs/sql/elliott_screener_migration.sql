@@ -93,3 +93,10 @@ CREATE TABLE IF NOT EXISTS suggestion_chart_layout (
 ALTER TABLE elliott_trade_suggestion
     ADD COLUMN primary_timeframe VARCHAR(64) NULL,
     ADD COLUMN all_timeframes VARCHAR(255) NULL;
+
+-- Add numeric price fields for automated trade monitoring
+ALTER TABLE elliott_trade_suggestion
+    ADD COLUMN IF NOT EXISTS entry_low       DECIMAL(15,2) NULL,
+    ADD COLUMN IF NOT EXISTS entry_high      DECIMAL(15,2) NULL,
+    ADD COLUMN IF NOT EXISTS stop_loss_price DECIMAL(15,2) NULL,
+    ADD COLUMN IF NOT EXISTS target1_price   DECIMAL(15,2) NULL;

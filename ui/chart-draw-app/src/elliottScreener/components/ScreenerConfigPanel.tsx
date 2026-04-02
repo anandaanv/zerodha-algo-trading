@@ -133,11 +133,26 @@ export default function ScreenerConfigPanel({
             alignItems: 'center',
           }}
         >
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontWeight: 600, color: '#90caf9' }}>
               {screener.name}
             </span>
-            <span style={{ color: '#aaa', marginLeft: 12, fontSize: 13 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); window.location.href = `/elliott-screener/${screener.id}/status`; }}
+              style={{
+                background: '#0d2137',
+                color: '#90caf9',
+                border: '1px solid #42a5f5',
+                padding: '3px 12px',
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              View Status
+            </button>
+            <span style={{ color: '#aaa', fontSize: 13 }}>
               {screener.symbols.split(',').length} symbol(s) · {screener.timeframes}
             </span>
           </div>
@@ -347,22 +362,6 @@ export default function ScreenerConfigPanel({
                 }}
               >
                 {showRuns ? 'Hide History' : 'Run History'}
-              </button>
-            )}
-            {screener && (
-              <button
-                onClick={() => window.location.href = `/elliott-screener/${screener.id}/status`}
-                style={{
-                  background: '#333',
-                  color: '#90caf9',
-                  border: '1px solid #42a5f5',
-                  padding: '8px 16px',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  fontSize: 13,
-                }}
-              >
-                View Status
               </button>
             )}
           </div>
