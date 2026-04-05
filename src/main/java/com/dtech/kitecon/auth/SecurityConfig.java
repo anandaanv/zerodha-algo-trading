@@ -66,7 +66,8 @@ public class SecurityConfig {
                                 "/settings",
                                 "/admin/kite-config",
                                 "/admin/groups",
-                                "/elliott-screener/*/status"
+                                "/elliott-screener/*/status",
+                                "/wave-lab", "/wave-lab/**"
                         ).permitAll()
 
                         // Role-based access control
@@ -99,6 +100,9 @@ public class SecurityConfig {
                                 "/api/elliott-suggestions/**",
                                 "/api/scan/**"
                         ).hasAnyRole("USER", "MODERATOR", "ADMIN")
+
+                        // Wave Lab endpoints — USER role
+                        .requestMatchers("/api/wave-lab/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // All other endpoints require authentication
                         .anyRequest().authenticated()

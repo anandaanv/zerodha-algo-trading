@@ -1,0 +1,10 @@
+INPUT_SUMMARY_JSON:
+{{input_summary_json}}
+
+MODEL_A_OUTPUT_JSON:
+{{model_a_output_json}}
+
+MODEL_B_OUTPUT_JSON:
+{{model_b_output_json}}
+
+Return final JSON only as per schema.

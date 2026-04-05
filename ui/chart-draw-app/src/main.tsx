@@ -16,6 +16,7 @@ import CopilotDashboard from "./tradingview/CopilotDashboard";
 import SkillBuilderPage from "./tradingview/SkillBuilderPage";
 import KiteLogin from "./components/KiteLogin";
 import KiteSuccess from "./components/KiteSuccess";
+import WaveLabApp from "./wave-lab/WaveLabApp";
 
 // Get Google OAuth Client ID from environment variable
 // Set this in .env file: VITE_GOOGLE_OAUTH_CLIENT_ID=your_client_id_here
@@ -83,6 +84,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="ADMIN">
               <TVChartApp />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/wave-lab"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <WaveLabApp />
             </ProtectedRoute>
           }
         />

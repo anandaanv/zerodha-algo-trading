@@ -1,0 +1,9 @@
+Analyze triangle state for:
+symbol: {{symbol}}
+timeframe: {{timeframe}}
+candle_count: {{candle_count}}
+
+INPUT_SUMMARY_JSON:
+{{input_summary_json}}
+
+Return JSON only as per schema.
