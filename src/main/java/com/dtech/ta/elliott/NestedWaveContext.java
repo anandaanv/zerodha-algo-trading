@@ -24,6 +24,8 @@ public class NestedWaveContext {
     private String dominantStructure;
     private String narrative;
     private Double anchorLevel;
+    /** Timestamp of the anchor pivot — used to filter sub-wave pivots on lower TFs. */
+    private java.time.Instant anchorTimestamp;
     private Double invalidationLevel;
 
     @Builder.Default
@@ -46,5 +48,18 @@ public class NestedWaveContext {
         private Double triggerPrice;
         /** The current price at time of evaluation */
         private Double currentPrice;
+
+        /** Sub-wave label when the branch has triggered and 4C sub-waves are being counted.
+         *  E.g. "4C1", "4C2", "4C3". Null when not yet triggered or insufficient pivots. */
+        private String subwaveLabel;
+
+        /** Structure type of the active sub-wave: "DIAGONAL" (W4 overlaps W1) or "CHANNEL_IMPULSE". */
+        private String subwaveStructureType;
+
+        /** Short description of the next expected sub-wave move. */
+        private String subwaveNextMove;
+
+        /** Price level that invalidates the current sub-wave count (typically the 4C1 high/low). */
+        private Double subwaveInvalidation;
     }
 }

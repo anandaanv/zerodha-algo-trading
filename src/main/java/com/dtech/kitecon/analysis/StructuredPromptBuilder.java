@@ -231,7 +231,8 @@ public class StructuredPromptBuilder {
     private List<PatternMatch> filterActivePatterns(List<PatternMatch> all, double currentPrice) {
         List<PatternMatch> result = new ArrayList<>();
         for (PatternMatch p : all) {
-            if (p.getStatus() != null && p.getStatus().name().equals("INVALIDATED")) continue;
+            if (p.getStatus() == PatternStatus.CONFIRMED
+                    || p.getStatus() == PatternStatus.INVALIDATED) continue;
 
             Double support    = p.getSupport();
             Double resistance = p.getResistance();

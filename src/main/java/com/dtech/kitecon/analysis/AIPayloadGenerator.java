@@ -244,6 +244,9 @@ public class AIPayloadGenerator {
 
         List<PatternMatch> filtered = dedupedPatterns.stream()
             .filter(p -> entryTf.equals(p.getTimeframe()) || "15m".equals(p.getTimeframe()))
+            .filter(p -> p.getStatus() == PatternStatus.WATCHING
+                      || p.getStatus() == PatternStatus.BUILDING
+                      || p.getStatus() == PatternStatus.PARTIAL)
             .sorted((p1, p2) -> Double.compare(p2.getConfidence(), p1.getConfidence()))
             .limit(5)
             .collect(Collectors.toList());

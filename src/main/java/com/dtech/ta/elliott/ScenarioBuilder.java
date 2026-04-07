@@ -140,6 +140,28 @@ public class ScenarioBuilder {
                         : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
             };
             case TRIANGLE         -> WaveScenario.ScenarioDirection.RANGE_RESOLUTION;
+            case LEADING_DIAGONAL -> switch (cur) {
+                case W3, W4 -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
+                        : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
+                case W5, UNKNOWN -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BEARISH_REVERSAL
+                        : WaveScenario.ScenarioDirection.BULLISH_REVERSAL;
+                default -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
+                        : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
+            };
+            case ENDING_DIAGONAL -> switch (cur) {
+                case W4, W5 -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
+                        : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
+                case UNKNOWN -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BEARISH_REVERSAL
+                        : WaveScenario.ScenarioDirection.BULLISH_REVERSAL;
+                default -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
+                        : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
+            };
             case DOUBLE_ZIGZAG, COMPLEX_WXY -> wc.isBullish()
                     ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
                     : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
@@ -327,7 +349,31 @@ public class ScenarioBuilder {
                     targets.add(target(wA_end.getPrice() + retDir * aLength * 0.382, "WB = 38.2% retrace of WA", "WB", 0.25));
                 }
             }
-            case FLAT, EXPANDED_FLAT, RUNNING_FLAT -> {
+            case EXPANDED_FLAT -> {
+                if (wc.getCurrentWaveInProgress() == WaveLabel.WC && pivots.size() >= 3) {
+                    EnrichedPivot wA_start = pivots.get(0);
+                    EnrichedPivot wA_end   = pivots.get(1);
+                    EnrichedPivot wB_end   = pivots.get(2);
+                    double aLength = Math.abs(wA_start.getPrice() - wA_end.getPrice());
+                    boolean down = wA_end.getPrice() < wA_start.getPrice();
+                    double dir = down ? -1 : 1;
+                    // Expanded flat: WC typically reaches 127.2% or 161.8% of WA from WB end
+                    targets.add(target(wB_end.getPrice() + dir * aLength * 1.272, "WC = 127.2% of WA (expanded flat primary)", "WC", 0.5));
+                    targets.add(target(wB_end.getPrice() + dir * aLength * 1.618, "WC = 161.8% of WA (expanded flat extended)", "WC", 0.35));
+                    targets.add(target(wA_end.getPrice(), "WC returns to WA end level (minimum)", "WC", 0.15));
+                } else if (wc.getCurrentWaveInProgress() == WaveLabel.WB && pivots.size() >= 2) {
+                    EnrichedPivot wA_start = pivots.get(0);
+                    EnrichedPivot wA_end   = pivots.get(1);
+                    double aLength = Math.abs(wA_start.getPrice() - wA_end.getPrice());
+                    boolean waDown = wA_end.getPrice() < wA_start.getPrice();
+                    double retDir = waDown ? 1 : -1;
+                    // Expanded flat B retraces 100%+ of A — use higher targets
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 1.0,   "WB = 100% of WA (expanded flat min)", "WB", 0.4));
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 1.272, "WB = 127.2% of WA (expanded flat typical)", "WB", 0.4));
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 1.618, "WB = 161.8% of WA (expanded flat extended)", "WB", 0.2));
+                }
+            }
+            case FLAT, RUNNING_FLAT -> {
                 if (wc.getCurrentWaveInProgress() == WaveLabel.WC && pivots.size() >= 3) {
                     EnrichedPivot wA_start = pivots.get(0);
                     EnrichedPivot wA_end   = pivots.get(1);
@@ -342,17 +388,28 @@ public class ScenarioBuilder {
                     EnrichedPivot wA_end   = pivots.get(1);
                     double aLength = Math.abs(wA_start.getPrice() - wA_end.getPrice());
                     boolean waDown = wA_end.getPrice() < wA_start.getPrice();
-                    double retDir = waDown ? 1 : -1; // WB retraces opposite direction of WA
+                    double retDir = waDown ? 1 : -1;
                     targets.add(target(wA_end.getPrice() + retDir * aLength * 0.618, "WB = 61.8% retrace of WA", "WB", 0.4));
                     targets.add(target(wA_end.getPrice() + retDir * aLength * 0.500, "WB = 50% retrace of WA", "WB", 0.35));
                     targets.add(target(wA_end.getPrice() + retDir * aLength * 0.382, "WB = 38.2% retrace of WA", "WB", 0.25));
                 }
             }
             case TRIANGLE -> {
-                // Triangle target = pole (prior trend) projected from breakout
-                // Use last pivot as breakout reference
+                // Triangle target = pole height (Wave A length) projected from WE breakout point
                 EnrichedPivot last = pivots.get(pivots.size() - 1);
-                targets.add(target(last.getPrice() * 1.10, "Triangle breakout — estimated target (10% move)", "WE", 0.5));
+                if (pivots.size() >= 2) {
+                    double poleHeight = Math.abs(pivots.get(1).getPrice() - pivots.get(0).getPrice());
+                    boolean thrustUp = wc.isBullish();
+                    double bp = last.getPrice();
+                    targets.add(target(
+                        thrustUp ? bp + poleHeight : bp - poleHeight,
+                        "Triangle thrust = Wave A pole height from WE", "Thrust", 0.5));
+                    targets.add(target(
+                        thrustUp ? bp + poleHeight * 0.618 : bp - poleHeight * 0.618,
+                        "Triangle thrust = 61.8% of Wave A (conservative)", "Thrust", 0.35));
+                } else {
+                    targets.add(target(last.getPrice() * 1.10, "Triangle breakout estimate", "WE", 0.5));
+                }
             }
             case DOUBLE_ZIGZAG, COMPLEX_WXY -> {
                 // WY is the final leg — treat like WC of a ZIGZAG
