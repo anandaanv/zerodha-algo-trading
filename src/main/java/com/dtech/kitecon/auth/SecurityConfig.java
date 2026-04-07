@@ -86,6 +86,9 @@ public class SecurityConfig {
                         // Snapshot and analysis endpoints - allow USER role
                         .requestMatchers("/api/snapshots/**", "/api/analysis/**", "/api/tags/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
 
+                        // Forecast endpoints — USER role
+                        .requestMatchers("/api/forecast/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
+
                         // Co-Pilot endpoints — USER role
                         .requestMatchers(
                                 "/api/hypotheses/**", "/api/monitor/**",

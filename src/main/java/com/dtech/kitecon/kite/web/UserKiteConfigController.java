@@ -4,6 +4,7 @@ import com.dtech.algo.runner.candle.KiteTickerService;
 import com.dtech.kitecon.kite.service.UserKiteConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
@@ -17,6 +18,9 @@ public class UserKiteConfigController {
 
     private final UserKiteConfigService service;
     private final KiteTickerService tickerService;
+
+    @Value("${app.frontend.url:}")
+    private String frontendUrl;
 
     // ── CRUD endpoints (admin only — enforced by SecurityConfig /api/admin/**) ──
 
@@ -50,14 +54,14 @@ public class UserKiteConfigController {
     }
 
     /**
-     * Redirect browser to Kite OAuth page for this config.
+     * Return JSON with Kite OAuth login URL.
      * The Kite developer console must have redirect URI set to:
      *   {server}/kite-callback/config/{id}
      */
     @GetMapping("/api/admin/kite-configs/{id}/connect")
-    public RedirectView connect(@PathVariable Long id) {
+    public ResponseEntity<?> connect(@PathVariable Long id) {
         String loginUrl = service.getLoginUrl(id);
-        return new RedirectView(loginUrl);
+        return ResponseEntity.ok(Map.of("url", loginUrl));
     }
 
     // ── OAuth callback (no JWT — redirected from Kite servers) ──
@@ -73,7 +77,7 @@ public class UserKiteConfigController {
         } catch (Exception e) {
             log.error("Kite callback failed for config {}: {}", configId, e.getMessage(), e);
         }
-        return new RedirectView("/admin/kite-config");
+        return new RedirectView(frontendUrl + "/admin/kite-config");
     }
 
     // ── Request DTOs ──

@@ -21,12 +21,15 @@ interface ChartTabBarProps {
   onToggleCopilot?: () => void;
   onToggleAnalysis?: () => void;
   onCopilotSettings?: () => void;
+  isForecastOpen?: boolean;
+  onToggleForecast?: () => void;
 }
 
 export default function ChartTabBar({
   tabs, activeTabId, workspaceName, onWorkspaceNameChange,
   onSwitch, onAdd, onClose, onRename, onSaveLayout, onSaveAsLayout, onLoadLayout,
   isCopilotOpen, isAnalysisOpen, copilotCount, onToggleCopilot, onToggleAnalysis, onCopilotSettings,
+  isForecastOpen, onToggleForecast,
 }: ChartTabBarProps) {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -117,7 +120,7 @@ export default function ChartTabBar({
       <button style={styles.addBtn} onClick={onAdd} title="New chart tab">+</button>
 
       {/* Right-side action buttons */}
-      {(onToggleCopilot || onToggleAnalysis || onCopilotSettings) && (
+      {(onToggleCopilot || onToggleAnalysis || onCopilotSettings || onToggleForecast) && (
         <>
           <div style={styles.divider} />
           {onCopilotSettings && (
@@ -142,6 +145,13 @@ export default function ChartTabBar({
               onClick={onToggleAnalysis}
               title="Fundamentals, news, snapshots"
             >📊</button>
+          )}
+          {onToggleForecast && (
+            <button
+              style={{ ...styles.actionBtn, background: isForecastOpen ? '#1b5e20' : undefined, color: isForecastOpen ? '#fff' : undefined }}
+              onClick={onToggleForecast}
+              title="TSFM Forecast: AI time-series model predictions"
+            >📈</button>
           )}
         </>
       )}

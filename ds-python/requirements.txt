@@ -1,0 +1,9 @@
+# Dependency management is split per model to avoid numpy/transformers conflicts.
+# See individual requirements files:
+#
+#   requirements-chronos.txt   — Chronos-Bolt (Tiny)  port 11111
+#   requirements-lagllama.txt  — Lag-Llama             port 11112
+#   requirements-granite.txt   — IBM Granite TTM       port 11113
+#
+# Use ./start.sh — it creates .venv-chronos, .venv-lagllama, .venv-granite
+# and installs each automatically.

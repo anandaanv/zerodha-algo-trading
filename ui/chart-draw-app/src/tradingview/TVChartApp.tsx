@@ -11,6 +11,9 @@ import AIChatOverlay from './AIChatOverlay';
 import PromptBuilderPage from './PromptBuilderPage';
 import CopilotChartPanel from './CopilotChartPanel';
 import CopilotSettingsModal from './CopilotSettingsModal';
+import ForecastPanel from './ForecastPanel';
+import { drawForecastOverlay, clearForecastShapes } from './useForecastOverlay';
+import type { ForecastResponse } from './forecastApi';
 import type { CopilotHypothesis, CopilotObservation, DrawingPoint } from './copilotTypes';
 import {
   WorkspaceTab,
@@ -49,6 +52,8 @@ export default function TVChartApp() {
   const [copilotHypotheses, setCopilotHypotheses] = useState<CopilotHypothesis[]>([]);
   const hypothesisShapeIdsRef = useRef<any[]>([]);
   const observationShapeIdsRef = useRef<any[]>([]);
+  const [isForecastPanelOpen, setIsForecastPanelOpen] = useState(false);
+  const forecastShapeIdsRef = useRef<any[]>([]);
 
   // Parse URL parameters for initial defaults only
   const urlSymbol = searchParams.get('script') || searchParams.get('symbol');
@@ -557,6 +562,32 @@ export default function TVChartApp() {
     }
   }, []);
 
+  // ─── Forecast: draw model forecast lines on chart ────────────────────────
+
+  const handleForecastReady = useCallback((data: ForecastResponse) => {
+    if (!widgetReadyRef.current || !widgetRef.current) return;
+    try {
+      const chart = widgetRef.current.activeChart();
+      // Clear previous forecast shapes
+      clearForecastShapes(chart, forecastShapeIdsRef.current);
+      forecastShapeIdsRef.current = [];
+      // Draw new ones (all three models enabled by default — panel controls per-model)
+      const ids = drawForecastOverlay(chart, data, { chronos: true, lagLlama: true, granite: true });
+      forecastShapeIdsRef.current = ids;
+    } catch (e) {
+      console.warn('Could not draw forecast overlay:', e);
+    }
+  }, []);
+
+  const handleForecastClear = useCallback(() => {
+    if (!widgetReadyRef.current || !widgetRef.current) return;
+    try {
+      const chart = widgetRef.current.activeChart();
+      clearForecastShapes(chart, forecastShapeIdsRef.current);
+      forecastShapeIdsRef.current = [];
+    } catch { /* ignore */ }
+  }, []);
+
   // ─── Derived: active tab for display ─────────────────────────────────────
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
@@ -601,6 +632,8 @@ export default function TVChartApp() {
         onToggleCopilot={() => setIsCopilotPanelOpen(prev => !prev)}
         onToggleAnalysis={() => setIsAnalysisPanelOpen(prev => !prev)}
         onCopilotSettings={() => setShowCopilotSettings(true)}
+        isForecastOpen={isForecastPanelOpen}
+        onToggleForecast={() => setIsForecastPanelOpen(prev => !prev)}
       />
 
       {/* Chart + Copilot panel row */}
@@ -628,6 +661,24 @@ export default function TVChartApp() {
             getChartState={getChartState}
             onHypothesesLoaded={handleHypothesesLoaded}
             onObservationsLoaded={handleObservationsLoaded}
+          />
+        </div>
+
+        {/* Forecast panel — right side, shrinks chart */}
+        <div style={{
+          width: isForecastPanelOpen ? 300 : 0,
+          overflow: 'hidden',
+          transition: 'width 0.3s ease',
+          flexShrink: 0,
+          borderLeft: isForecastPanelOpen ? '1px solid rgba(255,255,255,0.1)' : 'none',
+        }}>
+          <ForecastPanel
+            open={isForecastPanelOpen}
+            onClose={() => setIsForecastPanelOpen(false)}
+            symbol={activeTab?.symbol || defaultSymbol}
+            timeframe={activeTab?.timeframe || rawTimeframe}
+            onForecastReady={handleForecastReady}
+            onForecastClear={handleForecastClear}
           />
         </div>
       </div>

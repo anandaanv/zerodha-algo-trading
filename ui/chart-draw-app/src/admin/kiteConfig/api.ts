@@ -63,9 +63,9 @@ export async function disconnectKiteConfig(id: number): Promise<void> {
   if (!res.ok) throw new Error(await res.text() || `Failed: ${res.status}`);
 }
 
-export function getKiteConnectUrl(id: number): string {
-  // Returns the backend URL that redirects to Kite OAuth.
-  // The Kite developer console must have redirect URI: {server}/kite-callback/config/{id}
-  const base = (window as any).__API_BASE_URL__ || '';
-  return `${base}/api/admin/kite-configs/${id}/connect`;
+export async function fetchKiteConnectUrl(id: number): Promise<string> {
+  const res = await apiFetch(`/api/admin/kite-configs/${id}/connect`, withAuth());
+  if (!res.ok) throw new Error(await res.text() || `Failed: ${res.status}`);
+  const data = await res.json();
+  return data.url;
 }

@@ -1,0 +1,23 @@
+# Lag-Llama — port 11112
+# gluonts requires numpy<2.2
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+pydantic>=2.10.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.6.0+cpu
+# gluonts must be pre-installed before lag-llama (older gluonts wheels have bad
+# metadata that breaks pip's resolver when lag-llama pulls them in transitively)
+gluonts==0.14.4
+huggingface-hub>=0.28.0
+transformers>=4.45.0,<4.48
+# lag-llama extra deps (installed alongside --no-deps lag-llama in start.sh)
+lightning>=2.1.0
+pytorch-lightning>=2.1.0
+torchmetrics>=1.0.0
+matplotlib>=3.7.0
+wandb>=0.15.0
+gitpython>=3.1.0
+einops>=0.8.0
+# numpy pinned by gluonts==0.14.4 (~=1.16 → resolves to 1.26.4)
+pandas>=2.1.0
+scipy>=1.12.0

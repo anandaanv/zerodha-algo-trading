@@ -119,3 +119,18 @@ Desktop.ini
 *.orig.tmp
 
 ui/chart-draw-app/charting_library/**
+
+# ------------------------------------------------------------------
+# ds-python — TSFM sidecar
+# ------------------------------------------------------------------
+ds-python/.venv-chronos/
+ds-python/.venv-lagllama/
+ds-python/.venv-granite/
+ds-python/__pycache__/
+ds-python/**/__pycache__/
+ds-python/**/*.pyc
+ds-python/**/*.pyo
+ds-python/.cache/
+# HuggingFace model weights (downloaded at runtime)
+ds-python/models_cache/
+~/.cache/huggingface/

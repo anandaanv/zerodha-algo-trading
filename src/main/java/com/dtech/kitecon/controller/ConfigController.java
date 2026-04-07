@@ -7,6 +7,7 @@ import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
@@ -47,6 +48,9 @@ public class ConfigController {
     private final IndexSymbolUpdaterService updaterService;
     private final KiteTickerService tickerService;
 
+    @Value("${app.frontend.url:}")
+    private String frontendUrl;
+
     /** Step 1: Start the OAuth chain — redirect to App 0's login page */
     @GetMapping("/kite-login")
     public RedirectView startKiteLogin() {
@@ -80,7 +84,7 @@ public class ConfigController {
             return new RedirectView(nextUrl);
         } else {
             log.info("All {} Kite app(s) authenticated — redirecting to dashboard", kiteConnectPool.getAppCount());
-            return new RedirectView("/dashboard");
+            return new RedirectView(frontendUrl + "/dashboard");
         }
     }
 

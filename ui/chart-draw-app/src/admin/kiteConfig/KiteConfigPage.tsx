@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   UserKiteConfigDto, CreateKiteConfigRequest,
   listKiteConfigs, createKiteConfig, updateKiteConfig,
-  deleteKiteConfig, disconnectKiteConfig, getKiteConnectUrl,
+  deleteKiteConfig, disconnectKiteConfig, fetchKiteConnectUrl,
 } from './api';
 
 const card: React.CSSProperties = {
@@ -79,8 +79,13 @@ export default function KiteConfigPage() {
     }
   }
 
-  function handleConnect(id: number) {
-    window.location.href = getKiteConnectUrl(id);
+  async function handleConnect(id: number) {
+    try {
+      const url = await fetchKiteConnectUrl(id);
+      window.location.href = url;
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
 
   return (
