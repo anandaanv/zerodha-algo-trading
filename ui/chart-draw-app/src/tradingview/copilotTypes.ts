@@ -312,6 +312,14 @@ export interface AiTradeEntry {
   rationale?: string;
 }
 
+export interface WaveKeyPoint {
+  label: string;
+  price: number;
+  timestamp: string;
+  timeframe: string;
+  type: string;
+}
+
 export interface AiTradeRecommendation {
   type: string;
   hypothesisLabel?: string;
@@ -334,6 +342,7 @@ export interface AdvancedElliottResult {
   hypothesisSnapshot: ElliottHypothesisSnapshot | null;
   promptSummary: string;
   aiRecommendation?: AiTradeRecommendation | null;
+  waveKeyPoints?: WaveKeyPoint[];
 }
 
 // ─── Second-Pass Filtering + AI Verification ─────────────────────────────────

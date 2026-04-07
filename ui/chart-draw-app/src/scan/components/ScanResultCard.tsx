@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import MarkdownView from '../../components/MarkdownView';
 
 interface ScanResult {
   symbol?: string;
   primaryTimeframe?: string;
   allTimeframes?: string;
+  dataRange?: Record<string, string>;
   humanReadable?: string;
   msdSummary?: string;
   aiResponse?: string;
@@ -77,6 +79,20 @@ export default function ScanResultCard({ scan }: Props) {
       {scan.allTimeframes && (
         <div style={{ marginBottom: 8, fontSize: 12, color: '#aaa' }}>
           TFs: {scan.allTimeframes}
+        </div>
+      )}
+
+      {/* Data Range */}
+      {result?.dataRange && Object.keys(result.dataRange).length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {Object.entries(result.dataRange as Record<string, string>).map(([tf, range]) => (
+            <span key={tf} style={{
+              background: '#1a1a2e', border: '1px solid #333', borderRadius: 3,
+              padding: '2px 7px', fontSize: 11, color: '#9e9e9e',
+            }}>
+              <span style={{ color: '#64b5f6' }}>{tf}</span>: {range}
+            </span>
+          ))}
         </div>
       )}
 
@@ -164,58 +180,27 @@ export default function ScanResultCard({ scan }: Props) {
           >
             {showRaw ? 'Hide AI' : 'Raw AI'}
           </button>
+          <button
+            onClick={() => window.open(`/api/debug/elliott/view?file=${scan.id}_${scan.symbol}.json`, '_blank')}
+            style={{ background: '#1a237e', color: '#90caf9', border: '1px solid #3949ab', borderRadius: 4, padding: '4px 10px', fontSize: 12, cursor: 'pointer' }}
+            title="Open Elliott debug dump in JSON viewer"
+          >
+            Elliott JSON
+          </button>
         </div>
       )}
 
       {/* Human readable */}
       {showHuman && result?.humanReadable && (
-        <div style={{
-          marginTop: 10, background: '#0d1117', border: '1px solid #333',
-          borderRadius: 4, padding: '10px 16px', fontSize: 13, color: '#c9d1d9',
-          maxHeight: 400, overflow: 'auto', lineHeight: 1.6,
-        }}>
-          <ReactMarkdown
-            components={{
-              h1: ({children}) => <h1 style={{ color: '#90caf9', fontSize: 16, marginBottom: 8 }}>{children}</h1>,
-              h2: ({children}) => <h2 style={{ color: '#80cbc4', fontSize: 14, marginBottom: 6, marginTop: 14 }}>{children}</h2>,
-              h3: ({children}) => <h3 style={{ color: '#a5d6a7', fontSize: 13, marginBottom: 4, marginTop: 10 }}>{children}</h3>,
-              p: ({children}) => <p style={{ margin: '4px 0', color: '#c9d1d9' }}>{children}</p>,
-              strong: ({children}) => <strong style={{ color: '#ffd54f' }}>{children}</strong>,
-              li: ({children}) => <li style={{ marginBottom: 2, color: '#c9d1d9' }}>{children}</li>,
-              ul: ({children}) => <ul style={{ paddingLeft: 20, margin: '4px 0' }}>{children}</ul>,
-              ol: ({children}) => <ol style={{ paddingLeft: 20, margin: '4px 0' }}>{children}</ol>,
-              code: ({children}) => <code style={{ background: '#1a2a3a', padding: '1px 4px', borderRadius: 3, fontSize: 12, color: '#90caf9' }}>{children}</code>,
-              hr: () => <hr style={{ border: 'none', borderTop: '1px solid #333', margin: '8px 0' }} />,
-            }}
-          >
-            {result.humanReadable}
-          </ReactMarkdown>
+        <div style={{ marginTop: 10 }}>
+          <MarkdownView content={result.humanReadable} />
         </div>
       )}
 
       {/* Raw AI response */}
       {showRaw && result?.aiResponse && (
-        <div style={{
-          marginTop: 10, background: '#0d1117', border: '1px solid #333',
-          borderRadius: 4, padding: '10px 16px', fontSize: 13, color: '#8b949e',
-          maxHeight: 400, overflow: 'auto', lineHeight: 1.6,
-        }}>
-          <ReactMarkdown
-            components={{
-              h1: ({children}) => <h1 style={{ color: '#7986cb', fontSize: 16, marginBottom: 8 }}>{children}</h1>,
-              h2: ({children}) => <h2 style={{ color: '#9575cd', fontSize: 14, marginBottom: 6, marginTop: 14 }}>{children}</h2>,
-              h3: ({children}) => <h3 style={{ color: '#ba68c8', fontSize: 13, marginBottom: 4, marginTop: 10 }}>{children}</h3>,
-              p: ({children}) => <p style={{ margin: '4px 0', color: '#8b949e' }}>{children}</p>,
-              strong: ({children}) => <strong style={{ color: '#ce93d8' }}>{children}</strong>,
-              li: ({children}) => <li style={{ marginBottom: 2, color: '#8b949e' }}>{children}</li>,
-              ul: ({children}) => <ul style={{ paddingLeft: 20, margin: '4px 0' }}>{children}</ul>,
-              ol: ({children}) => <ol style={{ paddingLeft: 20, margin: '4px 0' }}>{children}</ol>,
-              code: ({children}) => <code style={{ background: '#1a1a3a', padding: '1px 4px', borderRadius: 3, fontSize: 12, color: '#7986cb' }}>{children}</code>,
-              hr: () => <hr style={{ border: 'none', borderTop: '1px solid #333', margin: '8px 0' }} />,
-            }}
-          >
-            {result.aiResponse}
-          </ReactMarkdown>
+        <div style={{ marginTop: 10 }}>
+          <MarkdownView content={result.aiResponse} theme="raw" />
         </div>
       )}
     </div>

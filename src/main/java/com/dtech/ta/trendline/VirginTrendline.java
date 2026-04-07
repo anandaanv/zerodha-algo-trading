@@ -20,6 +20,10 @@ public class VirginTrendline {
     @lombok.Builder.Default
     private int score = 0;
 
+    /** Number of historical pivot/candle touches (minimum 2 = the two anchors). Higher = stronger line. */
+    @lombok.Builder.Default
+    private int touchCount = 2;
+
     /** Which scenarios contributed to this trendline's detection/scoring. */
     @lombok.Builder.Default
     private java.util.List<String> scenarioTags = new java.util.ArrayList<>();

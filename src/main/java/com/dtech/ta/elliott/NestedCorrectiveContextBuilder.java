@@ -30,7 +30,8 @@ public class NestedCorrectiveContextBuilder {
             String primaryTf,
             Map<String, TfContext> tfContexts,
             Map<String, List<EnrichedPivot>> enrichedByTf,
-            List<PatternMatch> patterns) {
+            List<PatternMatch> patterns,
+            double currentPrice) {
 
         List<NestedWaveContext> results = new ArrayList<>();
 
@@ -158,6 +159,18 @@ public class NestedCorrectiveContextBuilder {
                         .build());
             }
 
+            // Adjust branch probabilities based on current price vs anchor
+            double anchorPrice = last.getPrice();
+            adjustBranchProbabilities(branches, anchorPrice, currentPrice);
+            // Update narrative if truncation has triggered
+            boolean truncationTriggered = currentPrice < anchorPrice && !extensionUp
+                    || currentPrice > anchorPrice && extensionUp;
+            if (truncationTriggered) {
+                narrative = tf + ": Truncation confirmed — price has moved through anchor "
+                        + fmt(anchorPrice) + ". Wave 4C is likely in progress. "
+                        + "Extended scenario probability reduced significantly.";
+            }
+
             results.add(NestedWaveContext.builder()
                     .timeframe(tf)
                     .higherDegreeWave(parentWave)
@@ -210,5 +223,66 @@ public class NestedCorrectiveContextBuilder {
 
     private String fmt(double value) {
         return String.format("%.2f", value);
+    }
+
+    /**
+     * Adjusts TRUNCATED vs EXTENDED branch probabilities based on current price vs anchor.
+     * If price has already broken through the anchor (truncation trigger met), boost TRUNCATED.
+     * Also sets triggered/triggerPrice/currentPrice fields on each branch.
+     */
+    private void adjustBranchProbabilities(List<NestedWaveContext.BranchHypothesis> branches,
+                                             double anchorPrice, double currentPrice) {
+        if (currentPrice <= 0 || anchorPrice <= 0) return;
+
+        // Determine if truncation trigger has been hit (price below anchor for downward corrections)
+        boolean truncationTriggered = currentPrice < anchorPrice;
+        double distFromAnchor = (currentPrice - anchorPrice) / anchorPrice; // negative if below
+
+        for (int i = 0; i < branches.size(); i++) {
+            NestedWaveContext.BranchHypothesis b = branches.get(i);
+            // Mark trigger/price fields
+            branches.set(i, NestedWaveContext.BranchHypothesis.builder()
+                    .code(b.getCode())
+                    .label(b.getLabel())
+                    .targetLevel(b.getTargetLevel())
+                    .trigger(b.getTrigger())
+                    .rationale(b.getRationale())
+                    .nextHigherDegreeMove(b.getNextHigherDegreeMove())
+                    .triggerPrice(anchorPrice)
+                    .currentPrice(currentPrice)
+                    .triggered(b.getCode() != null && b.getCode().startsWith("TRUNCATED") && truncationTriggered)
+                    .probability(computeAdjustedProbability(b.getCode(), truncationTriggered, distFromAnchor, b.getProbability()))
+                    .build());
+        }
+    }
+
+    private double computeAdjustedProbability(String code, boolean truncationTriggered,
+                                               double distFromAnchor, double originalProb) {
+        if (code == null) return originalProb;
+        boolean isTruncated = code.startsWith("TRUNCATED");
+        boolean isExtended  = code.startsWith("EXTENDED");
+
+        if (truncationTriggered) {
+            // Price is below anchor — truncation has triggered
+            if (isTruncated) return 0.85;
+            if (isExtended)  return 0.15;
+        } else {
+            // Price is above anchor — still in decision zone
+            double absDist = Math.abs(distFromAnchor);
+            if (absDist <= 0.01) {
+                // Within 1% of anchor — neutral
+                if (isTruncated) return 0.50;
+                if (isExtended)  return 0.50;
+            } else if (absDist <= 0.03) {
+                // 1-3% above anchor — extension favored
+                if (isTruncated) return 0.40;
+                if (isExtended)  return 0.60;
+            } else {
+                // >3% above anchor — extension more likely
+                if (isTruncated) return 0.30;
+                if (isExtended)  return 0.70;
+            }
+        }
+        return originalProb; // non-TRUNCATED/EXTENDED branches keep original
     }
 }

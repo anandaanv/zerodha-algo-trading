@@ -319,17 +319,19 @@ public class CopilotOrchestratorService {
             - If the pre-computed evidence is ambiguous, say so in confidenceLayers
             - If no trade setup is actionable right now, say so clearly
             - Always reference which scenario and hypothesis ID you are confirming
-            - The INDICATOR SNAPSHOT section (appended to the analysis data) shows actual RSI/MACD/EWO/
-              Bollinger/ADX/Volume readings at the last 1-2 pivots per timeframe. Use these to assess
-              momentum direction, divergences, and whether indicators confirm the wave structure before
-              selecting and sizing the best trade.
+            - The prompt contains numbered ZIGZAG PIVOTS (Z0, Z1, ...) per timeframe — these are the
+              raw price pivots the engine detected. Wave counts and patterns reference these by Zn index.
+            - ACTIVE PATTERNS are pre-filtered to only those whose price range contains the current price.
+              Do not invent or reference patterns not listed.
+            - When writing waveContext, always cite actual Zn pivot references and their prices/dates.
+              E.g. 'W3 peaked at Z5 (28400, 2024-02-20), W4 correction underway from Z5, currently Z6 (26100).'
 
             Return a JSON FINDING response:
             {
               "type": "FINDING",
               "hypothesisLabel": "short label e.g. Wave 4 Triangle → Wave 5 Launch",
               "hypothesisDescription": "detailed description of the confirmed scenario",
-              "waveContext": "which scenario/hypothesis you confirmed and why",
+              "waveContext": "Wave position with actual prices from wave_key_points. Example: 'W3 peaked at 25432 (2024-03-15), W4 correction from that peak, B-wave high at 24800 (2024-04-10), now in C-of-B targeting 23200.' Always cite actual pivot prices and dates.",
               "pattern": "the key pattern driving the setup (or null)",
               "currentStage": "WATCHING | ENTRY_READY | INVALIDATED",
               "confidenceLayers": {

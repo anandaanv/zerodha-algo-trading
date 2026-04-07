@@ -16,11 +16,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.dtech.ta.elliott.WaveCount;
+import com.dtech.ta.elliott.WaveLabel;
 
 @Service
 @RequiredArgsConstructor
@@ -65,6 +69,7 @@ public class AIPayloadGenerator {
         payload.put("cross_timeframe_summary", buildCrossTimeframeSummary(analysis));
         payload.put("pattern_counts", buildPatternCounts(analysis));
         payload.put("indicator_snapshot", buildIndicatorSnapshotBlock(analysis.getEnrichedPivots()));
+        payload.put("wave_key_points", buildWaveKeyPointsBlock(analysis.getWaveCounts()));
 
         // Token budget enforcement
         int tokenEstimate = estimateTokens(payload);
@@ -470,5 +475,43 @@ public class AIPayloadGenerator {
         }
 
         return snapshot;
+    }
+
+    private Map<String, Object> buildWaveKeyPointsBlock(List<WaveCount> waveCounts) {
+        Map<String, Object> block = new LinkedHashMap<>();
+        if (waveCounts == null || waveCounts.isEmpty()) return block;
+
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.of("Asia/Kolkata"));
+
+        // Best-scoring WaveCount per timeframe
+        Map<String, WaveCount> bestByTf = new LinkedHashMap<>();
+        for (WaveCount wc : waveCounts) {
+            String tf = wc.getPrimaryTimeframe();
+            if (tf == null) continue;
+            WaveCount existing = bestByTf.get(tf);
+            if (existing == null || wc.totalScore() > existing.totalScore()) {
+                bestByTf.put(tf, wc);
+            }
+        }
+
+        for (Map.Entry<String, WaveCount> entry : bestByTf.entrySet()) {
+            WaveCount wc = entry.getValue();
+            if (wc.getPivots() == null || wc.getPivotToWave() == null) continue;
+
+            List<Map<String, Object>> points = new ArrayList<>();
+            for (EnrichedPivot pivot : wc.getPivots()) {
+                WaveLabel label = wc.getPivotToWave().get(pivot.getBarIndex());
+                if (label == null || pivot.getTimestamp() == null) continue;
+                Map<String, Object> pt = new LinkedHashMap<>();
+                pt.put("label", label.name());
+                pt.put("price", Math.round(pivot.getPrice() * 100.0) / 100.0);
+                pt.put("date", fmt.format(pivot.getTimestamp()));
+                pt.put("type", pivot.isHigh() ? "HIGH" : "LOW");
+                points.add(pt);
+            }
+            if (!points.isEmpty()) block.put(entry.getKey(), points);
+        }
+
+        return block;
     }
 }

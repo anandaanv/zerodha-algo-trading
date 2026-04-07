@@ -63,8 +63,13 @@ public class ElliottWaveAnalyzer {
         // Layer 6: Wave counts
         List<WaveCount> waveCounts = waveCounter.generateCounts(enrichedByTf, tfOrder);
 
+        // Current price from primary series (used for activation status and branch probabilities)
+        BarSeries primaryBarSeries = seriesByTf.get(primaryTf);
+        double currentPrice = (primaryBarSeries != null && primaryBarSeries.getBarCount() > 0)
+                ? primaryBarSeries.getLastBar().getClosePrice().doubleValue() : 0.0;
+
         // Layer 7: Scenarios
-        List<WaveScenario> scenarios = scenarioBuilder.build(waveCounts, patterns, primaryTf);
+        List<WaveScenario> scenarios = scenarioBuilder.build(waveCounts, patterns, primaryTf, currentPrice);
 
         // Phase 2b: segment proportionality bonus on wave counts (before scenario ranking)
         applySegmentProportionalityBonus(waveCounts, structureByTf);
@@ -94,7 +99,7 @@ public class ElliottWaveAnalyzer {
         String narrative = buildCrossTfNarrative(tfOrder, tfContexts, gapsByTf, patterns);
         String nestedBranchNarrative = buildNestedBranchNarrative(tfOrder, tfContexts, patterns, scenarios);
         List<NestedWaveContext> nestedCorrectiveContexts = nestedCorrectiveContextBuilder.build(
-                tfOrder, primaryTf, tfContexts, enrichedByTf, patterns);
+                tfOrder, primaryTf, tfContexts, enrichedByTf, patterns, currentPrice);
 
         return ElliottWaveAnalysis.builder()
             .scenarios(scenarios).allPatterns(patterns)
@@ -217,8 +222,12 @@ public class ElliottWaveAnalyzer {
 
         sb.append("\nPATTERN → WAVE CONTEXT:\n");
         boolean anyHints = false;
+        // Deduplicate by (type, timeframe, status) — only print one representative per unique combo
+        java.util.Set<String> seenPatternKeys = new java.util.LinkedHashSet<>();
         for (PatternMatch pm : patterns) {
             if (pm.getWaveContextHints() == null || pm.getWaveContextHints().isEmpty()) continue;
+            String key = pm.getType() + "|" + pm.getTimeframe() + "|" + pm.getStatus();
+            if (!seenPatternKeys.add(key)) continue; // skip duplicate type+tf+status combos
             anyHints = true;
             sb.append("  [").append(pm.getTimeframe()).append("] ").append(pm.getType())
               .append("[").append(pm.getStatus()).append("] conf=").append(fmt(pm.getConfidence())).append("\n");

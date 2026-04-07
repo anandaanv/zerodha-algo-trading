@@ -203,11 +203,11 @@ export async function generateSuggestionChartLayout(suggestionId: number): Promi
 }
 
 // On-demand scan API
-export async function initiateScan(symbol: string, primaryTimeframe: string) {
+export async function initiateScan(symbol: string, primaryTimeframe: string, verboseLogging = false) {
   const res = await apiFetch('/api/scan', withAuth({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ symbol, primaryTimeframe }),
+    body: JSON.stringify({ symbol, primaryTimeframe, verboseLogging }),
   }));
   if (res.status === 429) {
     const data = await res.json();

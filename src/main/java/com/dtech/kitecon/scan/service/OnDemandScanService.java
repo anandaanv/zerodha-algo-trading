@@ -4,6 +4,7 @@ import com.dtech.algo.series.Interval;
 import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import com.dtech.chartpattern.zigzag.ZigZagService;
 import com.dtech.kitecon.analysis.AnalysisProcessService;
+import com.dtech.kitecon.analysis.StructuredPromptBuilder;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.scan.entity.*;
 import com.dtech.kitecon.scan.repository.*;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.ta4j.core.BarSeries;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.*;
 
 @Service
@@ -37,12 +39,13 @@ public class OnDemandScanService {
     private final AnalysisProcessService analysisProcessService;
     private final CopilotOrchestratorService orchestratorService;
     private final CopilotAIService aiService;
+    private final StructuredPromptBuilder structuredPromptBuilder;
     private final AIResponseParser responseParser;
     private final InstrumentRepository instrumentRepository;
     private final ObjectMapper objectMapper;
 
     @Transactional
-    public OnDemandScan initiateScan(Long userId, String symbol, String primaryTimeframe) {
+    public OnDemandScan initiateScan(Long userId, String symbol, String primaryTimeframe, boolean verboseLogging) {
         rateLimitService.checkRateLimit(userId);
 
         List<String> allTfs = expandTimeframes(primaryTimeframe);
@@ -52,6 +55,7 @@ public class OnDemandScanService {
                 .primaryTimeframe(primaryTimeframe)
                 .allTimeframes(String.join(",", allTfs))
                 .status(ScanStatus.PENDING)
+                .verboseLogging(verboseLogging)
                 .build();
         scan = scanRepository.save(scan);
         runScanAsync(scan.getId(), userId, symbol.toUpperCase().trim(), primaryTimeframe);
@@ -109,14 +113,104 @@ public class OnDemandScanService {
 
             var processed = analysisProcessService.process(advResult.getWaveAnalysis(), symbol, currentPrice, effectivePrimaryTf);
 
-            String data = "=== SYMBOL: " + symbol + " ===\n" + processed.getHumanReadable() + "\n" + msdSummary;
+            // Verbose: log all Elliott wave engine output for debugging
+            if (scan.isVerboseLogging()) {
+                // 1. Zigzag pivots per TF
+                StringBuilder pivotLog = new StringBuilder();
+                for (String tf : orderedTfs) {
+                    List<ZigZagPoint> pts = pivotsByTf.get(tf);
+                    if (pts == null) continue;
+                    pivotLog.append("\n[").append(tf).append("] ").append(pts.size()).append(" pivots:\n");
+                    for (ZigZagPoint p : pts) {
+                        pivotLog.append("  [").append(p.getBarIndex()).append("] ")
+                                .append(p.isHigh() ? "HIGH" : "LOW").append(" ")
+                                .append(String.format("%.2f", p.getValue()))
+                                .append(" ").append(p.getTimestamp() != null
+                                        ? p.getTimestamp().atZone(java.time.ZoneId.of("Asia/Kolkata"))
+                                               .toLocalDateTime().toString() : "?")
+                                .append("\n");
+                    }
+                }
+                log.info("[VerboseLog][{}] ===== ZIGZAG PIVOTS =====\n{}", symbol, pivotLog);
+
+                // 2. Market structure per TF
+                StringBuilder msdLog = new StringBuilder();
+                for (Map.Entry<String, MarketStructureData> e : structureByTf.entrySet()) {
+                    msdLog.append("\n[").append(e.getKey()).append("]\n")
+                          .append(e.getValue().toPromptSummary());
+                }
+                log.info("[VerboseLog][{}] ===== MARKET STRUCTURE =====\n{}", symbol, msdLog);
+
+                // 3. Elliott wave analysis summary
+                ElliottWaveAnalysis wa = advResult.getWaveAnalysis();
+                if (wa != null) {
+                    log.info("[VerboseLog][{}] ===== ELLIOTT WAVE SUMMARY =====\n{}", symbol, wa.toPromptSummary());
+
+                    // 4. All wave counts as JSON
+                    if (wa.getWaveCounts() != null) {
+                        log.info("[VerboseLog][{}] ===== WAVE COUNTS ({}) =====", symbol, wa.getWaveCounts().size());
+                        for (WaveCount wc : wa.getWaveCounts()) {
+                            try {
+                                log.info("[VerboseLog][{}] WaveCount: {}", symbol, objectMapper.writeValueAsString(wc));
+                            } catch (Exception ex) {
+                                log.warn("[VerboseLog][{}] Failed to serialize WaveCount: {}", symbol, ex.getMessage());
+                            }
+                        }
+                    }
+
+                    // 5. All patterns as JSON
+                    if (wa.getAllPatterns() != null) {
+                        try {
+                            log.info("[VerboseLog][{}] ===== ALL PATTERNS ({}) =====\n{}", symbol,
+                                    wa.getAllPatterns().size(),
+                                    objectMapper.writeValueAsString(wa.getAllPatterns()));
+                        } catch (Exception ex) {
+                            log.warn("[VerboseLog][{}] Failed to serialize patterns: {}", symbol, ex.getMessage());
+                        }
+                    }
+                }
+            }
+
+            // Extract data range per timeframe from BarSeries
+            Map<String, String> dataRangeByTf = new LinkedHashMap<>();
+            for (String tf : orderedTfs) {
+                BarSeries s = seriesByTf.get(tf);
+                if (s != null && s.getBarCount() > 0) {
+                    String firstDate = s.getFirstBar().getEndTime().atZone(ZoneId.of("Asia/Kolkata")).toLocalDate().toString();
+                    String lastDate  = s.getLastBar().getEndTime().atZone(ZoneId.of("Asia/Kolkata")).toLocalDate().toString();
+                    dataRangeByTf.put(tf, firstDate + " → " + lastDate + " (" + s.getBarCount() + " bars)");
+                }
+            }
+
+            String data = structuredPromptBuilder.build(
+                    symbol, currentPrice, effectivePrimaryTf, orderedTfs,
+                    pivotsByTf, advResult.getWaveAnalysis(), structureByTf);
             String instructions = orchestratorService.buildScenarioEvaluatorInstructions();
+
+            // Always log prompt length and content for debugging
+            log.info("[OnDemandScan][{}] prompt size: instructions={}chars data={}chars total={}chars (~{}tokens)",
+                    symbol, instructions.length(), data.length(),
+                    instructions.length() + data.length(),
+                    (instructions.length() + data.length()) / 4);
+            log.info("[OnDemandScan][{}] ===== FULL PROMPT DATA =====\n{}", symbol, data);
+
+            if (scan.isVerboseLogging()) {
+                log.info("[VerboseLog][{}] ===== AI INSTRUCTIONS =====\n{}", symbol, instructions);
+            }
+
+            writeElliottDebugDump(scanId, symbol, currentPrice, orderedTfs, pivotsByTf, structureByTf, advResult.getWaveAnalysis());
+
             String rawResponse = aiService.call(userId, instructions, data);
+
+            if (scan.isVerboseLogging()) {
+                log.info("[VerboseLog][{}] ===== AI RAW RESPONSE =====\n{}", symbol, rawResponse);
+            }
 
             AIResponse aiResponse = responseParser.parse(rawResponse);
             boolean hasTradeSetup = (aiResponse instanceof FindingResponse fr) && "ENTRY_READY".equals(fr.getCurrentStage());
 
             Map<String, Object> result = new LinkedHashMap<>();
+            result.put("dataRange", dataRangeByTf);
             result.put("symbol", symbol);
             result.put("primaryTimeframe", effectivePrimaryTf);
             result.put("allTimeframes", String.join(",", orderedTfs));
@@ -230,5 +324,60 @@ public class OnDemandScanService {
             case "15min", "15m", "15minute" -> List.of("1d", "1h", "15min");
             default -> List.of(primaryTf);
         };
+    }
+
+    private void writeElliottDebugDump(Long scanId, String symbol, double currentPrice,
+                                        List<String> orderedTfs,
+                                        Map<String, List<ZigZagPoint>> pivotsByTf,
+                                        Map<String, MarketStructureData> structureByTf,
+                                        ElliottWaveAnalysis wa) {
+        try {
+            java.io.File dir = new java.io.File("/tmp/elliott-debug");
+            dir.mkdirs();
+
+            Map<String, Object> dump = new LinkedHashMap<>();
+            dump.put("scanId", scanId);
+            dump.put("symbol", symbol);
+            dump.put("currentPrice", currentPrice);
+            dump.put("timeframes", orderedTfs);
+            dump.put("timestamp", java.time.Instant.now().toString());
+
+            // Pivots per TF
+            Map<String, Object> pivotsMap = new LinkedHashMap<>();
+            for (String tf : orderedTfs) {
+                List<ZigZagPoint> pts = pivotsByTf.get(tf);
+                if (pts == null) continue;
+                List<Map<String, Object>> list = new java.util.ArrayList<>();
+                for (ZigZagPoint p : pts) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("barIndex", p.getBarIndex());
+                    m.put("type", p.isHigh() ? "HIGH" : "LOW");
+                    m.put("price", p.getValue());
+                    m.put("timestamp", p.getTimestamp() != null ? p.getTimestamp().toString() : null);
+                    list.add(m);
+                }
+                pivotsMap.put(tf, list);
+            }
+            dump.put("pivots", pivotsMap);
+
+            // Market structure per TF (as summary string)
+            Map<String, String> msdMap = new LinkedHashMap<>();
+            for (Map.Entry<String, MarketStructureData> e : structureByTf.entrySet()) {
+                msdMap.put(e.getKey(), e.getValue().toPromptSummary());
+            }
+            dump.put("marketStructure", msdMap);
+
+            // Full wave analysis
+            if (wa != null) {
+                dump.put("waveAnalysis", wa);
+            }
+
+            String filename = scanId + "_" + symbol + ".json";
+            java.io.File file = new java.io.File(dir, filename);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, dump);
+            log.info("[OnDemandScan][{}] Elliott debug dump written to {}", symbol, file.getAbsolutePath());
+        } catch (Exception e) {
+            log.warn("[OnDemandScan][{}] Failed to write Elliott debug dump: {}", symbol, e.getMessage());
+        }
     }
 }
