@@ -25,7 +25,9 @@ public class WaveCount {
         RUNNING_FLAT,   // Wave C doesn't reach Wave A end
         TRIANGLE,       // 5-swing converging ABCDE
         DOUBLE_ZIGZAG,  // WXY
-        COMPLEX_WXY     // Double/triple combination
+        COMPLEX_WXY,    // Double/triple combination
+        LEADING_DIAGONAL,  // 5-wave wedge in W1/WA position; W4 overlaps W1 territory
+        ENDING_DIAGONAL    // 5-wave wedge in W5/WC position; exhaustion pattern
     }
 
     /** Type of wave structure this count represents */

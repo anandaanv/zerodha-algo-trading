@@ -27,7 +27,7 @@ public class ScenarioStatusTracker {
             List<String> reasons = new ArrayList<>();
             double totalScore = computeTotalScore(scenario);
 
-            // Check hard invalidation
+            // Check hard scenario-level invalidation
             boolean invalidated = isInvalidated(scenario, currentPrice);
             if (invalidated) {
                 reasons.add("hard_invalidation: price crossed " + scenario.getScenarioInvalidation());
@@ -40,10 +40,48 @@ public class ScenarioStatusTracker {
                 continue;
             }
 
-            // Tentative assignment (will promote first non-invalidated to LEADING below)
+            // Hypothesis-level invalidation cascade
+            if (scenario.getHypotheses() != null && !scenario.getHypotheses().isEmpty()
+                    && currentPrice > 0) {
+                boolean anyCascaded = false;
+                WaveHypothesis firstValid = null;
+                for (WaveHypothesis h : scenario.getHypotheses()) {
+                    double inv = h.getInvalidationLevel();
+                    if (inv <= 0) {
+                        if (firstValid == null) firstValid = h;
+                        continue;
+                    }
+                    boolean hBullish = h.isNextMajorMoveUp();
+                    boolean hInvalidated = hBullish ? currentPrice < inv : currentPrice > inv;
+                    if (hInvalidated && !h.isHypothesisInvalidated()) {
+                        h.setHypothesisInvalidated(true);
+                        h.setHypothesisNote("invalidated: price " + String.format("%.2f", currentPrice)
+                            + (hBullish ? " < " : " > ") + String.format("%.2f", inv));
+                        anyCascaded = true;
+                        reasons.add("hypothesis_invalidated: " + h.getId() + " breached at " + String.format("%.2f", inv));
+                    } else if (!h.isHypothesisInvalidated() && firstValid == null) {
+                        firstValid = h;
+                    }
+                }
+                if (anyCascaded && firstValid != null) {
+                    firstValid.setHypothesisNote("promoted_after_cascade");
+                    reasons.add("promoted: " + firstValid.getId() + " after cascade");
+                }
+                // Recompute total score excluding invalidated hypotheses
+                totalScore = scenario.getHypotheses().stream()
+                    .filter(h -> !h.isHypothesisInvalidated())
+                    .mapToDouble(WaveHypothesis::getTotalScore)
+                    .boxed()
+                    .sorted(Comparator.reverseOrder())
+                    .limit(2)
+                    .mapToDouble(Double::doubleValue)
+                    .sum();
+            }
+
+            // Tentative assignment
             ScenarioStatus status;
             if (totalScore >= ACTIVE_SCORE_FLOOR) {
-                status = ScenarioStatus.ACTIVE_ALTERNATE; // will promote to LEADING if first
+                status = ScenarioStatus.ACTIVE_ALTERNATE;
                 reasons.add("score_above_active_floor: " + totalScore);
             } else if (totalScore >= WEAK_SCORE_FLOOR) {
                 status = ScenarioStatus.WEAK_ALTERNATE;

@@ -179,11 +179,13 @@ public class NestedCorrectiveContextBuilder {
                     .dominantStructure(dominantStructure)
                     .narrative(narrative)
                     .anchorLevel(last.getPrice())
+                    .anchorTimestamp(last.getTimestamp())
                     .invalidationLevel(resolveInvalidation(ctx, last))
                     .branches(branches)
                     .build());
         }
 
+        enrichTriggeredBranchSubwaves(results, enrichedByTf, tfOrder);
         results.sort(Comparator.comparing(NestedWaveContext::getTimeframe));
         return results;
     }
@@ -284,5 +286,114 @@ public class NestedCorrectiveContextBuilder {
             }
         }
         return originalProb; // non-TRUNCATED/EXTENDED branches keep original
+    }
+
+    /**
+     * When TRUNCATED_C_OF_B has triggered, count sub-waves from the anchor timestamp
+     * and classify the emerging 4C structure (diagonal vs clean channel impulse).
+     */
+    private void enrichTriggeredBranchSubwaves(List<NestedWaveContext> contexts,
+                                                Map<String, List<EnrichedPivot>> enrichedByTf,
+                                                List<String> tfOrder) {
+        for (NestedWaveContext ctx : contexts) {
+            java.time.Instant anchorTs = ctx.getAnchorTimestamp();
+            if (anchorTs == null) continue;
+
+            // Step 1: try same-TF pivots after the anchor timestamp
+            List<EnrichedPivot> subPivots = new java.util.ArrayList<>();
+            List<EnrichedPivot> sameTfPivots = enrichedByTf.get(ctx.getTimeframe());
+            if (sameTfPivots != null) {
+                for (EnrichedPivot p : sameTfPivots) {
+                    if (p.getTimestamp() != null && p.getTimestamp().isAfter(anchorTs)) {
+                        subPivots.add(p);
+                    }
+                }
+            }
+
+            // Step 2: if same-TF has no sub-pivots, fall back to next lower TF
+            if (subPivots.isEmpty()) {
+                int tfIdx = tfOrder.indexOf(ctx.getTimeframe());
+                if (tfIdx >= 0 && tfIdx + 1 < tfOrder.size()) {
+                    String lowerTf = tfOrder.get(tfIdx + 1);
+                    List<EnrichedPivot> lowerPivots = enrichedByTf.get(lowerTf);
+                    if (lowerPivots != null) {
+                        for (EnrichedPivot p : lowerPivots) {
+                            if (p.getTimestamp() != null && p.getTimestamp().isAfter(anchorTs)) {
+                                subPivots.add(p);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Now classify the 4C sub-wave stage from the sub-pivot count
+            List<NestedWaveContext.BranchHypothesis> updated = new java.util.ArrayList<>();
+            for (NestedWaveContext.BranchHypothesis b : ctx.getBranches()) {
+                if (!Boolean.TRUE.equals(b.isTriggered()) || b.getCode() == null
+                        || !b.getCode().startsWith("TRUNCATED")) {
+                    updated.add(b);
+                    continue;
+                }
+
+                int n = subPivots.size();
+                String subwaveLabel;
+                String subwaveStructureType = null;
+                String subwaveNextMove;
+                Double subwaveInvalidation = null;
+
+                if (n == 0) {
+                    subwaveLabel    = "4C not yet started";
+                    subwaveNextMove = "Awaiting first sub-swing below anchor " + fmt(ctx.getAnchorLevel());
+                } else if (n == 1) {
+                    EnrichedPivot p0 = subPivots.get(0);
+                    subwaveLabel    = "4C1 in progress";
+                    subwaveInvalidation = p0.getPrice();
+                    subwaveNextMove = "4C1 in progress — watch for bounce to confirm 4C2";
+                } else if (n == 2) {
+                    EnrichedPivot p0 = subPivots.get(0);
+                    EnrichedPivot p1 = subPivots.get(1);
+                    subwaveLabel    = "4C2 retrace in progress";
+                    subwaveInvalidation = p0.getPrice(); // 4C1 extreme = sub-count invalidation
+                    double retrace = p0.getPrice() != 0
+                            ? Math.abs(p1.getPrice() - p0.getPrice()) / Math.abs(ctx.getAnchorLevel() - p0.getPrice())
+                            : 0;
+                    subwaveNextMove = String.format("4C2 bounce in progress (%.0f%% retrace) — watch for 4C3 continuation",
+                            retrace * 100);
+                } else {
+                    // Diagonal: 4C2 bounce retraces >78.6% of 4C1 (W2 overlaps W1 territory)
+                    EnrichedPivot p0 = subPivots.get(0); // 4C1 start (high for bearish)
+                    EnrichedPivot p1 = subPivots.get(1); // 4C1 end (low for bearish)
+                    EnrichedPivot p2 = subPivots.get(2); // 4C2 end (bounce high)
+                    double c1Range = Math.abs(p1.getPrice() - p0.getPrice());
+                    double c2Retrace = c1Range > 0
+                            ? Math.abs(p2.getPrice() - p1.getPrice()) / c1Range : 0;
+                    boolean diagonal = c2Retrace > 0.786;
+                    subwaveLabel        = "4C" + Math.min(n, 5) + " in progress";
+                    subwaveStructureType = diagonal ? "DIAGONAL" : "CHANNEL_IMPULSE";
+                    subwaveInvalidation  = p1.getPrice(); // current 4C wave extreme
+                    subwaveNextMove = diagonal
+                            ? "Leading diagonal developing — deep W2 retrace; expect W3-of-4C acceleration after 4C2 completes"
+                            : "Channel impulse — W3-of-4C should extend strongly below " + fmt(p1.getPrice());
+                }
+
+                updated.add(NestedWaveContext.BranchHypothesis.builder()
+                        .code(b.getCode())
+                        .label(b.getLabel())
+                        .probability(b.getProbability())
+                        .targetLevel(b.getTargetLevel())
+                        .trigger(b.getTrigger())
+                        .rationale(b.getRationale())
+                        .nextHigherDegreeMove(b.getNextHigherDegreeMove())
+                        .triggered(b.isTriggered())
+                        .triggerPrice(b.getTriggerPrice())
+                        .currentPrice(b.getCurrentPrice())
+                        .subwaveLabel(subwaveLabel)
+                        .subwaveStructureType(subwaveStructureType)
+                        .subwaveNextMove(subwaveNextMove)
+                        .subwaveInvalidation(subwaveInvalidation)
+                        .build());
+            }
+            ctx.setBranches(updated);
+        }
     }
 }

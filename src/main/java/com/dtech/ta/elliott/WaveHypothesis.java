@@ -116,6 +116,13 @@ public class WaveHypothesis {
     /** Absolute distance from current price as a fraction (e.g. 0.142 = 14.2%) */
     private Double distanceFromCurrentPrice;
 
+    /** True when this hypothesis's invalidation level has been breached by current price */
+    @lombok.Builder.Default
+    private boolean hypothesisInvalidated = false;
+
+    /** Free-text note about cascade/promotion — set by ScenarioStatusTracker */
+    private String hypothesisNote;
+
     // ── Fibonacci target model ────────────────────────────────────────────────
 
     @Data
