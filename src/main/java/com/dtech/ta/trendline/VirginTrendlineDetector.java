@@ -73,6 +73,55 @@ public class VirginTrendlineDetector {
 
                 if (!isVirgin) continue;
 
+                // Backward candle scan: count historical touches
+                double atr = p1.getAtrAtPivot() != 0 ? p1.getAtrAtPivot() : p2.getAtrAtPivot();
+                int touchCount = 2;  // Start with the two anchors
+
+                for (int bi = p1.getBarIndex() - 1; bi >= 0; bi--) {
+                    double projPrice = slope * bi + intercept;
+
+                    // Check if this bar touches the line
+                    boolean touches = false;
+                    if (!bullish) {
+                        // Resistance line: check HIGH
+                        double high = series.getBar(bi).getHighPrice().doubleValue();
+                        if (Math.abs(high - projPrice) <= atr * 0.5) {
+                            touches = true;
+                        }
+                    } else {
+                        // Support line: check LOW
+                        double low = series.getBar(bi).getLowPrice().doubleValue();
+                        if (Math.abs(low - projPrice) <= atr * 0.5) {
+                            touches = true;
+                        }
+                    }
+
+                    if (touches) {
+                        // Check if line is clean between this touch and the anchor
+                        if (isLineCleanBetween(series, bi, p1.getBarIndex(), slope, intercept, bullish, atr)) {
+                            touchCount++;
+                            // Continue scanning further back
+                        } else {
+                            // Line is not clean, stop scanning
+                            break;
+                        }
+                    } else {
+                        // Check for close-through break
+                        double close = series.getBar(bi).getClosePrice().doubleValue();
+                        boolean breaks = false;
+                        if (!bullish && close > projPrice + atr * 0.5) {
+                            breaks = true;
+                        } else if (bullish && close < projPrice - atr * 0.5) {
+                            breaks = true;
+                        }
+
+                        if (breaks) {
+                            // Close breaks the line, stop scanning
+                            break;
+                        }
+                    }
+                }
+
                 // Compute price at current bar
                 int currentBarIndex = series.getBarCount() - 1;
                 double priceAtCurrentBar = slope * currentBarIndex + intercept;
@@ -88,6 +137,8 @@ public class VirginTrendlineDetector {
                         .support(bullish)  // true for bullish (support), false for bearish (resistance)
                         .priceAtCurrentBar(priceAtCurrentBar)
                         .distancePctFromCurrentPrice(distancePctFromCurrentPrice)
+                        .touchCount(touchCount)
+                        .score(touchCount - 2)
                         .build();
 
                 candidates_trendlines.add(trendline);
@@ -151,6 +202,22 @@ public class VirginTrendlineDetector {
             }
         }
         return true; // Trendline is virgin
+    }
+
+    /**
+     * Checks if the trendline is clean (not broken) between two bars.
+     * For resistance lines (!bullish): checks if any close > projPrice + atr * 0.5
+     * For support lines (bullish): checks if any close < projPrice - atr * 0.5
+     */
+    private boolean isLineCleanBetween(BarSeries series, int fromBar, int toBar,
+                                       double slope, double intercept, boolean bullish, double atr) {
+        for (int i = fromBar + 1; i < toBar; i++) {
+            double projPrice = slope * i + intercept;
+            double barClose = series.getBar(i).getClosePrice().doubleValue();
+            if (!bullish && barClose > projPrice + atr * 0.5) return false;
+            if (bullish  && barClose < projPrice - atr * 0.5) return false;
+        }
+        return true;
     }
 
     private final java.util.List<TrendlineScenario> scenarios = java.util.List.of(

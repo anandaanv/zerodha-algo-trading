@@ -110,6 +110,12 @@ public class WaveHypothesis {
      */
     private Map<String, Integer> scoreBreakdown;
 
+    /** ACTIVE = within 3% of current price, WATCHING = 3-15%, DISTANT = >15% */
+    private String activationStatus;
+
+    /** Absolute distance from current price as a fraction (e.g. 0.142 = 14.2%) */
+    private Double distanceFromCurrentPrice;
+
     // ── Fibonacci target model ────────────────────────────────────────────────
 
     @Data

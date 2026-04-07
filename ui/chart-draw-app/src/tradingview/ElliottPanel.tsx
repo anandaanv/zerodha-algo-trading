@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import MarkdownView from '../components/MarkdownView';
 import type {
   AdvancedElliottResult,
   AiTradeRecommendation,
@@ -9,6 +10,7 @@ import type {
   VerifiedElliottResult,
   ScenarioFamilyCandidate,
   HumanResearchSummary,
+  WaveKeyPoint,
 } from './copilotTypes';
 
 interface Props {
@@ -142,6 +144,11 @@ export default function ElliottPanel({
         </div>
       )}
 
+      {/* ── Wave Map ── */}
+      {result.waveKeyPoints && result.waveKeyPoints.length > 0 && (
+        <WaveMapTable points={result.waveKeyPoints} />
+      )}
+
       {/* ── Section E: AI Trade Recommendation ── */}
       {aiRecommendation && (
         <AiRecommendationPanel rec={aiRecommendation} open={aiRecOpen} onToggle={() => setAiRecOpen(o => !o)} />
@@ -257,13 +264,9 @@ function VerifiedSection({
             {aiOpen ? '▾' : '▸'} AI Reasoning
           </button>
           {aiOpen && (
-            <pre style={{
-              marginTop: 6, padding: 8, background: '#1a1a1a', borderRadius: 4,
-              fontSize: 10, color: '#9e9e9e', overflowX: 'auto', maxHeight: 150,
-              overflowY: 'auto', whiteSpace: 'pre-wrap',
-            }}>
-              {aiReasoning}
-            </pre>
+            <div style={{ marginTop: 6 }}>
+              <MarkdownView content={aiReasoning} theme="raw" maxHeight={300} />
+            </div>
           )}
         </div>
       )}
@@ -414,6 +417,52 @@ function ZoneRow({ zone }: { zone: ElliottConfluenceZone }) {
   );
 }
 
+// ── Wave Map Table ────────────────────────────────────────────────────────────
+
+function WaveMapTable({ points }: { points: WaveKeyPoint[] }) {
+  if (!points || points.length === 0) return null;
+
+  const IMPULSE_LABELS = new Set(['W1', 'W2', 'W3', 'W4', 'W5']);
+  const labelColor = (label: string) =>
+    IMPULSE_LABELS.has(label) ? '#90caf9' : '#ffcc80';
+
+  // Group by timeframe
+  const byTf: Record<string, WaveKeyPoint[]> = {};
+  for (const pt of points) {
+    if (!byTf[pt.timeframe]) byTf[pt.timeframe] = [];
+    byTf[pt.timeframe].push(pt);
+  }
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontWeight: 700, color: '#90caf9', marginBottom: 6, fontSize: 13 }}>
+        Wave Map
+      </div>
+      {Object.entries(byTf).map(([tf, pts]) => (
+        <div key={tf} style={{ marginBottom: 6 }}>
+          <div style={{ color: '#757575', fontSize: 10, marginBottom: 3 }}>{tf}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {pts.map((pt, i) => {
+              const date = pt.timestamp ? new Date(pt.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '';
+              return (
+                <div key={i} style={{
+                  background: '#1a1a2e', border: `1px solid ${labelColor(pt.label)}33`,
+                  borderRadius: 4, padding: '3px 7px', fontSize: 11,
+                }}>
+                  <span style={{ color: labelColor(pt.label), fontWeight: 700 }}>{pt.label}</span>
+                  <span style={{ color: '#757575', marginLeft: 4 }}>{'HIGH' === pt.type ? '▲' : '▼'}</span>
+                  <span style={{ color: '#e0e0e0', marginLeft: 4 }}>{pt.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                  {date && <span style={{ color: '#616161', marginLeft: 4 }}>{date}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── AI Recommendation Panel ──────────────────────────────────────────────────
 
 function AiRecommendationPanel({
@@ -463,6 +512,16 @@ function AiRecommendationPanel({
           {/* Hypothesis label */}
           {rec.hypothesisLabel && (
             <div style={{ color: '#fff176', fontWeight: 600, marginBottom: 4 }}>{rec.hypothesisLabel}</div>
+          )}
+
+          {/* Wave context — price-anchored positions */}
+          {rec.waveContext && (
+            <div style={{
+              background: '#0d1a2e', border: '1px solid #1565c0', borderRadius: 4,
+              padding: '5px 8px', marginBottom: 8, color: '#90caf9', fontSize: 11,
+            }}>
+              {rec.waveContext}
+            </div>
           )}
 
           {/* Confidence layers */}
@@ -548,8 +607,8 @@ function AiRecommendationPanel({
 
           {/* Reasoning */}
           {rec.reasoning && (
-            <div style={{ color: '#9e9e9e', borderTop: '1px solid #222', paddingTop: 6, marginTop: 4 }}>
-              {rec.reasoning}
+            <div style={{ borderTop: '1px solid #222', paddingTop: 6, marginTop: 4 }}>
+              <MarkdownView content={rec.reasoning} maxHeight={300} />
             </div>
           )}
         </div>

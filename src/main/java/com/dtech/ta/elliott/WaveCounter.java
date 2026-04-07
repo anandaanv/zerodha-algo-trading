@@ -633,7 +633,43 @@ public class WaveCounter {
                                   List<String> tfOrder) {
         for (WaveCount wc : counts) {
             int tfIndex = tfOrder.indexOf(wc.getPrimaryTimeframe());
-            if (tfIndex < 0 || tfIndex + 1 >= tfOrder.size()) continue;
+            if (tfIndex < 0) continue;
+
+            if (tfIndex + 1 >= tfOrder.size()) {
+                // Last TF in chain — no child. Score by parent direction alignment.
+                if (tfIndex > 0) {
+                    String parentTf = tfOrder.get(tfIndex - 1);
+                    // Find the best-scoring parent count IN THE SAME DIRECTION as this child count
+                    counts.stream()
+                        .filter(other -> parentTf.equals(other.getPrimaryTimeframe())
+                                      && other.isBullish() == wc.isBullish())
+                        .max(java.util.Comparator.comparingInt(WaveCount::totalScore))
+                        .ifPresent(sameDir -> {
+                            wc.setCrossTfScore(wc.getCrossTfScore() + 10);
+                            wc.getSupportingEvidence().add(WaveEvidence.supports("Cross-TF",
+                                "Parent " + parentTf + " has matching "
+                                + (wc.isBullish() ? "bullish" : "bearish")
+                                + " wave count (score=" + sameDir.totalScore() + ")"));
+                        });
+                    // Add contradicting evidence only if the strongest opposite parent count
+                    // significantly outscores any same-direction parent count
+                    OptionalInt sameDirBest = counts.stream()
+                        .filter(other -> parentTf.equals(other.getPrimaryTimeframe())
+                                      && other.isBullish() == wc.isBullish())
+                        .mapToInt(WaveCount::totalScore).max();
+                    OptionalInt oppDirBest = counts.stream()
+                        .filter(other -> parentTf.equals(other.getPrimaryTimeframe())
+                                      && other.isBullish() != wc.isBullish())
+                        .mapToInt(WaveCount::totalScore).max();
+                    if (oppDirBest.isPresent() && oppDirBest.getAsInt() > 30
+                            && (!sameDirBest.isPresent() || oppDirBest.getAsInt() > sameDirBest.getAsInt() + 10)) {
+                        wc.getContradictingEvidence().add(WaveEvidence.contradicts("Cross-TF",
+                            "Parent " + parentTf + " dominant direction opposes this count",
+                            0.6));
+                    }
+                }
+                continue;
+            }
 
             String childTf = tfOrder.get(tfIndex + 1);
             List<EnrichedPivot> childPivots = pivotsByTf.get(childTf);
@@ -644,14 +680,21 @@ public class WaveCounter {
                 EnrichedPivot w2 = wc.getPivots().get(2);  // W2 end
                 EnrichedPivot w3 = wc.getPivots().get(3);  // W3 end
                 int childSwings = countSwingsBetween(childPivots, w2.getTimestamp(), w3.getTimestamp());
-                if (childSwings == 5) {
+                // Impulse W3 internal structure: odd number of pivots >= 5 (5,7,9,... sub-swings)
+                if (childSwings >= 5 && childSwings % 2 == 1) {
                     wc.setCrossTfScore(wc.getCrossTfScore() + 10);
                     wc.getSupportingEvidence().add(WaveEvidence.supports("Cross-TF",
-                            "W3 internal structure = 5 swings on " + childTf + " (confirms impulse)"));
+                            "W3 internal structure = " + childSwings + " swings (impulse-like) on " + childTf));
                 } else if (childSwings == 3) {
-                    wc.getCrossTfScore();  // no boost for 3 swings in W3
                     wc.getContradictingEvidence().add(WaveEvidence.contradicts("Cross-TF",
                             "W3 shows only 3 child-TF swings (corrective internal = lower confidence)"));
+                } else if (childSwings > 0) {
+                    // Even number or >= 5 even: partial credit for complex structure
+                    if (childSwings >= 4) {
+                        wc.setCrossTfScore(wc.getCrossTfScore() + 5);
+                        wc.getSupportingEvidence().add(WaveEvidence.supports("Cross-TF",
+                                "W3 internal structure = " + childSwings + " swings on " + childTf + " (partial confirmation)"));
+                    }
                 }
             }
         }

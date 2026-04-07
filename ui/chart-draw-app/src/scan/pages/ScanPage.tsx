@@ -11,6 +11,7 @@ export default function ScanPage() {
   const [error, setError] = useState<string | null>(null);
   const [scans, setScans] = useState<any[]>([]);
   const [pollingIds, setPollingIds] = useState<Set<number>>(new Set());
+  const [verboseLogging, setVerboseLogging] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -66,7 +67,7 @@ export default function ScanPage() {
     setLoading(true);
     setError(null);
     try {
-      const scan = await initiateScan(symbol.trim().toUpperCase(), primaryTf);
+      const scan = await initiateScan(symbol.trim().toUpperCase(), primaryTf, verboseLogging);
       setScans(prev => [scan, ...prev]);
       setPollingIds(prev => new Set([...Array.from(prev), scan.id]));
       setSymbol('');
@@ -116,17 +117,28 @@ export default function ScanPage() {
             {TIMEFRAMES.map(tf => <option key={tf} value={tf}>{tf}</option>)}
           </select>
         </div>
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            background: loading ? '#333' : '#1565c0', color: loading ? '#888' : '#fff',
-            border: 'none', borderRadius: 4, padding: '9px 20px', cursor: loading ? 'default' : 'pointer',
-            fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
-          }}
-        >
-          {loading ? 'Scanning...' : 'Run Scan'}
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 4 }}>
+          <label style={{ color: '#aaa', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={verboseLogging}
+              onChange={e => setVerboseLogging(e.target.checked)}
+              style={{ accentColor: '#90caf9' }}
+            />
+            Verbose Logging
+          </label>
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              background: loading ? '#333' : '#1565c0', color: loading ? '#888' : '#fff',
+              border: 'none', borderRadius: 4, padding: '9px 20px', cursor: loading ? 'default' : 'pointer',
+              fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap',
+            }}
+          >
+            {loading ? 'Scanning...' : 'Run Scan'}
+          </button>
+        </div>
       </form>
 
       {/* Error */}

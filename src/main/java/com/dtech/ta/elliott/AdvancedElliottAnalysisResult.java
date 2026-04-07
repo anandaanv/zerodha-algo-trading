@@ -23,5 +23,7 @@ public class AdvancedElliottAnalysisResult {
     private HypothesisSnapshot hypothesisSnapshot;
     private String promptSummary;
     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private List<WaveKeyPoint> waveKeyPoints;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
     private Object aiRecommendation;
 }

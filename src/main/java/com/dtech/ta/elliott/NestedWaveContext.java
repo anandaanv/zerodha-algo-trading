@@ -39,5 +39,12 @@ public class NestedWaveContext {
         private String trigger;
         private String rationale;
         private String nextHigherDegreeMove;
+
+        /** True if the branch trigger condition has already been met by current price */
+        private boolean triggered;
+        /** The anchor/trigger price this branch was evaluated against */
+        private Double triggerPrice;
+        /** The current price at time of evaluation */
+        private Double currentPrice;
     }
 }
