@@ -7,8 +7,6 @@ import { WorkspaceTab } from './workspaceTypes';
 import {
   loadCustomPrompts, getLastUsedPromptId, setLastUsedPromptId,
 } from './promptTypes';
-import type { CopilotHypothesis } from './copilotTypes';
-import { confirmHypothesis, dismissHypothesis } from './copilotApi';
 
 interface Props {
   open: boolean;
@@ -19,10 +17,6 @@ interface Props {
   tabs?: WorkspaceTab[];
   activeTabId?: string;
   onOpenPromptBuilder?: () => void;
-  /** Active hypotheses from Co-Pilot — shown as inline notification card */
-  copilotHypotheses?: CopilotHypothesis[];
-  /** Called after confirm/dismiss so parent can refresh */
-  onCopilotAction?: () => void;
 }
 
 interface ChatMessage {
@@ -55,7 +49,7 @@ function loadPanelW() { return Number(localStorage.getItem(PANEL_W_KEY)) || 460;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getChartState, tabs, activeTabId, onOpenPromptBuilder, copilotHypotheses, onCopilotAction }: Props) {
+export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getChartState, tabs, activeTabId, onOpenPromptBuilder }: Props) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [input, setInput]   = useState('');
   const [mode, setMode]     = useState<ChatMode>('VALIDATE');
@@ -253,16 +247,7 @@ export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getCh
           {/* Messages */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0 }}>
 
-            {/* Co-Pilot hypothesis notification card */}
-            {copilotHypotheses && copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length > 0 && (
-              <CopilotNotificationCard
-                hypotheses={copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED')}
-                onAction={onCopilotAction}
-                fontSize={fs.msg}
-              />
-            )}
-
-            {chatHistory.length === 0 && !(copilotHypotheses?.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length) && (
+            {chatHistory.length === 0 && (
               <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: fs.msg, textAlign: 'center', padding: '32px 8px', lineHeight: 1.7 }}>
                 {mode === 'REASON' ? 'Draw on the chart, then hit Send.' : 'Ask anything about this chart.'}
               </div>
@@ -385,91 +370,6 @@ export default function AIChatOverlay({ open, onToggle, symbol, timeframe, getCh
           >All {tabs!.length}</button>
         )}
       </div>
-    </div>
-  );
-}
-
-// ─── Co-Pilot Notification Card ───────────────────────────────────────────────
-
-function CopilotNotificationCard({
-  hypotheses, onAction, fontSize,
-}: {
-  hypotheses: CopilotHypothesis[];
-  onAction?: () => void;
-  fontSize: number;
-}) {
-  const [acting, setActing] = useState<number | null>(null);
-  const [localList, setLocalList] = useState(hypotheses);
-
-  // Keep in sync when parent updates
-  React.useEffect(() => { setLocalList(hypotheses); }, [hypotheses]);
-
-  const doConfirm = async (id: number, entryType: string) => {
-    setActing(id);
-    try {
-      await confirmHypothesis(id, entryType, false);
-      setLocalList(prev => prev.filter(h => h.id !== id));
-      onAction?.();
-    } catch { /* silent */ } finally { setActing(null); }
-  };
-
-  const doDismiss = async (id: number) => {
-    setActing(id);
-    try {
-      await dismissHypothesis(id);
-      setLocalList(prev => prev.filter(h => h.id !== id));
-      onAction?.();
-    } catch { /* silent */ } finally { setActing(null); }
-  };
-
-  if (localList.length === 0) return null;
-
-  return (
-    <div style={{
-      background: 'rgba(26,35,126,0.85)',
-      border: '1px solid #FFD700',
-      borderRadius: 10,
-      padding: '10px 12px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-    }}>
-      <div style={{ fontSize: fontSize - 1, fontWeight: 700, color: '#FFD700', letterSpacing: 0.5 }}>
-        ⚡ Co-Pilot — {localList.length} Active {localList.length === 1 ? 'Hypothesis' : 'Hypotheses'}
-      </div>
-      {localList.map(h => (
-        <div key={h.id} style={{
-          background: 'rgba(255,255,255,0.08)', borderRadius: 7, padding: '7px 9px',
-        }}>
-          <div style={{ fontSize: fontSize - 1, fontWeight: 700, color: '#fff', marginBottom: 4 }}>
-            <span style={{
-              fontSize: 9, background: h.state === 'CONFIRMED' ? '#388e3c' : h.state === 'BUILDING' ? '#f57c00' : '#607d8b',
-              color: '#fff', borderRadius: 3, padding: '1px 5px', marginRight: 6,
-            }}>{h.state}</span>
-            {h.label}
-          </div>
-          <div style={{ fontSize: fontSize - 2, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>
-            {h.pattern} · {h.direction}
-          </div>
-          <div style={{ display: 'flex', gap: 5 }}>
-            <button
-              onClick={() => doConfirm(h.id, 'ANTICIPATORY')}
-              disabled={acting === h.id}
-              style={{ padding: '3px 8px', background: '#388e3c', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-            >✓ Anticipatory</button>
-            <button
-              onClick={() => doConfirm(h.id, 'CONFIRMATION')}
-              disabled={acting === h.id}
-              style={{ padding: '3px 8px', background: '#1976d2', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-            >✓ Confirm</button>
-            <button
-              onClick={() => doDismiss(h.id)}
-              disabled={acting === h.id}
-              style={{ padding: '3px 8px', background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
-            >✗</button>
-          </div>
-        </div>
-      ))}
     </div>
   );
 }
