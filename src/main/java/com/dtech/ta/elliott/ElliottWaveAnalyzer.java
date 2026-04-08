@@ -99,7 +99,7 @@ public class ElliottWaveAnalyzer {
         String narrative = buildCrossTfNarrative(tfOrder, tfContexts, gapsByTf, patterns);
         String nestedBranchNarrative = buildNestedBranchNarrative(tfOrder, tfContexts, patterns, scenarios);
         List<NestedWaveContext> nestedCorrectiveContexts = nestedCorrectiveContextBuilder.build(
-                tfOrder, primaryTf, tfContexts, enrichedByTf, patterns, currentPrice);
+                tfOrder, primaryTf, tfContexts, enrichedByTf, patterns, currentPrice, waveCounts);
 
         return ElliottWaveAnalysis.builder()
             .scenarios(scenarios).allPatterns(patterns)

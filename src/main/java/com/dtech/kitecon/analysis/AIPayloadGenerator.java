@@ -61,7 +61,7 @@ public class AIPayloadGenerator {
         payload.put("generated_at", Instant.now().toString());
         payload.put("entry_timeframe", entryTf);
 
-        payload.put("decision_point", buildDecisionPointBlock(analysis, entryTf));
+        payload.put("decision_point", buildDecisionPointBlock(analysis, entryTf, currentPrice));
         payload.put("nested_context", buildNestedContextBlock(analysis, entryTf));
         payload.put("top_patterns", buildTopPatternsBlock(dedupedPatterns, entryTf, currentPrice));
         payload.put("competing_scenarios", buildCompetingScenariosBlock(normalizedScenarios));
@@ -132,7 +132,7 @@ public class AIPayloadGenerator {
     }
 
     private Map<String, Object> buildDecisionPointBlock(
-            ElliottWaveAnalysis analysis, String entryTf) {
+            ElliottWaveAnalysis analysis, String entryTf, double currentPrice) {
 
         Map<String, Object> block = new LinkedHashMap<>();
 
@@ -154,7 +154,11 @@ public class AIPayloadGenerator {
 
         double keyLevel = context.getInvalidationLevel() != null ? context.getInvalidationLevel() : 0.0;
         block.put("key_level", keyLevel);
-        block.put("key_level_meaning", "Hold above key level for extension");
+        boolean keyLevelBreached = keyLevel > 0 && currentPrice < keyLevel;
+        block.put("key_level_status", keyLevelBreached ? "BREACHED" : "ACTIVE");
+        block.put("key_level_meaning", keyLevelBreached
+                ? "KEY LEVEL BREACHED — price already below " + String.format("%.2f", keyLevel)
+                : "Hold above " + String.format("%.2f", keyLevel) + " for extension");
 
         // Determine scenario_a (lower probability) and scenario_b (higher probability)
         List<BranchHypothesis> branches = context.getBranches();
@@ -166,22 +170,49 @@ public class AIPayloadGenerator {
             BranchHypothesis branchA = sortedByProb.get(0);
             BranchHypothesis branchB = sortedByProb.get(sortedByProb.size() - 1);
 
-            block.put("scenario_a", buildBranchScenario(branchA));
-            block.put("scenario_b", buildBranchScenario(branchB));
+            block.put("scenario_a", buildBranchScenario(branchA, currentPrice));
+            block.put("scenario_b", buildBranchScenario(branchB, currentPrice));
         }
 
-        block.put("watch_for", List.of("Wave invalidation", "Confluence zone breach", "Gap fill"));
+        // Build watch_for from branch trigger levels
+        List<String> watchFor = new ArrayList<>();
+        if (branches != null) {
+            for (BranchHypothesis b : branches) {
+                if (b.getTrigger() != null && !b.getTrigger().isBlank()) {
+                    watchFor.add(b.getTrigger());
+                }
+            }
+        }
+        if (watchFor.isEmpty()) watchFor.add("Key level break");
+        block.put("watch_for", watchFor);
 
         return block;
     }
 
-    private Map<String, Object> buildBranchScenario(BranchHypothesis branch) {
+    private Map<String, Object> buildBranchScenario(BranchHypothesis branch, double currentPrice) {
         Map<String, Object> scenario = new LinkedHashMap<>();
         scenario.put("label", branch.getLabel() != null ? branch.getLabel() : branch.getCode());
         scenario.put("probability", (int) (branch.getProbability() * 100));
         scenario.put("trigger", branch.getTrigger() != null ? branch.getTrigger() : "N/A");
-        scenario.put("target", branch.getTargetLevel() != null ? branch.getTargetLevel() : 0.0);
-        scenario.put("bias", "NEUTRAL");
+        double target = branch.getTargetLevel() != null ? branch.getTargetLevel() : 0.0;
+        scenario.put("target", target);
+        // Infer bias: use stored direction if available, else fall back to target vs price
+        String bias = "NEUTRAL";
+        if (branch.getBullish() != null) {
+            bias = branch.getBullish() ? "BULL" : "BEAR";
+        } else if (target > 0 && currentPrice > 0) {
+            bias = target > currentPrice ? "BULL" : "BEAR";
+        }
+        scenario.put("bias", bias);
+        // Flag if target already reached
+        if (target > 0) {
+            boolean targetReached = target > currentPrice
+                    ? currentPrice >= target   // bull target: price reached or exceeded
+                    : currentPrice <= target;  // bear target: price reached or went lower
+            if (targetReached) {
+                scenario.put("status", "TARGET_REACHED");
+            }
+        }
         return scenario;
     }
 

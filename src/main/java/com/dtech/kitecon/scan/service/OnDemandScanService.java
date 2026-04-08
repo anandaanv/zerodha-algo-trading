@@ -113,64 +113,6 @@ public class OnDemandScanService {
 
             var processed = analysisProcessService.process(advResult.getWaveAnalysis(), symbol, currentPrice, effectivePrimaryTf);
 
-            // Verbose: log all Elliott wave engine output for debugging
-            if (scan.isVerboseLogging()) {
-                // 1. Zigzag pivots per TF
-                StringBuilder pivotLog = new StringBuilder();
-                for (String tf : orderedTfs) {
-                    List<ZigZagPoint> pts = pivotsByTf.get(tf);
-                    if (pts == null) continue;
-                    pivotLog.append("\n[").append(tf).append("] ").append(pts.size()).append(" pivots:\n");
-                    for (ZigZagPoint p : pts) {
-                        pivotLog.append("  [").append(p.getBarIndex()).append("] ")
-                                .append(p.isHigh() ? "HIGH" : "LOW").append(" ")
-                                .append(String.format("%.2f", p.getValue()))
-                                .append(" ").append(p.getTimestamp() != null
-                                        ? p.getTimestamp().atZone(java.time.ZoneId.of("Asia/Kolkata"))
-                                               .toLocalDateTime().toString() : "?")
-                                .append("\n");
-                    }
-                }
-                log.info("[VerboseLog][{}] ===== ZIGZAG PIVOTS =====\n{}", symbol, pivotLog);
-
-                // 2. Market structure per TF
-                StringBuilder msdLog = new StringBuilder();
-                for (Map.Entry<String, MarketStructureData> e : structureByTf.entrySet()) {
-                    msdLog.append("\n[").append(e.getKey()).append("]\n")
-                          .append(e.getValue().toPromptSummary());
-                }
-                log.info("[VerboseLog][{}] ===== MARKET STRUCTURE =====\n{}", symbol, msdLog);
-
-                // 3. Elliott wave analysis summary
-                ElliottWaveAnalysis wa = advResult.getWaveAnalysis();
-                if (wa != null) {
-                    log.info("[VerboseLog][{}] ===== ELLIOTT WAVE SUMMARY =====\n{}", symbol, wa.toPromptSummary());
-
-                    // 4. All wave counts as JSON
-                    if (wa.getWaveCounts() != null) {
-                        log.info("[VerboseLog][{}] ===== WAVE COUNTS ({}) =====", symbol, wa.getWaveCounts().size());
-                        for (WaveCount wc : wa.getWaveCounts()) {
-                            try {
-                                log.info("[VerboseLog][{}] WaveCount: {}", symbol, objectMapper.writeValueAsString(wc));
-                            } catch (Exception ex) {
-                                log.warn("[VerboseLog][{}] Failed to serialize WaveCount: {}", symbol, ex.getMessage());
-                            }
-                        }
-                    }
-
-                    // 5. All patterns as JSON
-                    if (wa.getAllPatterns() != null) {
-                        try {
-                            log.info("[VerboseLog][{}] ===== ALL PATTERNS ({}) =====\n{}", symbol,
-                                    wa.getAllPatterns().size(),
-                                    objectMapper.writeValueAsString(wa.getAllPatterns()));
-                        } catch (Exception ex) {
-                            log.warn("[VerboseLog][{}] Failed to serialize patterns: {}", symbol, ex.getMessage());
-                        }
-                    }
-                }
-            }
-
             // Extract data range per timeframe from BarSeries
             Map<String, String> dataRangeByTf = new LinkedHashMap<>();
             for (String tf : orderedTfs) {
