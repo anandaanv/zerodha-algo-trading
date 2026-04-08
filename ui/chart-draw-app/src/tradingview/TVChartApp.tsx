@@ -9,9 +9,8 @@ import AnalysisPanel from './AnalysisPanel';
 import ChartTabBar from './ChartTabBar';
 import AIChatOverlay from './AIChatOverlay';
 import PromptBuilderPage from './PromptBuilderPage';
-import CopilotChartPanel from './CopilotChartPanel';
-import CopilotSettingsModal from './CopilotSettingsModal';
-import type { CopilotHypothesis, CopilotObservation, DrawingPoint } from './copilotTypes';
+import ElliottChartPanel from './ElliottChartPanel';
+import WatchlistSidebar from './WatchlistSidebar';
 import {
   WorkspaceTab,
   WorkspaceLayout,
@@ -41,14 +40,10 @@ export default function TVChartApp() {
   const widgetRef = useRef<any>(null);
   const widgetReadyRef = useRef(false);
   const [isAnalysisPanelOpen, setIsAnalysisPanelOpen] = useState(false);
-  const [isAiOverlayOpen, setIsAiOverlayOpen] = useState(false);
-  const [isCopilotPanelOpen, setIsCopilotPanelOpen] = useState(false);
-  const [showCopilotSettings, setShowCopilotSettings] = useState(false);
+  const [isElliottPanelOpen, setIsElliottPanelOpen] = useState(false);
+  const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [layoutModalMode, setLayoutModalMode] = useState<'save' | 'load' | null>(null);
-  const [copilotHypotheses, setCopilotHypotheses] = useState<CopilotHypothesis[]>([]);
-  const hypothesisShapeIdsRef = useRef<any[]>([]);
-  const observationShapeIdsRef = useRef<any[]>([]);
 
   // Parse URL parameters for initial defaults only
   const urlSymbol = searchParams.get('script') || searchParams.get('symbol');
@@ -442,121 +437,6 @@ export default function TVChartApp() {
     }
   };
 
-  // ─── Co-Pilot: draw yellow hypothesis labels on chart ────────────────────
-
-  const handleHypothesesLoaded = useCallback((hypotheses: CopilotHypothesis[]) => {
-    setCopilotHypotheses(hypotheses);
-    if (!widgetReadyRef.current || !widgetRef.current) return;
-    try {
-      const chart = widgetRef.current.activeChart();
-
-      // Remove previous hypothesis shapes
-      hypothesisShapeIdsRef.current.forEach(id => {
-        try { chart.removeEntity(id); } catch { /* ignore */ }
-      });
-      hypothesisShapeIdsRef.current = [];
-
-      const visRange = chart.getVisibleRange();
-      if (!visRange) return;
-
-      const active = hypotheses.filter(h =>
-        h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED'
-      );
-
-      // Draw a text label at the right side of the visible range for each active hypothesis.
-      // Prices are spaced so labels don't overlap — we anchor to the chart's visible high.
-      active.forEach((h, idx) => {
-        try {
-          // Attempt to extract a price from the anticipatory trade JSON
-          let price: number | undefined;
-          try {
-            const tradeData = JSON.parse(h.anticipatoryTrade || '{}');
-            const zone: string = tradeData.entry_zone ?? tradeData.entryZone ?? '';
-            const match = zone.match(/[\d.]+/);
-            if (match) price = Number(match[0]);
-          } catch { /* ignore */ }
-
-          // Fall back: space labels 2% apart from top of visible range
-          if (!price) {
-            const bars = chart.getVisibleRange();
-            // We can't easily get the y-axis range, so just stack labels
-            price = undefined;
-          }
-
-          const shapeId = chart.createShape(
-            { time: visRange.to, price },
-            {
-              shape: 'text',
-              lock: true,
-              disableSelection: false,
-              overrides: {
-                text: `⚡ ${h.label}`,
-                fontsize: 12,
-                bold: true,
-                color: '#FFD700',
-                backgroundColor: 'rgba(26,35,126,0.75)',
-                backgroundTransparency: 25,
-              },
-            },
-          );
-          if (shapeId) hypothesisShapeIdsRef.current.push(shapeId);
-        } catch { /* TV shape API may not support all fields — fail silently */ }
-      });
-    } catch (e) {
-      console.warn('Could not draw copilot annotations:', e);
-    }
-  }, []);
-
-  // ─── Co-Pilot: draw observation patterns on chart (Phase 1) ─────────────
-
-  const handleObservationsLoaded = useCallback((observations: CopilotObservation[]) => {
-    if (!widgetReadyRef.current || !widgetRef.current) return;
-    try {
-      const chart = widgetRef.current.activeChart();
-
-      // Remove previous observation shapes
-      observationShapeIdsRef.current.forEach(id => {
-        try { chart.removeEntity(id); } catch { /* ignore */ }
-      });
-      observationShapeIdsRef.current = [];
-
-      const positive = observations.filter(o => o.patternDetected && o.drawingPoints && o.drawingType);
-
-      positive.forEach(obs => {
-        try {
-          let points: DrawingPoint[];
-          try {
-            points = typeof obs.drawingPoints === 'string'
-              ? JSON.parse(obs.drawingPoints)
-              : (obs.drawingPoints as unknown as DrawingPoint[]);
-          } catch { return; }
-
-          if (!points || points.length < 2) return;
-
-          const tvPoints = points.map(p => ({ time: p.time, price: p.price }));
-
-          const shapeId = chart.createMultipointShape(tvPoints, {
-            shape: obs.drawingType,
-            lock: true,
-            disableSelection: false,
-            disableSave: true,
-            overrides: {
-              linecolor: '#9E9E9E',
-              linestyle: 1, // dashed
-              linewidth: 1,
-              transparency: 40,
-            },
-          });
-          if (shapeId) observationShapeIdsRef.current.push(shapeId);
-        } catch (e) {
-          console.warn('Could not draw observation pattern:', obs.skillKey, e);
-        }
-      });
-    } catch (e) {
-      console.warn('Could not draw observation annotations:', e);
-    }
-  }, []);
-
   // ─── Derived: active tab for display ─────────────────────────────────────
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
@@ -595,29 +475,46 @@ export default function TVChartApp() {
         }}
         onSaveAsLayout={() => setLayoutModalMode('save')}
         onLoadLayout={() => setLayoutModalMode('load')}
-        isCopilotOpen={isCopilotPanelOpen}
+        isCopilotOpen={isElliottPanelOpen}
         isAnalysisOpen={isAnalysisPanelOpen}
-        copilotCount={copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length}
-        onToggleCopilot={() => setIsCopilotPanelOpen(prev => !prev)}
+        onToggleCopilot={() => setIsElliottPanelOpen(prev => !prev)}
         onToggleAnalysis={() => setIsAnalysisPanelOpen(prev => !prev)}
-        onCopilotSettings={() => setShowCopilotSettings(true)}
+        onToggleWatchlist={() => setIsWatchlistOpen(prev => !prev)}
+        isWatchlistOpen={isWatchlistOpen}
       />
 
       {/* Chart + Copilot panel row */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <WatchlistSidebar
+          open={isWatchlistOpen}
+          onClose={() => setIsWatchlistOpen(false)}
+          onSymbolSelect={(sym) => {
+            const existingTab = tabs.find(t => t.symbol === sym);
+            if (existingTab) {
+              switchToTab(existingTab.id);
+            } else {
+              const newTabItem = newTab(sym, activeTab?.timeframe || rawTimeframe);
+              const updated = [...tabsRef.current, newTabItem];
+              tabsRef.current = updated;
+              setTabs(updated);
+              saveTabsToStorage(updated);
+              setTimeout(() => switchToTab(newTabItem.id), 0);
+            }
+          }}
+        />
         <div ref={chartContainerRef} style={{ flex: 1, minWidth: 0 }} />
 
-        {/* Copilot inline panel — shrinks the chart rather than overlaying it */}
+        {/* Elliott panel — shrinks chart rather than overlaying it */}
         <div style={{
-          width: isCopilotPanelOpen ? 400 : 0,
+          width: isElliottPanelOpen ? 400 : 0,
           overflow: 'hidden',
           transition: 'width 0.3s ease',
           flexShrink: 0,
-          borderLeft: isCopilotPanelOpen ? '1px solid #e0e0e0' : 'none',
+          borderLeft: isElliottPanelOpen ? '1px solid #e0e0e0' : 'none',
         }}>
-          <CopilotChartPanel
-            open={isCopilotPanelOpen}
-            onClose={() => setIsCopilotPanelOpen(false)}
+          <ElliottChartPanel
+            open={isElliottPanelOpen}
+            onClose={() => setIsElliottPanelOpen(false)}
             symbol={activeTab?.symbol || defaultSymbol}
             timeframes={[...new Set(
               tabs
@@ -626,8 +523,6 @@ export default function TVChartApp() {
             )]}
             layoutId={Number(localStorage.getItem('lastLayoutId')) || null}
             getChartState={getChartState}
-            onHypothesesLoaded={handleHypothesesLoaded}
-            onObservationsLoaded={handleObservationsLoaded}
           />
         </div>
       </div>
@@ -651,69 +546,6 @@ export default function TVChartApp() {
         />
       )}
 
-
-      {/* Yellow hypothesis annotation badges — float over chart at bottom-right */}
-      {copilotHypotheses.filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED').length > 0 && (
-        <div style={{
-          position: 'fixed',
-          bottom: 80,
-          right: 20,
-          zIndex: 9996,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 4,
-          alignItems: 'flex-end',
-        }}>
-          {copilotHypotheses
-            .filter(h => h.state === 'WATCHING' || h.state === 'BUILDING' || h.state === 'CONFIRMED')
-            .map(h => (
-              <div
-                key={h.id}
-                onClick={() => setIsCopilotPanelOpen(true)}
-                style={{
-                  background: '#1a237e',
-                  color: '#FFD700',
-                  border: '1px solid #FFD700',
-                  borderRadius: 6,
-                  padding: '4px 10px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                  whiteSpace: 'nowrap',
-                  letterSpacing: 0.3,
-                }}
-                title={`${h.pattern} · ${h.direction} · Click to open Co-Pilot`}
-              >
-                ⚡ {h.label}
-              </div>
-            ))}
-        </div>
-      )}
-
-
-      {/* Co-Pilot settings modal */}
-      {showCopilotSettings && (
-        <CopilotSettingsModal onClose={() => setShowCopilotSettings(false)} />
-      )}
-
-      {/* AI Chat Overlay — disabled for now; Co-Pilot scan/reason replaces it */}
-      {/* {!showPromptBuilder && (
-        <AIChatOverlay
-          open={isAiOverlayOpen}
-          onToggle={() => setIsAiOverlayOpen(prev => !prev)}
-          symbol={activeTab?.symbol || defaultSymbol}
-          timeframe={activeTab?.timeframe || rawTimeframe}
-          getChartState={getChartState}
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onOpenPromptBuilder={() => setShowPromptBuilder(true)}
-          copilotHypotheses={copilotHypotheses}
-          onCopilotAction={() => {
-            const id = Number(localStorage.getItem('copilot_investigation_id')) || null;
-          }}
-        />
-      )} */}
 
       {/* Prompt Builder — rendered via portal into document.body so it
           sits above the TradingView iframe stacking context */}
