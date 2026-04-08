@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { runFullElliott, triggerAnalysis } from './elliottApi';
+import { runFullElliott } from './elliottApi';
 
 interface Props {
   open: boolean;
@@ -8,11 +8,12 @@ interface Props {
   timeframes: string[];
   layoutId: number | null;
   getChartState?: () => string;
+  onPatternsDetected?: (patterns: any[]) => void;
 }
 
-type LoadingAction = 'identify' | 'ai-call' | 'full' | null;
+type LoadingAction = 'scan' | 'scan-ai' | null;
 
-export default function ElliottChartPanel({ open, onClose, symbol, timeframes, layoutId, getChartState }: Props) {
+export default function ElliottChartPanel({ open, onClose, symbol, timeframes, layoutId, getChartState, onPatternsDetected }: Props) {
   const [loading, setLoading] = useState<LoadingAction>(null);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,32 +21,17 @@ export default function ElliottChartPanel({ open, onClose, symbol, timeframes, l
   const primaryTf = timeframes[0] ?? '1D';
   const tfParam = timeframes.join(',');
 
-  const handleIdentify = useCallback(async () => {
-    setLoading('identify'); setError(null); setResult(null);
+  const runScan = useCallback(async (withAi: boolean) => {
+    const action: LoadingAction = withAi ? 'scan-ai' : 'scan';
+    setLoading(action); setError(null); setResult(null);
     try {
-      setResult(await runFullElliott(symbol, primaryTf, tfParam, false));
-    } catch (e: any) { setError(e.message ?? 'Identification failed'); }
+      const res = await runFullElliott(symbol, primaryTf, tfParam, withAi);
+      setResult(res);
+      const patterns = res?.waveAnalysis?.allPatterns ?? [];
+      if (patterns.length > 0) onPatternsDetected?.(patterns);
+    } catch (e: any) { setError(e.message ?? 'Scan failed'); }
     finally { setLoading(null); }
-  }, [symbol, primaryTf, tfParam]);
-
-  const handleAiCall = useCallback(async () => {
-    setLoading('ai-call'); setError(null); setResult(null);
-    try {
-      setResult(await runFullElliott(symbol, primaryTf, tfParam, true));
-    } catch (e: any) { setError(e.message ?? 'AI call failed'); }
-    finally { setLoading(null); }
-  }, [symbol, primaryTf, tfParam]);
-
-  const handleFull = useCallback(async () => {
-    if (!layoutId) { setError('No layout ID. Save the layout first.'); return; }
-    setLoading('full'); setError(null); setResult(null);
-    try {
-      let drawingsJson: string | undefined;
-      try { drawingsJson = getChartState?.(); } catch { /* ignore */ }
-      setResult(await triggerAnalysis(layoutId, symbol, drawingsJson, timeframes, true));
-    } catch (e: any) { setError(e.message ?? 'Full analysis failed'); }
-    finally { setLoading(null); }
-  }, [layoutId, symbol, timeframes, getChartState]);
+  }, [symbol, primaryTf, tfParam, onPatternsDetected]);
 
   return (
     <div style={{ width: 400, height: '100%', background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -59,15 +45,12 @@ export default function ElliottChartPanel({ open, onClose, symbol, timeframes, l
       </div>
 
       {/* Action buttons */}
-      <div style={{ padding: '8px 14px', background: '#f8f9ff', borderBottom: '1px solid #e8eaf6', display: 'flex', gap: 6, flexShrink: 0 }}>
-        <button onClick={handleIdentify} disabled={loading !== null} style={actionBtn(loading === 'identify', '#4caf50')}>
-          {loading === 'identify' ? 'Identifying…' : 'Elliott - Identification'}
+      <div style={{ padding: '8px 14px', background: '#f8f9ff', borderBottom: '1px solid #e8eaf6', display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button onClick={() => runScan(false)} disabled={loading !== null} style={actionBtn(loading === 'scan', '#4caf50')}>
+          {loading === 'scan' ? 'Scanning…' : 'Scan'}
         </button>
-        <button onClick={handleAiCall} disabled={loading !== null} style={actionBtn(loading === 'ai-call', '#ff9800')}>
-          {loading === 'ai-call' ? 'Calling AI…' : 'Elliott - AI Call'}
-        </button>
-        <button onClick={handleFull} disabled={loading !== null} style={actionBtn(loading === 'full', '#3f51b5')}>
-          {loading === 'full' ? 'Running…' : 'Full'}
+        <button onClick={() => runScan(true)} disabled={loading !== null} style={actionBtn(loading === 'scan-ai', '#3f51b5')}>
+          {loading === 'scan-ai' ? 'Running AI…' : 'Scan + AI'}
         </button>
       </div>
 
@@ -86,7 +69,7 @@ export default function ElliottChartPanel({ open, onClose, symbol, timeframes, l
 
         {loading && (
           <div style={{ textAlign: 'center', color: '#90caf9', padding: '40px 10px', fontSize: 12 }}>
-            Running {loading === 'identify' ? 'Elliott identification' : loading === 'ai-call' ? 'Elliott AI call' : 'full analysis'}…
+            {loading === 'scan-ai' ? 'Running scan + AI analysis…' : 'Running Elliott scan…'}
           </div>
         )}
 
@@ -168,6 +151,29 @@ export default function ElliottChartPanel({ open, onClose, symbol, timeframes, l
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Detected Patterns (from waveAnalysis) */}
+            {result.waveAnalysis?.allPatterns?.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, color: '#555', marginBottom: 3 }}>Detected Patterns</div>
+                {result.waveAnalysis.allPatterns
+                  .filter((p: any) => p.status !== 'INVALIDATED')
+                  .slice(0, 8)
+                  .map((p: any, i: number) => {
+                    const isBull = ['DOUBLE_BOTTOM','TRIPLE_BOTTOM','INVERTED_HEAD_AND_SHOULDERS','CUP_AND_HANDLE','ROUNDING_BOTTOM','ASCENDING_TRIANGLE','BULL_FLAG','BULL_PENNANT','FALLING_WEDGE'].includes(p.type);
+                    const statusColor = p.status === 'CONFIRMED' ? '#388e3c' : p.status === 'WATCHING' ? '#f57c00' : '#607d8b';
+                    return (
+                      <div key={i} style={{ padding: '4px 8px', background: '#fafafa', border: `1px solid ${statusColor}`, borderRadius: 4, marginBottom: 4 }}>
+                        <span style={{ fontWeight: 600, color: isBull ? '#2e7d32' : '#c62828' }}>{p.type?.replace(/_/g, ' ')}</span>
+                        {p.timeframe && <span style={{ color: '#888', marginLeft: 6, fontSize: 10 }}>[{p.timeframe}]</span>}
+                        <span style={{ color: statusColor, marginLeft: 6, fontSize: 10 }}>{p.status}</span>
+                        {p.neckline && <div style={{ color: '#555', fontSize: 10 }}>neck={p.neckline?.toFixed(1)}</div>}
+                        {p.target && <div style={{ color: isBull ? '#2e7d32' : '#c62828', fontSize: 10 }}>target={p.target?.toFixed(1)}</div>}
+                      </div>
+                    );
+                  })}
               </div>
             )}
 

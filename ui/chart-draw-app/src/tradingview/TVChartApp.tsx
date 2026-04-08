@@ -39,6 +39,7 @@ export default function TVChartApp() {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
   const widgetReadyRef = useRef(false);
+  const patternShapeIdsRef = useRef<any[]>([]);
   const [isAnalysisPanelOpen, setIsAnalysisPanelOpen] = useState(false);
   const [isElliottPanelOpen, setIsElliottPanelOpen] = useState(false);
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
@@ -398,6 +399,51 @@ export default function TVChartApp() {
     };
   }, []); // Run once — tab switching is handled imperatively
 
+  // ─── drawPatternsOnChart: render detected patterns on the chart ──────────
+
+  const drawPatternsOnChart = useCallback((patterns: any[]) => {
+    if (!widgetRef.current || !widgetReadyRef.current) return;
+    try {
+      const chart = widgetRef.current.activeChart();
+      // Remove previous pattern drawings
+      patternShapeIdsRef.current.forEach(id => { try { chart.removeEntity(id); } catch {} });
+      patternShapeIdsRef.current = [];
+
+      const now = Math.floor(Date.now() / 1000);
+      patterns
+        .filter((p: any) => p.status !== 'INVALIDATED')
+        .forEach((p: any) => {
+          const isBull = ['DOUBLE_BOTTOM','TRIPLE_BOTTOM','INVERTED_HEAD_AND_SHOULDERS','CUP_AND_HANDLE','ROUNDING_BOTTOM','ASCENDING_TRIANGLE','BULL_FLAG','BULL_PENNANT','FALLING_WEDGE'].includes(p.type);
+          const baseColor = isBull ? '#2e7d32' : '#c62828';
+          const isDashed = p.status !== 'CONFIRMED';
+          const tf = p.timeframe ? ` [${p.timeframe}]` : '';
+          const patLabel = p.type?.replace(/_/g, ' ') ?? '';
+
+          const drawLine = (price: number, label: string, color: string, linestyle: number) => {
+            try {
+              const id = chart.createShape(
+                { time: now, price },
+                {
+                  shape: 'horizontal_line',
+                  text: label,
+                  lock: false,
+                  overrides: { linecolor: color, linestyle, linewidth: 1, showLabel: true, textcolor: color, horzLabelsAlign: 'right', vertLabelsAlign: 'bottom' },
+                }
+              );
+              if (id) patternShapeIdsRef.current.push(id);
+            } catch {}
+          };
+
+          if (p.support != null)    drawLine(p.support,    `${patLabel} support${tf}`,    baseColor, isDashed ? 2 : 0);
+          if (p.resistance != null) drawLine(p.resistance, `${patLabel} resistance${tf}`, baseColor, isDashed ? 2 : 0);
+          if (p.neckline != null)   drawLine(p.neckline,   `${patLabel} neckline${tf}`,   '#ff9800',  1);
+          if (p.target != null)     drawLine(p.target,     `${patLabel} target${tf}`,     isBull ? '#1565c0' : '#880e4f', 2);
+        });
+    } catch (e) {
+      console.error('Failed to draw patterns:', e);
+    }
+  }, []);
+
   // ─── getChartState: for AI analysis (active chart, live) ─────────────────
 
   const getChartState = (): string => {
@@ -523,6 +569,7 @@ export default function TVChartApp() {
             )]}
             layoutId={Number(localStorage.getItem('lastLayoutId')) || null}
             getChartState={getChartState}
+            onPatternsDetected={drawPatternsOnChart}
           />
         </div>
       </div>
