@@ -150,6 +150,9 @@ public class OnDemandScanService {
 
             AIResponse aiResponse = responseParser.parse(rawResponse);
             boolean hasTradeSetup = (aiResponse instanceof FindingResponse fr) && "ENTRY_READY".equals(fr.getCurrentStage());
+            boolean hasWatchingSetup = (aiResponse instanceof FindingResponse fr2)
+                    && "WATCHING".equals(fr2.getCurrentStage())
+                    && fr2.getAnticipatoryEntry() != null;
 
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("dataRange", dataRangeByTf);
@@ -160,8 +163,31 @@ public class OnDemandScanService {
             result.put("msdSummary", msdSummary.toString());
             result.put("aiResponse", rawResponse);
             result.put("hasTradeSetup", hasTradeSetup);
-            if (hasTradeSetup) {
+            result.put("hasWatchingSetup", hasWatchingSetup);
+            if (hasTradeSetup || hasWatchingSetup) {
                 result.put("aiParsed", aiResponse);
+            }
+
+            // Serialize active patterns (non-INVALIDATED) for frontend display
+            ElliottWaveAnalysis waveAnalysis = advResult.getWaveAnalysis();
+            if (waveAnalysis != null && waveAnalysis.getAllPatterns() != null) {
+                List<Map<String, Object>> patternList = new ArrayList<>();
+                for (PatternMatch p : waveAnalysis.getAllPatterns()) {
+                    if (p.getStatus() == PatternStatus.INVALIDATED) continue;
+                    Map<String, Object> pm = new LinkedHashMap<>();
+                    pm.put("type", p.getType() != null ? p.getType().name() : null);
+                    pm.put("status", p.getStatus() != null ? p.getStatus().name() : null);
+                    pm.put("timeframe", p.getTimeframe());
+                    pm.put("support", p.getSupport());
+                    pm.put("resistance", p.getResistance());
+                    pm.put("neckline", p.getNeckline());
+                    pm.put("target", p.getTarget());
+                    pm.put("confidence", p.getConfidence());
+                    pm.put("rsiDivergence", p.isRsiDivergence());
+                    pm.put("bullish", p.isBullish());
+                    patternList.add(pm);
+                }
+                if (!patternList.isEmpty()) result.put("patterns", patternList);
             }
 
             scan.setResultJson(objectMapper.writeValueAsString(result));

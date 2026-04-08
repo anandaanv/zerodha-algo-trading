@@ -39,11 +39,21 @@ public class FindingResponse extends AIResponse {
     @SuperBuilder
     @NoArgsConstructor
     public static class TradeParameters {
+        private String direction;
         private String entryZone;
         private String sl;
         private String tp;
+        private String stopLoss;   // AI sometimes returns stopLoss instead of sl
+        private String target1;    // AI sometimes returns target1 instead of tp
         private List<String> conditionsNeeded;
         private String triggerDescription;
+
+        public String resolvedSl() {
+            return sl != null ? sl : stopLoss;
+        }
+        public String resolvedTp() {
+            return tp != null ? tp : target1;
+        }
     }
 
     @Data
