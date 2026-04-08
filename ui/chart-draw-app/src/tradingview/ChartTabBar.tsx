@@ -17,16 +17,16 @@ interface ChartTabBarProps {
   // Action panel buttons
   isCopilotOpen?: boolean;
   isAnalysisOpen?: boolean;
-  copilotCount?: number;
+  isWatchlistOpen?: boolean;
   onToggleCopilot?: () => void;
   onToggleAnalysis?: () => void;
-  onCopilotSettings?: () => void;
+  onToggleWatchlist?: () => void;
 }
 
 export default function ChartTabBar({
   tabs, activeTabId, workspaceName, onWorkspaceNameChange,
   onSwitch, onAdd, onClose, onRename, onSaveLayout, onSaveAsLayout, onLoadLayout,
-  isCopilotOpen, isAnalysisOpen, copilotCount, onToggleCopilot, onToggleAnalysis, onCopilotSettings,
+  isCopilotOpen, isAnalysisOpen, isWatchlistOpen, onToggleCopilot, onToggleAnalysis, onToggleWatchlist,
 }: ChartTabBarProps) {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -117,23 +117,16 @@ export default function ChartTabBar({
       <button style={styles.addBtn} onClick={onAdd} title="New chart tab">+</button>
 
       {/* Right-side action buttons */}
-      {(onToggleCopilot || onToggleAnalysis || onCopilotSettings) && (
+      {(onToggleCopilot || onToggleAnalysis || onToggleWatchlist) && (
         <>
           <div style={styles.divider} />
-          {onCopilotSettings && (
-            <button
-              style={{ ...styles.actionBtn }}
-              onClick={onCopilotSettings}
-              title="Co-Pilot AI Settings"
-            >⚙</button>
-          )}
           {onToggleCopilot && (
             <button
               style={{ ...styles.actionBtn, background: isCopilotOpen ? '#283593' : undefined, color: isCopilotOpen ? '#fff' : undefined }}
               onClick={onToggleCopilot}
-              title="Co-Pilot: hypothesis tracking and trade management"
+              title="Elliott Analysis"
             >
-              🧠{(copilotCount ?? 0) > 0 ? ` (${copilotCount})` : ''}
+              📈 Elliott
             </button>
           )}
           {onToggleAnalysis && (
@@ -142,6 +135,15 @@ export default function ChartTabBar({
               onClick={onToggleAnalysis}
               title="Fundamentals, news, snapshots"
             >📊</button>
+          )}
+          {onToggleWatchlist && (
+            <button
+              style={{ ...styles.actionBtn, background: isWatchlistOpen ? '#283593' : undefined, color: isWatchlistOpen ? '#fff' : undefined }}
+              onClick={onToggleWatchlist}
+              title="Toggle Watchlist"
+            >
+              📋 Watchlist
+            </button>
           )}
         </>
       )}

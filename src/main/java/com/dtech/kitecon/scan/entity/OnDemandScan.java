@@ -45,6 +45,10 @@ public class OnDemandScan {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "verbose_logging", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    @Builder.Default
+    private boolean verboseLogging = false;
+
     @PrePersist
     protected void onCreate() {
         requestedAt = Instant.now();

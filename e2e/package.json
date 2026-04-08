@@ -1,0 +1,24 @@
+{
+  "name": "algotrade-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "cy:open": "cypress open",
+    "cy:run": "cypress run",
+    "cy:run:headed": "cypress run --headed",
+    "test": "cypress run --reporter mochawesome --reporter-options reportDir=evidence/reports,overwrite=false,html=true,json=true",
+    "test:dashboard": "cypress run --spec 'cypress/e2e/01-dashboard.cy.ts'",
+    "test:scan": "cypress run --spec 'cypress/e2e/02-scan-page.cy.ts'",
+    "test:chart": "cypress run --spec 'cypress/e2e/03-chart-page.cy.ts'",
+    "test:monitor": "cypress run --spec 'cypress/e2e/04-trade-monitor.cy.ts'",
+    "evidence": "node scripts/collect-evidence.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "cypress": "^15.0.0",
+    "mochawesome": "^7.1.3",
+    "mochawesome-merge": "^4.3.0",
+    "mochawesome-report-generator": "^6.2.0",
+    "typescript": "^5.5.4"
+  }
+}

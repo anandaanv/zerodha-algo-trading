@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["ES2017", "DOM"],
+    "module": "commonjs",
+    "strict": false,
+    "esModuleInterop": true,
+    "outDir": "dist",
+    "sourceMap": true,
+    "types": ["cypress", "node"]
+  },
+  "include": ["cypress/**/*.ts", "cypress.config.ts"]
+}

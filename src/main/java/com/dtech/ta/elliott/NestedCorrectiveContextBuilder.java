@@ -30,7 +30,9 @@ public class NestedCorrectiveContextBuilder {
             String primaryTf,
             Map<String, TfContext> tfContexts,
             Map<String, List<EnrichedPivot>> enrichedByTf,
-            List<PatternMatch> patterns) {
+            List<PatternMatch> patterns,
+            double currentPrice,
+            List<WaveCount> waveCounts) {
 
         List<NestedWaveContext> results = new ArrayList<>();
 
@@ -112,7 +114,10 @@ public class NestedCorrectiveContextBuilder {
                     .code("TRUNCATED_C_OF_B")
                     .label("Truncated C-of-B -> early 4C")
                     .probability(truncationProb)
-                    .targetLevel(last.getPrice())
+                    .targetLevel(extensionUp
+                            ? last.getPrice() - (extensionTarget - last.getPrice())
+                            : last.getPrice() + (last.getPrice() - extensionTarget))
+                    .bullish(!extensionUp)
                     .trigger(extensionUp
                             ? "Lose the latest swing support near " + fmt(last.getPrice())
                             : "Reject back below the latest swing near " + fmt(last.getPrice()))
@@ -126,6 +131,7 @@ public class NestedCorrectiveContextBuilder {
                     .label("Extended C-of-B -> 0.618 target before 4C")
                     .probability(extensionProb)
                     .targetLevel(extensionTarget)
+                    .bullish(extensionUp)
                     .trigger(extensionUp
                             ? "Hold above " + fmt(last.getPrice()) + " and expand toward " + fmt(extensionTarget)
                             : "Stay below " + fmt(last.getPrice()) + " and continue toward " + fmt(extensionTarget))
@@ -158,6 +164,18 @@ public class NestedCorrectiveContextBuilder {
                         .build());
             }
 
+            // Adjust branch probabilities based on current price vs anchor
+            double anchorPrice = last.getPrice();
+            adjustBranchProbabilities(branches, anchorPrice, currentPrice);
+            // Update narrative if truncation has triggered
+            boolean truncationTriggered = currentPrice < anchorPrice && !extensionUp
+                    || currentPrice > anchorPrice && extensionUp;
+            if (truncationTriggered) {
+                narrative = tf + ": Truncation confirmed — price has moved through anchor "
+                        + fmt(anchorPrice) + ". Wave 4C is likely in progress. "
+                        + "Extended scenario probability reduced significantly.";
+            }
+
             results.add(NestedWaveContext.builder()
                     .timeframe(tf)
                     .higherDegreeWave(parentWave)
@@ -166,11 +184,13 @@ public class NestedCorrectiveContextBuilder {
                     .dominantStructure(dominantStructure)
                     .narrative(narrative)
                     .anchorLevel(last.getPrice())
+                    .anchorTimestamp(last.getTimestamp())
                     .invalidationLevel(resolveInvalidation(ctx, last))
                     .branches(branches)
                     .build());
         }
 
+        enrichTriggeredBranchSubwaves(results, enrichedByTf, tfOrder, waveCounts);
         results.sort(Comparator.comparing(NestedWaveContext::getTimeframe));
         return results;
     }
@@ -210,5 +230,198 @@ public class NestedCorrectiveContextBuilder {
 
     private String fmt(double value) {
         return String.format("%.2f", value);
+    }
+
+    /**
+     * Adjusts TRUNCATED vs EXTENDED branch probabilities based on current price vs anchor.
+     * If price has already broken through the anchor (truncation trigger met), boost TRUNCATED.
+     * Also sets triggered/triggerPrice/currentPrice fields on each branch.
+     */
+    private void adjustBranchProbabilities(List<NestedWaveContext.BranchHypothesis> branches,
+                                             double anchorPrice, double currentPrice) {
+        if (currentPrice <= 0 || anchorPrice <= 0) return;
+
+        // Determine if truncation trigger has been hit (price below anchor for downward corrections)
+        boolean truncationTriggered = currentPrice < anchorPrice;
+        double distFromAnchor = (currentPrice - anchorPrice) / anchorPrice; // negative if below
+
+        for (int i = 0; i < branches.size(); i++) {
+            NestedWaveContext.BranchHypothesis b = branches.get(i);
+            // Mark trigger/price fields
+            branches.set(i, NestedWaveContext.BranchHypothesis.builder()
+                    .code(b.getCode())
+                    .label(b.getLabel())
+                    .targetLevel(b.getTargetLevel())
+                    .trigger(b.getTrigger())
+                    .rationale(b.getRationale())
+                    .nextHigherDegreeMove(b.getNextHigherDegreeMove())
+                    .bullish(b.getBullish())
+                    .triggerPrice(anchorPrice)
+                    .currentPrice(currentPrice)
+                    .triggered(b.getCode() != null && b.getCode().startsWith("TRUNCATED") && truncationTriggered)
+                    .probability(computeAdjustedProbability(b.getCode(), truncationTriggered, distFromAnchor, b.getProbability()))
+                    .build());
+        }
+    }
+
+    private double computeAdjustedProbability(String code, boolean truncationTriggered,
+                                               double distFromAnchor, double originalProb) {
+        if (code == null) return originalProb;
+        boolean isTruncated = code.startsWith("TRUNCATED");
+        boolean isExtended  = code.startsWith("EXTENDED");
+
+        if (truncationTriggered) {
+            // Price is below anchor — truncation has triggered
+            if (isTruncated) return 0.85;
+            if (isExtended)  return 0.15;
+        } else {
+            // Price is above anchor — still in decision zone
+            double absDist = Math.abs(distFromAnchor);
+            if (absDist <= 0.01) {
+                // Within 1% of anchor — neutral
+                if (isTruncated) return 0.50;
+                if (isExtended)  return 0.50;
+            } else if (absDist <= 0.03) {
+                // 1-3% above anchor — extension favored
+                if (isTruncated) return 0.40;
+                if (isExtended)  return 0.60;
+            } else {
+                // >3% above anchor — extension more likely
+                if (isTruncated) return 0.30;
+                if (isExtended)  return 0.70;
+            }
+        }
+        return originalProb; // non-TRUNCATED/EXTENDED branches keep original
+    }
+
+    /**
+     * When TRUNCATED_C_OF_B has triggered, count sub-waves from the anchor timestamp
+     * and classify the emerging 4C structure (diagonal vs clean channel impulse).
+     */
+    private void enrichTriggeredBranchSubwaves(List<NestedWaveContext> contexts,
+                                                Map<String, List<EnrichedPivot>> enrichedByTf,
+                                                List<String> tfOrder,
+                                                List<WaveCount> waveCounts) {
+        for (NestedWaveContext ctx : contexts) {
+            java.time.Instant anchorTs = ctx.getAnchorTimestamp();
+            if (anchorTs == null) continue;
+
+            // Step 1: try same-TF pivots after the anchor timestamp
+            List<EnrichedPivot> subPivots = new java.util.ArrayList<>();
+            List<EnrichedPivot> sameTfPivots = enrichedByTf.get(ctx.getTimeframe());
+            if (sameTfPivots != null) {
+                for (EnrichedPivot p : sameTfPivots) {
+                    if (p.getTimestamp() != null && p.getTimestamp().isAfter(anchorTs)) {
+                        subPivots.add(p);
+                    }
+                }
+            }
+
+            // Step 2: if same-TF has no sub-pivots, fall back to next lower TF
+            if (subPivots.isEmpty()) {
+                int tfIdx = tfOrder.indexOf(ctx.getTimeframe());
+                if (tfIdx >= 0 && tfIdx + 1 < tfOrder.size()) {
+                    String lowerTf = tfOrder.get(tfIdx + 1);
+                    List<EnrichedPivot> lowerPivots = enrichedByTf.get(lowerTf);
+                    if (lowerPivots != null) {
+                        for (EnrichedPivot p : lowerPivots) {
+                            if (p.getTimestamp() != null && p.getTimestamp().isAfter(anchorTs)) {
+                                subPivots.add(p);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Now classify the 4C sub-wave stage from the sub-pivot count
+            List<NestedWaveContext.BranchHypothesis> updated = new java.util.ArrayList<>();
+            for (NestedWaveContext.BranchHypothesis b : ctx.getBranches()) {
+                if (!Boolean.TRUE.equals(b.isTriggered()) || b.getCode() == null
+                        || !b.getCode().startsWith("TRUNCATED")) {
+                    updated.add(b);
+                    continue;
+                }
+
+                int n = subPivots.size();
+                String subwaveLabel;
+                String subwaveStructureType = null;
+                String subwaveNextMove;
+                Double subwaveInvalidation = null;
+
+                if (n == 0) {
+                    subwaveLabel    = "4C not yet started";
+                    subwaveNextMove = "Awaiting first sub-swing below anchor " + fmt(ctx.getAnchorLevel());
+                } else if (n == 1) {
+                    EnrichedPivot p0 = subPivots.get(0);
+                    subwaveLabel    = "4C1 in progress";
+                    subwaveInvalidation = p0.getPrice();
+                    subwaveNextMove = "4C1 in progress — watch for bounce to confirm 4C2";
+
+                    // Check if an ENDING_DIAGONAL on the same timeframe matches this sub-wave
+                    if (waveCounts != null) {
+                        double subAtr = p0.getAtrAtPivot() > 0 ? p0.getAtrAtPivot() : Math.abs(ctx.getAnchorLevel() - p0.getPrice()) * 0.05;
+                        WaveCount matchingDiag = waveCounts.stream()
+                            .filter(wc -> WaveCount.WaveType.ENDING_DIAGONAL.equals(wc.getWaveType()))
+                            .filter(wc -> ctx.getTimeframe().equals(wc.getPrimaryTimeframe())
+                                       || (wc.getPrimaryTimeframe() != null && ctx.getTimeframe() != null
+                                           && (ctx.getTimeframe().equals(wc.getPrimaryTimeframe())
+                                               || tfOrder.indexOf(ctx.getTimeframe()) + 1 == tfOrder.indexOf(wc.getPrimaryTimeframe()))))
+                            .filter(wc -> wc.getPivots() != null && !wc.getPivots().isEmpty())
+                            .filter(wc -> Math.abs(wc.getPivots().get(wc.getPivots().size() - 1).getPrice() - p0.getPrice()) <= subAtr * 2)
+                            .findFirst().orElse(null);
+                        if (matchingDiag != null) {
+                            double diagOrigin = matchingDiag.getPivots().get(0).getPrice();
+                            subwaveStructureType = "ENDING_DIAGONAL";
+                            subwaveNextMove = String.format("Ending diagonal complete — expect sharp reversal to %.2f", diagOrigin);
+                            subwaveInvalidation = diagOrigin;
+                        }
+                    }
+                } else if (n == 2) {
+                    EnrichedPivot p0 = subPivots.get(0);
+                    EnrichedPivot p1 = subPivots.get(1);
+                    subwaveLabel    = "4C2 retrace in progress";
+                    subwaveInvalidation = p0.getPrice(); // 4C1 extreme = sub-count invalidation
+                    double retrace = p0.getPrice() != 0
+                            ? Math.abs(p1.getPrice() - p0.getPrice()) / Math.abs(ctx.getAnchorLevel() - p0.getPrice())
+                            : 0;
+                    subwaveNextMove = String.format("4C2 bounce in progress (%.0f%% retrace) — watch for 4C3 continuation",
+                            retrace * 100);
+                } else {
+                    // Diagonal: 4C2 bounce retraces >78.6% of 4C1 (W2 overlaps W1 territory)
+                    EnrichedPivot p0 = subPivots.get(0); // 4C1 start (high for bearish)
+                    EnrichedPivot p1 = subPivots.get(1); // 4C1 end (low for bearish)
+                    EnrichedPivot p2 = subPivots.get(2); // 4C2 end (bounce high)
+                    double c1Range = Math.abs(p1.getPrice() - p0.getPrice());
+                    double c2Retrace = c1Range > 0
+                            ? Math.abs(p2.getPrice() - p1.getPrice()) / c1Range : 0;
+                    boolean diagonal = c2Retrace > 0.786;
+                    subwaveLabel        = "4C" + Math.min(n, 5) + " in progress";
+                    subwaveStructureType = diagonal ? "DIAGONAL" : "CHANNEL_IMPULSE";
+                    subwaveInvalidation  = p1.getPrice(); // current 4C wave extreme
+                    subwaveNextMove = diagonal
+                            ? "Leading diagonal developing — deep W2 retrace; expect W3-of-4C acceleration after 4C2 completes"
+                            : "Channel impulse — W3-of-4C should extend strongly below " + fmt(p1.getPrice());
+                }
+
+                updated.add(NestedWaveContext.BranchHypothesis.builder()
+                        .code(b.getCode())
+                        .label(b.getLabel())
+                        .probability(b.getProbability())
+                        .targetLevel(b.getTargetLevel())
+                        .trigger(b.getTrigger())
+                        .rationale(b.getRationale())
+                        .nextHigherDegreeMove(b.getNextHigherDegreeMove())
+                        .bullish(b.getBullish())
+                        .triggered(b.isTriggered())
+                        .triggerPrice(b.getTriggerPrice())
+                        .currentPrice(b.getCurrentPrice())
+                        .subwaveLabel(subwaveLabel)
+                        .subwaveStructureType(subwaveStructureType)
+                        .subwaveNextMove(subwaveNextMove)
+                        .subwaveInvalidation(subwaveInvalidation)
+                        .build());
+            }
+            ctx.setBranches(updated);
+        }
     }
 }

@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.ta4j.core.BarSeries;
 
 import java.util.*;
+import java.util.LinkedHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -154,6 +155,8 @@ public class AdvancedElliottService {
         // Step 7: Build prompt summary
         String promptSummary = buildPromptSummary(waveAnalysis, confluenceZones, entryCandidates);
 
+        List<WaveKeyPoint> waveKeyPoints = extractWaveKeyPoints(waveAnalysis);
+
         return AdvancedElliottAnalysisResult.builder()
                 .waveAnalysis(waveAnalysis)
                 .confluenceZones(confluenceZones)
@@ -161,6 +164,7 @@ public class AdvancedElliottService {
                 .entryCandidates(entryCandidates)
                 .hypothesisSnapshot(snapshot)
                 .promptSummary(promptSummary)
+                .waveKeyPoints(waveKeyPoints.isEmpty() ? null : waveKeyPoints)
                 .build();
     }
 
@@ -186,5 +190,44 @@ public class AdvancedElliottService {
                     e.getEntryPrice(), e.getStopLoss(), e.getTarget1(), e.getRiskRewardRatio())));
         }
         return sb.toString();
+    }
+
+    /**
+     * Extracts wave key points from the best-scoring WaveCount per timeframe.
+     * Gives the AI and frontend concrete price/time anchors for wave labels.
+     */
+    private List<WaveKeyPoint> extractWaveKeyPoints(ElliottWaveAnalysis analysis) {
+        if (analysis == null || analysis.getWaveCounts() == null || analysis.getWaveCounts().isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // Pick the highest-scoring WaveCount per timeframe
+        Map<String, WaveCount> bestByTf = new LinkedHashMap<>();
+        for (WaveCount wc : analysis.getWaveCounts()) {
+            String tf = wc.getPrimaryTimeframe();
+            if (tf == null) continue;
+            WaveCount existing = bestByTf.get(tf);
+            if (existing == null || wc.totalScore() > existing.totalScore()) {
+                bestByTf.put(tf, wc);
+            }
+        }
+
+        List<WaveKeyPoint> result = new ArrayList<>();
+        for (WaveCount wc : bestByTf.values()) {
+            if (wc.getPivots() == null || wc.getPivotToWave() == null) continue;
+            for (EnrichedPivot pivot : wc.getPivots()) {
+                WaveLabel label = wc.getPivotToWave().get(pivot.getBarIndex());
+                if (label != null) {
+                    result.add(WaveKeyPoint.builder()
+                            .label(label.name())
+                            .price(pivot.getPrice())
+                            .timestamp(pivot.getTimestamp())
+                            .timeframe(wc.getPrimaryTimeframe())
+                            .type(pivot.isHigh() ? "HIGH" : "LOW")
+                            .build());
+                }
+            }
+        }
+        return result;
     }
 }

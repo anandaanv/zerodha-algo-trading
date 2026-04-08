@@ -25,11 +25,14 @@ public class ElliottTradeSuggestion {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "screener_id", nullable = false)
+    @Column(name = "screener_id", nullable = true)
     private Long screenerId;
 
     @Column(name = "run_id")
     private Long runId;
+
+    @Column(name = "source_scan_id")
+    private Long sourceScanId;
 
     @Column(name = "user_id", nullable = false)
     private Long userId;

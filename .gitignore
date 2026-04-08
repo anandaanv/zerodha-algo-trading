@@ -119,3 +119,4 @@ Desktop.ini
 *.orig.tmp
 
 ui/chart-draw-app/charting_library/**
+ds-python/.venv/

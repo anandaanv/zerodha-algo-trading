@@ -66,6 +66,7 @@ public class SecurityConfig {
                                 "/settings",
                                 "/admin/kite-config",
                                 "/admin/groups",
+                                "/debug/elliott",
                                 "/elliott-screener/*/status"
                         ).permitAll()
 
@@ -83,6 +84,8 @@ public class SecurityConfig {
                               .hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Elliott debug dump viewer — ADMIN only
+                        .requestMatchers("/api/debug/elliott/**", "/api/debug/**").hasRole("ADMIN")
                         // Snapshot and analysis endpoints - allow USER role
                         .requestMatchers("/api/snapshots/**", "/api/analysis/**", "/api/tags/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
 
