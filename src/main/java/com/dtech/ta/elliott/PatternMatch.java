@@ -86,6 +86,9 @@ public class PatternMatch {
     /** Score 0–100 reflecting structural quality + indicator confluence */
     private double confidence;
 
+    /** Why this pattern was invalidated — null if still active */
+    private InvalidationReason invalidationReason;
+
     /** One-line description for use in AI prompt context */
     private String description;
 
@@ -119,5 +122,13 @@ public class PatternMatch {
                  RISING_WEDGE, BROADENING_TOP -> true;
             default -> false;
         };
+    }
+
+    public enum InvalidationReason {
+        EXPLICIT,       // status was explicitly set to INVALIDATED
+        TARGET_HIT,     // price reached the measured target
+        SL_HIT,         // price broke the invalidation/SL level
+        TIME_SL,        // pattern took too long — 2x formation length elapsed
+        PROXIMITY       // price has moved >30% beyond all key levels
     }
 }

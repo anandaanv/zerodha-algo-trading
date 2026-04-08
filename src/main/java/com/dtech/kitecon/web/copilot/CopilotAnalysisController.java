@@ -668,6 +668,9 @@ public class CopilotAnalysisController {
                 com.dtech.kitecon.analysis.dto.ProcessAnalysisResponse processed =
                         analysisProcessService.process(result.getWaveAnalysis(), symbol, currentPrice, resolvedPrimaryTf);
                 result.setPromptSummary(processed.getHumanReadable());
+                if (processed.getActivePatterns() != null) {
+                    result.getWaveAnalysis().setAllPatterns(processed.getActivePatterns());
+                }
 
                 // Optional AI recommendation pass
                 if (aiRecommend) {

@@ -241,33 +241,46 @@ public class StructuredPromptBuilder {
 
     /**
      * Keep only patterns where currentPrice is within the support–resistance envelope.
-     * Excludes INVALIDATED patterns. Allows 10% tolerance beyond the range.
+     * Excludes INVALIDATED patterns. Also skips patterns with target hit or SL hit.
      */
     private List<PatternMatch> filterActivePatterns(List<PatternMatch> all, double currentPrice) {
         List<PatternMatch> result = new ArrayList<>();
         for (PatternMatch p : all) {
             if (p.getStatus() == PatternStatus.INVALIDATED) continue;
+            if (p.getInvalidationReason() != null) continue; // already marked by lifecycle evaluator
 
+            // Skip if target already hit
+            Double target = p.getTarget();
+            if (target != null) {
+                if (p.isBullish() && currentPrice >= target) continue;
+                if (p.isBearish() && currentPrice <= target) continue;
+            }
+
+            // Skip if SL hit
+            Double inv = p.getInvalidation();
+            if (inv != null) {
+                if (p.isBullish() && currentPrice < inv) continue;
+                if (p.isBearish() && currentPrice > inv) continue;
+            }
+
+            // Proximity check — keep if any key level within 25% of current price
             Double support    = p.getSupport();
             Double resistance = p.getResistance();
+            Double neckline   = p.getNeckline();
 
-            if (support != null && resistance != null) {
-                double lo = Math.min(support, resistance);
-                double hi = Math.max(support, resistance);
-                double tol = (hi - lo) * 0.10;
-                if (currentPrice >= (lo - tol) && currentPrice <= (hi + tol)) {
-                    result.add(p);
+            boolean inProximity = false;
+            for (Double level : new Double[]{ support, resistance, neckline, target }) {
+                if (level != null && Math.abs(level - currentPrice) / currentPrice <= 0.25) {
+                    inProximity = true;
+                    break;
                 }
-            } else if (support != null) {
-                // Only a floor — include if price is above it (within 15%)
-                if (currentPrice >= support * 0.85) result.add(p);
-            } else if (resistance != null) {
-                // Only a ceiling — include if price is below it (within 15%)
-                if (currentPrice <= resistance * 1.15) result.add(p);
+            }
+
+            if (support != null || resistance != null || neckline != null) {
+                if (inProximity) result.add(p);
             } else {
-                // No price bounds — include BUILDING/WATCHING only
-                String statusName = p.getStatus() != null ? p.getStatus().name() : "";
-                if (statusName.equals("BUILDING") || statusName.equals("WATCHING")) {
+                // No price levels — keep BUILDING/WATCHING only
+                if (p.getStatus() == PatternStatus.BUILDING || p.getStatus() == PatternStatus.WATCHING) {
                     result.add(p);
                 }
             }

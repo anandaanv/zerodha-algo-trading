@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -20,6 +22,9 @@ public class ProcessAnalysisResponse {
 
     @JsonProperty("processing_stats")
     private ProcessingStats processingStats;
+
+    /** Filtered, deduplicated patterns that survived all lifecycle checks */
+    private List<com.dtech.ta.elliott.PatternMatch> activePatterns;
 
     @Data
     @NoArgsConstructor
@@ -38,6 +43,9 @@ public class ProcessAnalysisResponse {
 
         @JsonProperty("patterns_removed_proximity")
         private int patternsRemovedProximity;
+
+        @JsonProperty("patterns_removed_lifecycle")
+        private int patternsRemovedLifecycle;
 
         @JsonProperty("wave_counts_historical")
         private int waveCountsHistorical;
