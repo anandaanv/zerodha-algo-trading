@@ -85,6 +85,9 @@ public class StructuredPromptBuilder {
             }
         }
 
+        // ── Section 1b: Detected patterns ─────────────────────────────────────
+        appendActivePatterns(sb, analysis, currentPrice);
+
         // ── Section 2: Market structure ────────────────────────────────────────
         if (structureByTf != null && !structureByTf.isEmpty()) {
             sb.append("=== MARKET STRUCTURE ===\n");
@@ -243,8 +246,7 @@ public class StructuredPromptBuilder {
     private List<PatternMatch> filterActivePatterns(List<PatternMatch> all, double currentPrice) {
         List<PatternMatch> result = new ArrayList<>();
         for (PatternMatch p : all) {
-            if (p.getStatus() == PatternStatus.CONFIRMED
-                    || p.getStatus() == PatternStatus.INVALIDATED) continue;
+            if (p.getStatus() == PatternStatus.INVALIDATED) continue;
 
             Double support    = p.getSupport();
             Double resistance = p.getResistance();
@@ -271,6 +273,51 @@ public class StructuredPromptBuilder {
             }
         }
         return result;
+    }
+
+    private void appendActivePatterns(StringBuilder sb, ElliottWaveAnalysis analysis, double currentPrice) {
+        if (analysis == null || analysis.getAllPatterns() == null || analysis.getAllPatterns().isEmpty()) return;
+        List<PatternMatch> active = filterActivePatterns(analysis.getAllPatterns(), currentPrice);
+        if (active.isEmpty()) return;
+
+        sb.append("=== DETECTED PATTERNS ===\n");
+        // Group by timeframe
+        Map<String, List<PatternMatch>> byTf = new LinkedHashMap<>();
+        for (PatternMatch p : active) {
+            String tf = p.getTimeframe() != null ? p.getTimeframe() : "?";
+            byTf.computeIfAbsent(tf, k -> new ArrayList<>()).add(p);
+        }
+        for (Map.Entry<String, List<PatternMatch>> entry : byTf.entrySet()) {
+            for (PatternMatch p : entry.getValue()) {
+                sb.append(String.format("[%s] %s · %s",
+                        entry.getKey(),
+                        p.getType() != null ? p.getType().name() : "?",
+                        p.getStatus() != null ? p.getStatus().name() : "?"));
+                sb.append(String.format("  conf=%.0f%%", p.getConfidence()));
+                if (p.getSupport() != null)    sb.append(String.format("  support=%.2f", p.getSupport()));
+                if (p.getResistance() != null) sb.append(String.format("  resistance=%.2f", p.getResistance()));
+                if (p.getNeckline() != null)   sb.append(String.format("  neckline=%.2f", p.getNeckline()));
+                if (p.getTarget() != null)     sb.append(String.format("  target=%.2f", p.getTarget()));
+                if (p.isRsiDivergence())       sb.append("  RSI_DIV");
+                if (p.isMacdDivergence())      sb.append("  MACD_DIV");
+                sb.append("\n");
+                if (p.getWaitingFor() != null && !p.getWaitingFor().isBlank()) {
+                    sb.append("  watching: ").append(p.getWaitingFor()).append("\n");
+                }
+                if (!p.getWaveContextHints().isEmpty()) {
+                    for (WaveContextHint h : p.getWaveContextHints()) {
+                        if (h.getProbability() >= 0.55) {
+                            sb.append(String.format("  wave-hint: %.0f%% %s→%s  %s\n",
+                                    h.getProbability() * 100,
+                                    h.getImpliedCurrentPosition() != null ? h.getImpliedCurrentPosition().name() : "?",
+                                    h.getImpliedNextWave() != null ? h.getImpliedNextWave().name() : "?",
+                                    h.getNarrative() != null ? h.getNarrative() : ""));
+                        }
+                    }
+                }
+            }
+        }
+        sb.append("\n");
     }
 
     private boolean isIntradayTf(String tf) {
