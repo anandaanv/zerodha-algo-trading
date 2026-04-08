@@ -4,6 +4,7 @@ import com.dtech.kitecon.analysis.dto.NormalizedScenario;
 import com.dtech.kitecon.analysis.dto.ProcessAnalysisResponse;
 import com.dtech.kitecon.analysis.dto.ProcessAnalysisResponse.ProcessingStats;
 import com.dtech.ta.elliott.ElliottWaveAnalysis;
+import com.dtech.ta.elliott.PatternLifecycleEvaluator;
 import com.dtech.ta.elliott.PatternMatch;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,6 +24,7 @@ public class AnalysisProcessService {
     private final OutputRestructurer outputRestructurer;
     private final AIPayloadGenerator aiPayloadGenerator;
     private final IndicatorSnapshotFormatter indicatorSnapshotFormatter;
+    private final PatternLifecycleEvaluator lifecycleEvaluator;
 
     public ProcessAnalysisResponse process(
             ElliottWaveAnalysis analysis,
@@ -40,6 +42,36 @@ public class AnalysisProcessService {
         // Step 2: Deduplicate patterns
         List<PatternMatch> dedupedPatterns = deduplicator.deduplicate(allPatterns);
         int after = dedupedPatterns.size();
+
+        // Step 2b: Lifecycle filter — remove expired patterns (target hit, SL hit, time SL, proximity)
+        int currentBarIndex = getCurrentBarIndex(analysis);
+        int removedLifecycle = 0;
+        if (currentPrice > 0) {
+            int sizeBefore = dedupedPatterns.size();
+            dedupedPatterns = lifecycleEvaluator.filterActive(dedupedPatterns, currentBarIndex, currentPrice);
+            removedLifecycle = sizeBefore - dedupedPatterns.size();
+        }
+        int removedHistorical = 0; // kept for stats compatibility
+        int removedProximity  = 0; // kept for stats compatibility
+
+        // Step 2c: Mark historical wave counts
+        int waveCountsHistorical = 0;
+        int waveCountsActive     = 0;
+        int hypothesesSuppressed = 0;
+        if (analysis.getWaveCounts() != null && currentBarIndex > 0) {
+            for (com.dtech.ta.elliott.WaveCount wc : analysis.getWaveCounts()) {
+                if (wc.getPivots() == null || wc.getPivots().isEmpty()) continue;
+                boolean complete = wc.getCurrentWaveInProgress() == com.dtech.ta.elliott.WaveLabel.UNKNOWN;
+                int lastBar = wc.getPivots().stream().mapToInt(com.dtech.ta.elliott.EnrichedPivot::getBarIndex).max().orElse(0);
+                int age = currentBarIndex - lastBar;
+                if (complete && age > 150) {
+                    wc.setHistorical(true);
+                    waveCountsHistorical++;
+                } else {
+                    waveCountsActive++;
+                }
+            }
+        }
 
         // Step 3: Normalize scenarios with deduplicated patterns
         List<NormalizedScenario> normalizedScenarios = scoreNormalizer.normalize(
@@ -102,13 +134,29 @@ public class AnalysisProcessService {
         return ProcessAnalysisResponse.builder()
                 .humanReadable(humanReadable)
                 .aiPayload(aiPayload)
+                .activePatterns(dedupedPatterns)
                 .processingStats(
                         ProcessingStats.builder()
                                 .patternsBefore(before)
                                 .patternsAfter(after)
+                                .patternsRemovedHistorical(removedHistorical)
+                                .patternsRemovedProximity(removedProximity)
+                                .patternsRemovedLifecycle(removedLifecycle)
+                                .waveCountsHistorical(waveCountsHistorical)
+                                .waveCountsActive(waveCountsActive)
+                                .hypothesesSuppressedHistorical(hypothesesSuppressed)
                                 .payloadTokenEstimate(tokenEstimate)
                                 .build()
                 )
                 .build();
+    }
+
+    private int getCurrentBarIndex(ElliottWaveAnalysis analysis) {
+        if (analysis == null || analysis.getWaveCounts() == null) return 0;
+        return analysis.getWaveCounts().stream()
+            .filter(wc -> wc.getPivots() != null && !wc.getPivots().isEmpty())
+            .flatMap(wc -> wc.getPivots().stream())
+            .mapToInt(com.dtech.ta.elliott.EnrichedPivot::getBarIndex)
+            .max().orElse(0);
     }
 }

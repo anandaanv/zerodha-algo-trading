@@ -25,7 +25,9 @@ public class WaveCount {
         RUNNING_FLAT,   // Wave C doesn't reach Wave A end
         TRIANGLE,       // 5-swing converging ABCDE
         DOUBLE_ZIGZAG,  // WXY
-        COMPLEX_WXY     // Double/triple combination
+        COMPLEX_WXY,    // Double/triple combination
+        LEADING_DIAGONAL,  // 5-wave wedge in W1/WA position; W4 overlaps W1 territory
+        ENDING_DIAGONAL    // 5-wave wedge in W5/WC position; exhaustion pattern
     }
 
     /** Type of wave structure this count represents */
@@ -139,6 +141,10 @@ public class WaveCount {
      * Scored lower than normal counts; label as "structural-only candidate" in prompt output.
      */
     private boolean structuralOnly;
+
+    /** True when this wave count is fully in the past (all pivots older than 150 bars, count complete) */
+    @Builder.Default
+    private boolean historical = false;
 
     public boolean isValid() {
         return ruleViolations == null || ruleViolations.isEmpty();

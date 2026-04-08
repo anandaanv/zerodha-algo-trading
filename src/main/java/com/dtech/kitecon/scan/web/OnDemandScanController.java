@@ -33,7 +33,7 @@ public class OnDemandScanController {
     public ResponseEntity<?> initiateScan(Authentication auth, @RequestBody ScanRequest request) {
         try {
             Long userId = resolveUserId(auth);
-            OnDemandScan scan = scanService.initiateScan(userId, request.getSymbol(), request.getPrimaryTimeframe());
+            OnDemandScan scan = scanService.initiateScan(userId, request.getSymbol(), request.getPrimaryTimeframe(), request.isVerboseLogging());
             return ResponseEntity.ok(toDto(scan));
         } catch (RateLimitExceededException e) {
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("error", e.getMessage()));
@@ -155,6 +155,7 @@ public class OnDemandScanController {
     public static class ScanRequest {
         private String symbol;
         private String primaryTimeframe;
+        private boolean verboseLogging = false;
     }
 
     @lombok.Data

@@ -30,7 +30,7 @@ public class ScenarioBuilder {
      * @param timeframe  the primary timeframe being analyzed
      * @return all scenarios with hypotheses, targets, and evidence
      */
-    public List<WaveScenario> build(List<WaveCount> waveCounts, List<PatternMatch> patterns, String timeframe) {
+    public List<WaveScenario> build(List<WaveCount> waveCounts, List<PatternMatch> patterns, String timeframe, double currentPrice) {
         // Group wave counts by directional thesis
         Map<WaveScenario.ScenarioDirection, List<WaveCount>> grouped = groupByDirection(waveCounts);
 
@@ -42,8 +42,10 @@ public class ScenarioBuilder {
 
             // Build hypotheses for each count in this direction
             List<WaveHypothesis> hypotheses = counts.stream()
-                    .map(wc -> buildHypothesis(wc, patterns, direction))
-                    .sorted(Comparator.comparingInt(WaveHypothesis::getTotalScore).reversed())
+                    .map(wc -> buildHypothesis(wc, patterns, direction, currentPrice))
+                    .sorted(Comparator
+                        .<WaveHypothesis>comparingInt(h -> activationRank(h.getActivationStatus()))
+                        .thenComparingInt(h -> -h.getTotalScore()))
                     .toList();
 
             if (hypotheses.isEmpty()) continue;
@@ -138,6 +140,28 @@ public class ScenarioBuilder {
                         : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
             };
             case TRIANGLE         -> WaveScenario.ScenarioDirection.RANGE_RESOLUTION;
+            case LEADING_DIAGONAL -> switch (cur) {
+                case W3, W4 -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
+                        : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
+                case W5, UNKNOWN -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BEARISH_REVERSAL
+                        : WaveScenario.ScenarioDirection.BULLISH_REVERSAL;
+                default -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
+                        : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
+            };
+            case ENDING_DIAGONAL -> switch (cur) {
+                case W4, W5 -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
+                        : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
+                case UNKNOWN -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BEARISH_REVERSAL
+                        : WaveScenario.ScenarioDirection.BULLISH_REVERSAL;
+                default -> wc.isBullish()
+                        ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
+                        : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
+            };
             case DOUBLE_ZIGZAG, COMPLEX_WXY -> wc.isBullish()
                     ? WaveScenario.ScenarioDirection.BULLISH_CONTINUATION
                     : WaveScenario.ScenarioDirection.BEARISH_CONTINUATION;
@@ -149,7 +173,7 @@ public class ScenarioBuilder {
     // ══════════════════════════════════════════════════════════════════════════
 
     private WaveHypothesis buildHypothesis(WaveCount wc, List<PatternMatch> allPatterns,
-                                            WaveScenario.ScenarioDirection direction) {
+                                            WaveScenario.ScenarioDirection direction, double currentPrice) {
         List<WaveHypothesis.FibTarget> targets = computeTargets(wc);
         double invalidation = computeInvalidation(wc);
         List<PatternType> expected = expectedPatternsForWave(wc.getCurrentWaveInProgress(), direction);
@@ -161,7 +185,12 @@ public class ScenarioBuilder {
         List<WaveEvidence> contradicting = new ArrayList<>(wc.getContradictingEvidence() != null ? wc.getContradictingEvidence() : List.of());
 
         int patternBonus = 0;
+        Set<String> contradictingKeys = new java.util.LinkedHashSet<>(); // dedup by type+tf
         for (PatternMatch pm : allPatterns) {
+            // Only process patterns from the same timeframe as this wave count
+            // (cross-TF patterns produce noise: every pattern's hints contradict every other TF's wave)
+            if (!wc.getPrimaryTimeframe().equals(pm.getTimeframe())) continue;
+
             // Forward: expected pattern for this wave position
             if (expected.contains(pm.getType())) {
                 patternBonus += pm.getStatus() == PatternStatus.CONFIRMED ? 15
@@ -174,12 +203,15 @@ public class ScenarioBuilder {
                     supporting.add(WaveEvidence.supports("Pattern-Wave",
                         pm.getType() + "@" + pm.getTimeframe() + " implies "
                         + hint.getImpliedCurrentPosition() + ": " + hint.getNarrative()));
-                } else if (hint.getProbability() > 0.6 && !pm.getWaveContextHints().isEmpty()) {
-                    // Disagreement: contradicting evidence, NOT elimination
-                    contradicting.add(WaveEvidence.contradicts("Pattern-Wave",
-                        pm.getType() + "@" + pm.getTimeframe() + " implies "
-                        + hint.getImpliedCurrentPosition() + " not " + wc.getCurrentWaveInProgress(),
-                        hint.getProbability()));
+                } else if (hint.getProbability() > 0.6) {
+                    // Deduplicate contradicting evidence by pattern type+position
+                    String key = pm.getType() + "|" + hint.getImpliedCurrentPosition();
+                    if (contradictingKeys.add(key)) {
+                        contradicting.add(WaveEvidence.contradicts("Pattern-Wave",
+                            pm.getType() + "@" + pm.getTimeframe() + " implies "
+                            + hint.getImpliedCurrentPosition() + " not " + wc.getCurrentWaveInProgress(),
+                            hint.getProbability()));
+                    }
                 }
             }
         }
@@ -199,6 +231,22 @@ public class ScenarioBuilder {
         Double decisionLevel = computeDecisionLevel(wc);
         String decisionMeaning = decisionLevel != null ? describeDecisionLevel(wc, decisionLevel) : null;
 
+        // Activation status: how far is the decision level from current price?
+        String activationStatus = "DISTANT";
+        Double distanceFromPrice = null;
+        if (decisionLevel != null && currentPrice > 0) {
+            double dist = Math.abs(decisionLevel - currentPrice) / currentPrice;
+            distanceFromPrice = dist;
+            if (dist <= 0.03)       activationStatus = "ACTIVE";
+            else if (dist <= 0.15)  activationStatus = "WATCHING";
+            else                    activationStatus = "DISTANT";
+        }
+
+        // Override for historical wave counts
+        if (wc.isHistorical()) {
+            activationStatus = "HISTORICAL";
+        }
+
         return WaveHypothesis.builder()
                 .id("H" + UUID.randomUUID().toString().substring(0, 4))
                 .waveCount(wc)
@@ -217,6 +265,8 @@ public class ScenarioBuilder {
                 .contradictingEvidence(contradicting)
                 .totalScore(total)
                 .scoreBreakdown(scoreBreakdown)
+                .activationStatus(activationStatus)
+                .distanceFromCurrentPrice(distanceFromPrice)
                 .build();
     }
 
@@ -250,6 +300,36 @@ public class ScenarioBuilder {
                     targets.add(target(w3.getPrice() - w3Length * 0.382, "W4 = 38.2% retrace of W3", "W4", 0.5));
                     targets.add(target(w3.getPrice() - w3Length * 0.500, "W4 = 50.0% retrace of W3", "W4", 0.3));
                     targets.add(target(w3.getPrice() - w3Length * 0.618, "W4 = 61.8% retrace of W3", "W4", 0.2));
+                } else if (wc.getCurrentWaveInProgress() == WaveLabel.UNKNOWN && pivots.size() >= 5) {
+                    // Completed impulse — compute correction/continuation targets
+                    EnrichedPivot impulseStart = pivots.get(0);
+                    EnrichedPivot impulseEnd   = pivots.get(pivots.size() - 1);
+                    EnrichedPivot w4Pivot      = pivots.get(pivots.size() - 2); // W4 end = last corrective pivot
+                    if (wc.isBullish()) {
+                        // Completed bullish impulse → expect bearish correction
+                        // Rule 1: W4 low (standard retrace zone)
+                        targets.add(target(w4Pivot.getPrice(),
+                                "W4 low — standard correction zone", "Correction", 0.5));
+                        // Rule 2: 0.618 retrace of full impulse
+                        double retrace618 = impulseEnd.getPrice()
+                                - 0.618 * (impulseEnd.getPrice() - impulseStart.getPrice());
+                        targets.add(target(retrace618,
+                                "0.618 retracement of full impulse", "Correction", 0.3));
+                        // Rule 3: 0.5 retrace (minimum)
+                        double retrace50 = impulseEnd.getPrice()
+                                - 0.5 * (impulseEnd.getPrice() - impulseStart.getPrice());
+                        targets.add(target(retrace50,
+                                "0.5 retracement of full impulse", "Correction", 0.2));
+                    } else {
+                        // Completed bearish impulse → continuation / measured move
+                        double impulseLen = impulseStart.getPrice() - impulseEnd.getPrice();
+                        targets.add(target(impulseEnd.getPrice() - impulseLen,
+                                "Measured move extension (100% of bearish impulse)", "Extension", 0.4));
+                        targets.add(target(impulseEnd.getPrice() - impulseLen * 0.618,
+                                "0.618 extension of bearish impulse", "Extension", 0.4));
+                        targets.add(target(impulseEnd.getPrice() - impulseLen * 1.618,
+                                "1.618 extension of bearish impulse", "Extension", 0.2));
+                    }
                 }
             }
             case ZIGZAG -> {
@@ -263,9 +343,42 @@ public class ScenarioBuilder {
                     targets.add(target(wB_end.getPrice() + dir * aLength * 1.0, "WC = 100% of WA", "WC", 0.4));
                     targets.add(target(wB_end.getPrice() + dir * aLength * 1.618, "WC = 161.8% of WA", "WC", 0.4));
                     targets.add(target(wB_end.getPrice() + dir * aLength * 0.618, "WC = 61.8% of WA", "WC", 0.2));
+                } else if (wc.getCurrentWaveInProgress() == WaveLabel.WB && pivots.size() >= 2) {
+                    EnrichedPivot wA_start = pivots.get(0);
+                    EnrichedPivot wA_end   = pivots.get(1);
+                    double aLength = Math.abs(wA_start.getPrice() - wA_end.getPrice());
+                    boolean waDown = wA_end.getPrice() < wA_start.getPrice();
+                    double retDir = waDown ? 1 : -1; // WB retraces opposite direction of WA
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 0.618, "WB = 61.8% retrace of WA", "WB", 0.4));
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 0.500, "WB = 50% retrace of WA", "WB", 0.35));
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 0.382, "WB = 38.2% retrace of WA", "WB", 0.25));
                 }
             }
-            case FLAT, EXPANDED_FLAT -> {
+            case EXPANDED_FLAT -> {
+                if (wc.getCurrentWaveInProgress() == WaveLabel.WC && pivots.size() >= 3) {
+                    EnrichedPivot wA_start = pivots.get(0);
+                    EnrichedPivot wA_end   = pivots.get(1);
+                    EnrichedPivot wB_end   = pivots.get(2);
+                    double aLength = Math.abs(wA_start.getPrice() - wA_end.getPrice());
+                    boolean down = wA_end.getPrice() < wA_start.getPrice();
+                    double dir = down ? -1 : 1;
+                    // Expanded flat: WC typically reaches 127.2% or 161.8% of WA from WB end
+                    targets.add(target(wB_end.getPrice() + dir * aLength * 1.272, "WC = 127.2% of WA (expanded flat primary)", "WC", 0.5));
+                    targets.add(target(wB_end.getPrice() + dir * aLength * 1.618, "WC = 161.8% of WA (expanded flat extended)", "WC", 0.35));
+                    targets.add(target(wA_end.getPrice(), "WC returns to WA end level (minimum)", "WC", 0.15));
+                } else if (wc.getCurrentWaveInProgress() == WaveLabel.WB && pivots.size() >= 2) {
+                    EnrichedPivot wA_start = pivots.get(0);
+                    EnrichedPivot wA_end   = pivots.get(1);
+                    double aLength = Math.abs(wA_start.getPrice() - wA_end.getPrice());
+                    boolean waDown = wA_end.getPrice() < wA_start.getPrice();
+                    double retDir = waDown ? 1 : -1;
+                    // Expanded flat B retraces 100%+ of A — use higher targets
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 1.0,   "WB = 100% of WA (expanded flat min)", "WB", 0.4));
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 1.272, "WB = 127.2% of WA (expanded flat typical)", "WB", 0.4));
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 1.618, "WB = 161.8% of WA (expanded flat extended)", "WB", 0.2));
+                }
+            }
+            case FLAT, RUNNING_FLAT -> {
                 if (wc.getCurrentWaveInProgress() == WaveLabel.WC && pivots.size() >= 3) {
                     EnrichedPivot wA_start = pivots.get(0);
                     EnrichedPivot wA_end   = pivots.get(1);
@@ -275,13 +388,85 @@ public class ScenarioBuilder {
                     double dir = down ? -1 : 1;
                     targets.add(target(wB_end.getPrice() + dir * aLength, "WC = 100% of WA (flat)", "WC", 0.5));
                     targets.add(target(wA_end.getPrice(), "WC returns to WA end level", "WC", 0.3));
+                } else if (wc.getCurrentWaveInProgress() == WaveLabel.WB && pivots.size() >= 2) {
+                    EnrichedPivot wA_start = pivots.get(0);
+                    EnrichedPivot wA_end   = pivots.get(1);
+                    double aLength = Math.abs(wA_start.getPrice() - wA_end.getPrice());
+                    boolean waDown = wA_end.getPrice() < wA_start.getPrice();
+                    double retDir = waDown ? 1 : -1;
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 0.618, "WB = 61.8% retrace of WA", "WB", 0.4));
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 0.500, "WB = 50% retrace of WA", "WB", 0.35));
+                    targets.add(target(wA_end.getPrice() + retDir * aLength * 0.382, "WB = 38.2% retrace of WA", "WB", 0.25));
                 }
             }
             case TRIANGLE -> {
-                // Triangle target = pole (prior trend) projected from breakout
-                // Use last pivot as breakout reference
+                // Triangle target = pole height (Wave A length) projected from WE breakout point
                 EnrichedPivot last = pivots.get(pivots.size() - 1);
-                targets.add(target(last.getPrice() * 1.10, "Triangle breakout — estimated target (10% move)", "WE", 0.5));
+                if (pivots.size() >= 2) {
+                    double poleHeight = Math.abs(pivots.get(1).getPrice() - pivots.get(0).getPrice());
+                    boolean thrustUp = wc.isBullish();
+                    double bp = last.getPrice();
+                    targets.add(target(
+                        thrustUp ? bp + poleHeight : bp - poleHeight,
+                        "Triangle thrust = Wave A pole height from WE", "Thrust", 0.5));
+                    targets.add(target(
+                        thrustUp ? bp + poleHeight * 0.618 : bp - poleHeight * 0.618,
+                        "Triangle thrust = 61.8% of Wave A (conservative)", "Thrust", 0.35));
+                } else {
+                    targets.add(target(last.getPrice() * 1.10, "Triangle breakout estimate", "WE", 0.5));
+                }
+            }
+            case LEADING_DIAGONAL -> {
+                // Leading diagonal in W1 position: expect W2 to retrace 78.6%–100% of diagonal
+                if (pivots.size() >= 2) {
+                    EnrichedPivot w1Start = pivots.get(0);
+                    EnrichedPivot w1End   = pivots.get(pivots.size() - 1);
+                    double diagLen = Math.abs(w1End.getPrice() - w1Start.getPrice());
+                    boolean bullish = wc.isBullish();
+                    // W2 retrace targets from W1 end
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 0.786 : w1End.getPrice() + diagLen * 0.786,
+                        "W2 = 78.6% retrace of leading diagonal", "W2", 0.5));
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 1.0   : w1End.getPrice() + diagLen * 1.0,
+                        "W2 = 100% retrace of leading diagonal (full retrace)", "W2", 0.35));
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 0.618 : w1End.getPrice() + diagLen * 0.618,
+                        "W2 = 61.8% retrace of leading diagonal (shallow)", "W2", 0.15));
+                }
+            }
+            case ENDING_DIAGONAL -> {
+                // Ending diagonal in W5/WC position: sharp reversal expected back to diagonal origin (W1 start)
+                if (pivots.size() >= 2) {
+                    EnrichedPivot w1Start = pivots.get(0);
+                    EnrichedPivot w1End   = pivots.get(pivots.size() - 1);
+                    double diagLen = Math.abs(w1End.getPrice() - w1Start.getPrice());
+                    // Primary target: full retrace back to diagonal origin
+                    targets.add(target(w1Start.getPrice(),
+                        "Ending diagonal reversal target = diagonal origin (W1 start)", "Reversal", 0.55));
+                    // Secondary: 61.8% retrace of diagonal
+                    boolean bullish = wc.isBullish();
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 0.618 : w1End.getPrice() + diagLen * 0.618,
+                        "Ending diagonal 61.8% retrace (conservative reversal)", "Reversal", 0.3));
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 1.618 : w1End.getPrice() + diagLen * 1.618,
+                        "Ending diagonal 161.8% extension (extended reversal)", "Reversal", 0.15));
+                }
+            }
+            case DOUBLE_ZIGZAG, COMPLEX_WXY -> {
+                // WY is the final leg — treat like WC of a ZIGZAG
+                if (wc.getCurrentWaveInProgress() == WaveLabel.WC && pivots.size() >= 3) {
+                    EnrichedPivot wX_start = pivots.get(0);
+                    EnrichedPivot wX_end   = pivots.get(1);
+                    EnrichedPivot wY_start = pivots.get(2);
+                    double xLength = Math.abs(wX_start.getPrice() - wX_end.getPrice());
+                    boolean down = wX_end.getPrice() < wX_start.getPrice();
+                    double dir = down ? -1 : 1;
+                    targets.add(target(wY_start.getPrice() + dir * xLength * 1.0,   "WY = 100% of WX", "WY", 0.4));
+                    targets.add(target(wY_start.getPrice() + dir * xLength * 1.618, "WY = 161.8% of WX", "WY", 0.35));
+                    targets.add(target(wY_start.getPrice() + dir * xLength * 0.618, "WY = 61.8% of WX", "WY", 0.25));
+                }
             }
         }
         return targets;
@@ -319,6 +504,12 @@ public class ScenarioBuilder {
                         : pivots.get(0).getPrice() * 1.02;
             }
             case TRIANGLE -> pivots.get(0).getPrice() * 0.97;
+            case LEADING_DIAGONAL, ENDING_DIAGONAL -> {
+                // Diagonal invalidated if price breaks back through W1 start (origin)
+                yield wc.isBullish()
+                    ? pivots.get(0).getPrice() * 0.98
+                    : pivots.get(0).getPrice() * 1.02;
+            }
             default -> pivots.get(0).getPrice() * 0.97;
         };
     }
@@ -330,6 +521,8 @@ public class ScenarioBuilder {
             case ZIGZAG, FLAT, EXPANDED_FLAT ->
                     "Correction invalidated if price breaches Wave A origin at " + fmt(level);
             case TRIANGLE -> "Triangle invalidated on strong directional break below " + fmt(level);
+            case LEADING_DIAGONAL, ENDING_DIAGONAL ->
+                "Diagonal invalidated if price breaks through origin at " + fmt(level);
             default -> "Invalidated below " + fmt(level);
         };
     }
@@ -525,4 +718,13 @@ public class ScenarioBuilder {
     }
 
     private String fmt(double v) { return String.format("%.2f", v); }
+
+    private int activationRank(String status) {
+        if (status == null) return 3;
+        return switch (status) {
+            case "ACTIVE"   -> 0;
+            case "WATCHING" -> 1;
+            default         -> 2;
+        };
+    }
 }

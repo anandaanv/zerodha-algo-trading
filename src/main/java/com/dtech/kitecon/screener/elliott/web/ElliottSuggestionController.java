@@ -48,6 +48,12 @@ public class ElliottSuggestionController {
         return ResponseEntity.ok(suggestionService.listForScreener(userId, screenerId));
     }
 
+    @PostMapping("/from-scan/{scanId}")
+    public ResponseEntity<?> createFromScan(Authentication auth, @PathVariable Long scanId) {
+        Long userId = resolveUserId(auth);
+        return ResponseEntity.ok(suggestionService.createFromScan(scanId, userId));
+    }
+
     @PostMapping("/{id}/accept")
     public ResponseEntity<?> accept(Authentication auth, @PathVariable Long id,
                                      @RequestBody(required = false) Map<String, Object> body) {

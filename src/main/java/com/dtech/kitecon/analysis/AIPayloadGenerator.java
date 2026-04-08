@@ -16,11 +16,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.dtech.ta.elliott.WaveCount;
+import com.dtech.ta.elliott.WaveLabel;
 
 @Service
 @RequiredArgsConstructor
@@ -57,7 +61,7 @@ public class AIPayloadGenerator {
         payload.put("generated_at", Instant.now().toString());
         payload.put("entry_timeframe", entryTf);
 
-        payload.put("decision_point", buildDecisionPointBlock(analysis, entryTf));
+        payload.put("decision_point", buildDecisionPointBlock(analysis, entryTf, currentPrice));
         payload.put("nested_context", buildNestedContextBlock(analysis, entryTf));
         payload.put("top_patterns", buildTopPatternsBlock(dedupedPatterns, entryTf, currentPrice));
         payload.put("competing_scenarios", buildCompetingScenariosBlock(normalizedScenarios));
@@ -65,6 +69,7 @@ public class AIPayloadGenerator {
         payload.put("cross_timeframe_summary", buildCrossTimeframeSummary(analysis));
         payload.put("pattern_counts", buildPatternCounts(analysis));
         payload.put("indicator_snapshot", buildIndicatorSnapshotBlock(analysis.getEnrichedPivots()));
+        payload.put("wave_key_points", buildWaveKeyPointsBlock(analysis.getWaveCounts()));
 
         // Token budget enforcement
         int tokenEstimate = estimateTokens(payload);
@@ -127,7 +132,7 @@ public class AIPayloadGenerator {
     }
 
     private Map<String, Object> buildDecisionPointBlock(
-            ElliottWaveAnalysis analysis, String entryTf) {
+            ElliottWaveAnalysis analysis, String entryTf, double currentPrice) {
 
         Map<String, Object> block = new LinkedHashMap<>();
 
@@ -149,7 +154,11 @@ public class AIPayloadGenerator {
 
         double keyLevel = context.getInvalidationLevel() != null ? context.getInvalidationLevel() : 0.0;
         block.put("key_level", keyLevel);
-        block.put("key_level_meaning", "Hold above key level for extension");
+        boolean keyLevelBreached = keyLevel > 0 && currentPrice < keyLevel;
+        block.put("key_level_status", keyLevelBreached ? "BREACHED" : "ACTIVE");
+        block.put("key_level_meaning", keyLevelBreached
+                ? "KEY LEVEL BREACHED — price already below " + String.format("%.2f", keyLevel)
+                : "Hold above " + String.format("%.2f", keyLevel) + " for extension");
 
         // Determine scenario_a (lower probability) and scenario_b (higher probability)
         List<BranchHypothesis> branches = context.getBranches();
@@ -161,22 +170,49 @@ public class AIPayloadGenerator {
             BranchHypothesis branchA = sortedByProb.get(0);
             BranchHypothesis branchB = sortedByProb.get(sortedByProb.size() - 1);
 
-            block.put("scenario_a", buildBranchScenario(branchA));
-            block.put("scenario_b", buildBranchScenario(branchB));
+            block.put("scenario_a", buildBranchScenario(branchA, currentPrice));
+            block.put("scenario_b", buildBranchScenario(branchB, currentPrice));
         }
 
-        block.put("watch_for", List.of("Wave invalidation", "Confluence zone breach", "Gap fill"));
+        // Build watch_for from branch trigger levels
+        List<String> watchFor = new ArrayList<>();
+        if (branches != null) {
+            for (BranchHypothesis b : branches) {
+                if (b.getTrigger() != null && !b.getTrigger().isBlank()) {
+                    watchFor.add(b.getTrigger());
+                }
+            }
+        }
+        if (watchFor.isEmpty()) watchFor.add("Key level break");
+        block.put("watch_for", watchFor);
 
         return block;
     }
 
-    private Map<String, Object> buildBranchScenario(BranchHypothesis branch) {
+    private Map<String, Object> buildBranchScenario(BranchHypothesis branch, double currentPrice) {
         Map<String, Object> scenario = new LinkedHashMap<>();
         scenario.put("label", branch.getLabel() != null ? branch.getLabel() : branch.getCode());
         scenario.put("probability", (int) (branch.getProbability() * 100));
         scenario.put("trigger", branch.getTrigger() != null ? branch.getTrigger() : "N/A");
-        scenario.put("target", branch.getTargetLevel() != null ? branch.getTargetLevel() : 0.0);
-        scenario.put("bias", "NEUTRAL");
+        double target = branch.getTargetLevel() != null ? branch.getTargetLevel() : 0.0;
+        scenario.put("target", target);
+        // Infer bias: use stored direction if available, else fall back to target vs price
+        String bias = "NEUTRAL";
+        if (branch.getBullish() != null) {
+            bias = branch.getBullish() ? "BULL" : "BEAR";
+        } else if (target > 0 && currentPrice > 0) {
+            bias = target > currentPrice ? "BULL" : "BEAR";
+        }
+        scenario.put("bias", bias);
+        // Flag if target already reached
+        if (target > 0) {
+            boolean targetReached = target > currentPrice
+                    ? currentPrice >= target   // bull target: price reached or exceeded
+                    : currentPrice <= target;  // bear target: price reached or went lower
+            if (targetReached) {
+                scenario.put("status", "TARGET_REACHED");
+            }
+        }
         return scenario;
     }
 
@@ -239,6 +275,9 @@ public class AIPayloadGenerator {
 
         List<PatternMatch> filtered = dedupedPatterns.stream()
             .filter(p -> entryTf.equals(p.getTimeframe()) || "15m".equals(p.getTimeframe()))
+            .filter(p -> p.getStatus() == PatternStatus.WATCHING
+                      || p.getStatus() == PatternStatus.BUILDING
+                      || p.getStatus() == PatternStatus.PARTIAL)
             .sorted((p1, p2) -> Double.compare(p2.getConfidence(), p1.getConfidence()))
             .limit(5)
             .collect(Collectors.toList());
@@ -470,5 +509,43 @@ public class AIPayloadGenerator {
         }
 
         return snapshot;
+    }
+
+    private Map<String, Object> buildWaveKeyPointsBlock(List<WaveCount> waveCounts) {
+        Map<String, Object> block = new LinkedHashMap<>();
+        if (waveCounts == null || waveCounts.isEmpty()) return block;
+
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.of("Asia/Kolkata"));
+
+        // Best-scoring WaveCount per timeframe
+        Map<String, WaveCount> bestByTf = new LinkedHashMap<>();
+        for (WaveCount wc : waveCounts) {
+            String tf = wc.getPrimaryTimeframe();
+            if (tf == null) continue;
+            WaveCount existing = bestByTf.get(tf);
+            if (existing == null || wc.totalScore() > existing.totalScore()) {
+                bestByTf.put(tf, wc);
+            }
+        }
+
+        for (Map.Entry<String, WaveCount> entry : bestByTf.entrySet()) {
+            WaveCount wc = entry.getValue();
+            if (wc.getPivots() == null || wc.getPivotToWave() == null) continue;
+
+            List<Map<String, Object>> points = new ArrayList<>();
+            for (EnrichedPivot pivot : wc.getPivots()) {
+                WaveLabel label = wc.getPivotToWave().get(pivot.getBarIndex());
+                if (label == null || pivot.getTimestamp() == null) continue;
+                Map<String, Object> pt = new LinkedHashMap<>();
+                pt.put("label", label.name());
+                pt.put("price", Math.round(pivot.getPrice() * 100.0) / 100.0);
+                pt.put("date", fmt.format(pivot.getTimestamp()));
+                pt.put("type", pivot.isHigh() ? "HIGH" : "LOW");
+                points.add(pt);
+            }
+            if (!points.isEmpty()) block.put(entry.getKey(), points);
+        }
+
+        return block;
     }
 }

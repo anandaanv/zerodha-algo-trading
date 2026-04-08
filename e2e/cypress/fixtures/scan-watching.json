@@ -1,0 +1,54 @@
+[
+  {
+    "id": 101,
+    "symbol": "COALINDIA",
+    "primaryTimeframe": "4h",
+    "allTimeframes": "1d,4h",
+    "status": "COMPLETED",
+    "requestedAt": "2026-04-08T10:00:00Z",
+    "completedAt": "2026-04-08T10:01:30Z",
+    "errorMessage": null,
+    "result": {
+      "symbol": "COALINDIA",
+      "primaryTimeframe": "4h",
+      "allTimeframes": "1d,4h",
+      "dataRange": { "4h": "2025-01-01 → 2026-04-08 (300 bars)", "1d": "2024-01-01 → 2026-04-08 (300 bars)" },
+      "hasTradeSetup": false,
+      "hasWatchingSetup": true,
+      "aiParsed": {
+        "type": "FINDING",
+        "hypothesisLabel": "Triple Top → Breakdown Setup",
+        "waveContext": "Wave 5 exhaustion near multi-year resistance",
+        "pattern": "TRIPLE_TOP",
+        "currentStage": "WATCHING",
+        "reasoning": "Three touches at 480-485 resistance zone with declining RSI divergence",
+        "anticipatoryEntry": {
+          "direction": "SHORT",
+          "entryZone": "455-460",
+          "sl": "492",
+          "tp": "410",
+          "triggerDescription": "Close below neckline at 455 on 4h"
+        },
+        "confirmationEntry": {
+          "trigger": "4h close below 455 neckline with volume expansion"
+        },
+        "invalidationConditions": ["4h close above 492 (all-time high)"]
+      },
+      "patterns": [
+        {
+          "type": "TRIPLE_TOP",
+          "status": "WATCHING",
+          "timeframe": "4h",
+          "resistance": 483.5,
+          "neckline": 455.0,
+          "target": 426.5,
+          "confidence": 78,
+          "rsiDivergence": true,
+          "bullish": false
+        }
+      ],
+      "humanReadable": "COALINDIA showing triple top formation on 4h with resistance at 483.5.",
+      "aiResponse": "{\"type\":\"FINDING\",\"currentStage\":\"WATCHING\"}"
+    }
+  }
+]

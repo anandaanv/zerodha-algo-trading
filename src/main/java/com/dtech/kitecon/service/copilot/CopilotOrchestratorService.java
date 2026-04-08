@@ -319,17 +319,16 @@ public class CopilotOrchestratorService {
             - If the pre-computed evidence is ambiguous, say so in confidenceLayers
             - If no trade setup is actionable right now, say so clearly
             - Always reference which scenario and hypothesis ID you are confirming
-            - The INDICATOR SNAPSHOT section (appended to the analysis data) shows actual RSI/MACD/EWO/
-              Bollinger/ADX/Volume readings at the last 1-2 pivots per timeframe. Use these to assess
-              momentum direction, divergences, and whether indicators confirm the wave structure before
-              selecting and sizing the best trade.
+            - When writing waveContext, cite actual wave prices and dates from the wave counts provided.
+            - When multiple hypotheses exist within a scenario, prefer ACTIVE status over WATCHING status unless the score difference exceeds 15 points. ACTIVE means price is at the decision level NOW.
+            - Pay special attention to ENDING_DIAGONAL hypotheses in S2. An ending diagonal at current price signals potential sharp reversal. If such a hypothesis exists and is ACTIVE, it must be addressed in anomalyFlags even if not selected as the primary scenario.
 
             Return a JSON FINDING response:
             {
               "type": "FINDING",
               "hypothesisLabel": "short label e.g. Wave 4 Triangle → Wave 5 Launch",
               "hypothesisDescription": "detailed description of the confirmed scenario",
-              "waveContext": "which scenario/hypothesis you confirmed and why",
+              "waveContext": "Wave position with actual prices and dates from the wave counts provided.",
               "pattern": "the key pattern driving the setup (or null)",
               "currentStage": "WATCHING | ENTRY_READY | INVALIDATED",
               "confidenceLayers": {

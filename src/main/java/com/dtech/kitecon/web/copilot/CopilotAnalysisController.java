@@ -69,73 +69,6 @@ public class CopilotAnalysisController {
     private final UserRepository userRepository;
     private final ChartLayoutRepository chartLayoutRepository;
 
-    // ─── Phase 1: Scan ─────────────────────────────────────────────────────────
-
-    /**
-     * Phase 1: Run all active scan skills to detect patterns/waves.
-     * Returns observations (not hypotheses).
-     *
-     * Body: { layoutId, symbol, drawingsJson, timeframes[], force }
-     */
-    @PostMapping("/scan")
-    public ResponseEntity<?> scanAnalysis(Authentication auth,
-                                           @RequestBody Map<String, Object> body) {
-        Long userId = resolveUserId(auth);
-        CopilotInvestigation investigation = createOrReuseInvestigation(userId, body);
-
-        String warning = null;
-        List<CopilotObservation> observations = new ArrayList<>();
-
-        try {
-            observations = runScanPhase(investigation, userId);
-        } catch (Exception e) {
-            warning = e.getMessage();
-            log.error("[Copilot] Scan failed for investigation #{}: {}", investigation.getId(), e.getMessage(), e);
-        }
-
-        var result = new java.util.HashMap<String, Object>();
-        result.put("investigationId", investigation.getId());
-        result.put("status", "scanned");
-        result.put("observations", observations);
-        if (warning != null) result.put("warning", warning);
-        return ResponseEntity.ok(result);
-    }
-
-    // ─── Phase 2: Reason ─────────────────────────────────────────────────────
-
-    /**
-     * Phase 2: Cross-correlate observations to find confluence.
-     * Can be invoked independently with observations, drawings, scenarios, or prior hypotheses.
-     *
-     * Body: ReasoningRequest JSON
-     */
-    @PostMapping("/reason")
-    public ResponseEntity<?> reasonAnalysis(Authentication auth,
-                                             @RequestBody ReasoningRequest request) {
-        Long userId = resolveUserId(auth);
-        CopilotInvestigation investigation = investigationService.getOrThrow(request.getInvestigationId());
-
-        String warning = null;
-
-        try {
-            runReasonPhase(investigation, userId, request);
-        } catch (Exception e) {
-            warning = e.getMessage();
-            log.error("[Copilot] Reasoning failed for investigation #{}: {}", investigation.getId(), e.getMessage(), e);
-        }
-
-        investigation = investigationService.getOrThrow(investigation.getId());
-
-        var result = new java.util.HashMap<String, Object>();
-        result.put("investigationId", investigation.getId());
-        result.put("status", "reasoned");
-        result.put("hypotheses", hypothesisService.getAllHypotheses(investigation.getId()));
-        result.put("flags", hypothesisService.getUnacknowledgedFlags(investigation.getId()));
-        result.put("observations", observationService.getObservationsForInvestigation(investigation.getId()));
-        if (warning != null) result.put("warning", warning);
-        return ResponseEntity.ok(result);
-    }
-
     // ─── Combined: Scan + Reason ─────────────────────────────────────────────
 
     /**
@@ -735,6 +668,9 @@ public class CopilotAnalysisController {
                 com.dtech.kitecon.analysis.dto.ProcessAnalysisResponse processed =
                         analysisProcessService.process(result.getWaveAnalysis(), symbol, currentPrice, resolvedPrimaryTf);
                 result.setPromptSummary(processed.getHumanReadable());
+                if (processed.getActivePatterns() != null) {
+                    result.getWaveAnalysis().setAllPatterns(processed.getActivePatterns());
+                }
 
                 // Optional AI recommendation pass
                 if (aiRecommend) {

@@ -12,8 +12,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LegacyChartApp from "./legacy-chart/ProApp";
 import TVChartApp from "./tradingview/TVChartApp";
 import PromptBuilderPage from "./tradingview/PromptBuilderPage";
-import CopilotDashboard from "./tradingview/CopilotDashboard";
-import SkillBuilderPage from "./tradingview/SkillBuilderPage";
+
 import KiteLogin from "./components/KiteLogin";
 import KiteSuccess from "./components/KiteSuccess";
 
@@ -91,22 +90,6 @@ root.render(
           element={
             <ProtectedRoute requiredRole="ADMIN">
               <PromptBuilderPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/copilot"
-          element={
-            <ProtectedRoute requiredRole="ADMIN">
-              <CopilotDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/skills"
-          element={
-            <ProtectedRoute requiredRole="ADMIN">
-              <SkillBuilderPage />
             </ProtectedRoute>
           }
         />
