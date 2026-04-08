@@ -1,0 +1,6 @@
+node_modules/
+evidence/screenshots/
+evidence/videos/
+cypress/downloads/
+.env
+cypress.env.json
