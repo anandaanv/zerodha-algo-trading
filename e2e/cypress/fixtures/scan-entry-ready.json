@@ -1,0 +1,51 @@
+[
+  {
+    "id": 102,
+    "symbol": "INFY",
+    "primaryTimeframe": "1h",
+    "allTimeframes": "1d,4h,1h",
+    "status": "COMPLETED",
+    "requestedAt": "2026-04-08T09:00:00Z",
+    "completedAt": "2026-04-08T09:01:45Z",
+    "errorMessage": null,
+    "result": {
+      "symbol": "INFY",
+      "primaryTimeframe": "1h",
+      "allTimeframes": "1d,4h,1h",
+      "dataRange": { "1h": "2025-12-01 → 2026-04-08 (500 bars)" },
+      "hasTradeSetup": true,
+      "hasWatchingSetup": false,
+      "aiParsed": {
+        "type": "FINDING",
+        "hypothesisLabel": "Wave 4 Complete → Wave 5 Launch",
+        "waveContext": "Completed A-B-C correction at W4 support, W5 targeting 1650",
+        "pattern": "DOUBLE_BOTTOM",
+        "currentStage": "ENTRY_READY",
+        "reasoning": "Double bottom confirmed with RSI bullish divergence at W4 support",
+        "anticipatoryEntry": {
+          "direction": "LONG",
+          "entryZone": "1520-1530",
+          "sl": "1495",
+          "tp": "1620",
+          "triggerDescription": "Entry on pullback to 1520-1530 zone"
+        },
+        "invalidationConditions": ["Close below 1495 invalidates W4 low"]
+      },
+      "patterns": [
+        {
+          "type": "DOUBLE_BOTTOM",
+          "status": "CONFIRMED",
+          "timeframe": "1h",
+          "support": 1498.0,
+          "neckline": 1545.0,
+          "target": 1592.0,
+          "confidence": 84,
+          "rsiDivergence": true,
+          "bullish": true
+        }
+      ],
+      "humanReadable": "INFY double bottom confirmed on 1h with target 1592.",
+      "aiResponse": "{\"type\":\"FINDING\",\"currentStage\":\"ENTRY_READY\"}"
+    }
+  }
+]
