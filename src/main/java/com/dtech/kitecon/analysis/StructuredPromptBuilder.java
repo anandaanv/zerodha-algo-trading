@@ -11,13 +11,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
- * Builds a structured, numbered-pivot AI prompt that gives the LLM
- * grounded price/time coordinates for every wave and pattern claim.
+ * Builds a structured AI prompt for Elliott Wave analysis.
  *
  * Structure:
- *   ZIGZAG PIVOTS (numbered Z0, Z1, ... per timeframe)
- *   WAVE COUNTS   (wave endpoints referenced by Zn index)
- *   ACTIVE PATTERNS (only patterns whose price range contains currentPrice)
+ *   WAVE COUNTS (best per timeframe)
  *   MARKET STRUCTURE (trend summary per timeframe)
  */
 @Service
@@ -29,11 +26,6 @@ public class StructuredPromptBuilder {
     private static final DateTimeFormatter DATETIME_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.of("Asia/Kolkata"));
 
-    private final PivotHierarchyBuilder hierarchyBuilder;
-
-    public StructuredPromptBuilder(PivotHierarchyBuilder hierarchyBuilder) {
-        this.hierarchyBuilder = hierarchyBuilder;
-    }
 
     /**
      * Build the full structured prompt string.
@@ -63,59 +55,7 @@ public class StructuredPromptBuilder {
           .append(" | PRIMARY TF: ").append(primaryTf)
           .append(" ===\n\n");
 
-        // ── Section 1: Nested ZigZag pivot hierarchy ──────────────────────────────
-        // Build waveLabels map for inline annotation in pivots
-        Map<String, Map<Integer, String>> waveLabels = new LinkedHashMap<>();
-        if (analysis != null && analysis.getWaveCounts() != null && !analysis.getWaveCounts().isEmpty()) {
-            // Pick highest-scoring WaveCount per timeframe
-            Map<String, WaveCount> bestByTf = new LinkedHashMap<>();
-            for (WaveCount wc : analysis.getWaveCounts()) {
-                String tf = wc.getPrimaryTimeframe();
-                if (tf == null) continue;
-                WaveCount cur = bestByTf.get(tf);
-                if (cur == null || wc.totalScore() > cur.totalScore()) bestByTf.put(tf, wc);
-            }
-            // For each best WaveCount, build the barIndex → label mapping
-            for (Map.Entry<String, WaveCount> entry : bestByTf.entrySet()) {
-                String tf = entry.getKey();
-                WaveCount wc = entry.getValue();
-                Map<Integer, String> tfWaveLabels = new LinkedHashMap<>();
-                waveLabels.put(tf, tfWaveLabels);
-                if (wc.getPivots() != null && wc.getPivotToWave() != null) {
-                    for (EnrichedPivot ep : wc.getPivots()) {
-                        WaveLabel label = wc.getPivotToWave().get(ep.getBarIndex());
-                        if (label != null) {
-                            tfWaveLabels.put(ep.getBarIndex(), label.name());
-                        }
-                    }
-                }
-            }
-        }
-
-        String pivotHierarchy = hierarchyBuilder.build(pivotsByTf, tfOrder, currentPrice, waveLabels);
-        sb.append("=== ZIGZAG PIVOTS ===\n");
-        sb.append(pivotHierarchy);
-        sb.append("\n");
-
-        // Rebuild barIndexToZn and tsEpochToZn for pattern/wave matching (flat maps still needed)
-        Map<String, Map<Integer, Integer>> barIndexToZn = new LinkedHashMap<>();
-        Map<String, Map<Long, Integer>>    tsEpochToZn  = new LinkedHashMap<>();
-        for (Map.Entry<String, List<ZigZagPoint>> entry : pivotsByTf.entrySet()) {
-            String tf = entry.getKey();
-            List<ZigZagPoint> pivots = entry.getValue();
-            if (pivots == null || pivots.isEmpty()) continue;
-            Map<Integer, Integer> barMap = new LinkedHashMap<>();
-            Map<Long, Integer>    tsMap  = new LinkedHashMap<>();
-            barIndexToZn.put(tf, barMap);
-            tsEpochToZn.put(tf, tsMap);
-            for (int i = 0; i < pivots.size(); i++) {
-                ZigZagPoint p = pivots.get(i);
-                barMap.put(p.getBarIndex(), i);
-                if (p.getTimestamp() != null) tsMap.put(p.getTimestamp().getEpochSecond(), i);
-            }
-        }
-
-        // ── Section 2: Wave counts ─────────────────────────────────────────────
+        // ── Section 1: Wave counts ─────────────────────────────────────────────
         if (analysis != null && analysis.getWaveCounts() != null && !analysis.getWaveCounts().isEmpty()) {
             sb.append("=== WAVE COUNTS (best per timeframe) ===\n");
 
@@ -145,70 +85,7 @@ public class StructuredPromptBuilder {
             }
         }
 
-        // ── Section 3: Active patterns (containing currentPrice) ──────────────
-        if (analysis != null && analysis.getAllPatterns() != null) {
-            List<PatternMatch> active = filterActivePatterns(analysis.getAllPatterns(), currentPrice);
-            if (!active.isEmpty()) {
-                sb.append("=== ACTIVE PATTERNS (current price ").append(String.format("%.2f", currentPrice)).append(" is within range) ===\n");
-                for (PatternMatch p : active) {
-                    String tf = p.getTimeframe() != null ? p.getTimeframe() : "?";
-                    Map<Long, Integer> tsMap = tsEpochToZn.getOrDefault(tf, Map.of());
-
-                    sb.append(String.format("[%s] %s  %s  conf=%.0f%%\n",
-                            tf,
-                            p.getType() != null ? p.getType().name() : "?",
-                            p.getStatus() != null ? p.getStatus().name() : "?",
-                            p.getConfidence()));
-
-                    // Pivot references
-                    if (p.getPivotTimestamps() != null && !p.getPivotTimestamps().isEmpty()
-                            && p.getPivotPrices() != null) {
-                        sb.append("  Pivots: ");
-                        for (int i = 0; i < p.getPivotTimestamps().size(); i++) {
-                            var ts = p.getPivotTimestamps().get(i);
-                            Double price = i < p.getPivotPrices().size() ? p.getPivotPrices().get(i) : null;
-                            Integer zn = ts != null ? tsMap.get(ts.getEpochSecond()) : null;
-                            String znStr = zn != null ? "Z" + zn : "Z?";
-                            String dateStr = ts != null ? (isIntradayTf(tf) ? DATETIME_FMT.format(ts) : DATE_FMT.format(ts)) : "?";
-                            sb.append(znStr);
-                            if (price != null) sb.append(String.format("(%.2f", price));
-                            sb.append(",").append(dateStr).append(")");
-                            if (i < p.getPivotTimestamps().size() - 1) sb.append(" → ");
-                        }
-                        sb.append("\n");
-                    }
-
-                    // Key levels
-                    if (p.getSupport() != null)    sb.append(String.format("  Support:    %.2f\n", p.getSupport()));
-                    if (p.getResistance() != null) sb.append(String.format("  Resistance: %.2f\n", p.getResistance()));
-                    if (p.getNeckline() != null)   sb.append(String.format("  Neckline:   %.2f\n", p.getNeckline()));
-                    if (p.getTarget() != null)     sb.append(String.format("  Target:     %.2f\n", p.getTarget()));
-                    if (p.getInvalidation() != null) sb.append(String.format("  Invalidation: %.2f\n", p.getInvalidation()));
-
-                    // Trendline geometry
-                    if (Boolean.TRUE.equals(p.isConverging())) sb.append("  Trendlines: CONVERGING\n");
-                    else if (Boolean.TRUE.equals(p.isParallel())) sb.append("  Trendlines: PARALLEL (channel)\n");
-
-                    // Wave context
-                    if (p.getWaveContextHints() != null && !p.getWaveContextHints().isEmpty()) {
-                        sb.append("  Wave context: ");
-                        for (WaveContextHint h : p.getWaveContextHints()) {
-                            sb.append(h.getImpliedCurrentPosition()).append("→")
-                              .append(h.getImpliedNextWave())
-                              .append(String.format("(%.0f%%)", h.getProbability() * 100)).append(" ");
-                        }
-                        sb.append("\n");
-                    }
-
-                    if (p.getDescription() != null) sb.append("  ").append(p.getDescription()).append("\n");
-                    sb.append("\n");
-                }
-            } else {
-                sb.append("=== ACTIVE PATTERNS ===\n  None containing current price ").append(String.format("%.2f", currentPrice)).append("\n\n");
-            }
-        }
-
-        // ── Section 4: Market structure ────────────────────────────────────────
+        // ── Section 2: Market structure ────────────────────────────────────────
         if (structureByTf != null && !structureByTf.isEmpty()) {
             sb.append("=== MARKET STRUCTURE ===\n");
             for (Map.Entry<String, MarketStructureData> entry : structureByTf.entrySet()) {
@@ -217,6 +94,141 @@ public class StructuredPromptBuilder {
                     sb.append("[").append(entry.getKey()).append("] ")
                       .append(summary.replace("\n", " ").trim()).append("\n");
                 }
+            }
+            sb.append("\n");
+        }
+
+        // ── Section 3: Nested Corrective Context ──────────────────────────────
+        if (analysis != null && analysis.getNestedCorrectiveContexts() != null
+                && !analysis.getNestedCorrectiveContexts().isEmpty()) {
+            sb.append("=== NESTED CORRECTIVE CONTEXT ===\n");
+            for (NestedWaveContext ctx : analysis.getNestedCorrectiveContexts()) {
+                sb.append(String.format("[%s] %s → %s | anchor=%.2f inv=%.2f\n",
+                        ctx.getTimeframe() != null ? ctx.getTimeframe() : "?",
+                        ctx.getHigherDegreeWave() != null ? ctx.getHigherDegreeWave() : "?",
+                        ctx.getCorrectiveLeg() != null ? ctx.getCorrectiveLeg() : "?",
+                        ctx.getAnchorLevel() != null ? ctx.getAnchorLevel() : 0.0,
+                        ctx.getInvalidationLevel() != null ? ctx.getInvalidationLevel() : 0.0));
+                if (ctx.getNarrative() != null && !ctx.getNarrative().isBlank()) {
+                    String firstLine = ctx.getNarrative().lines().findFirst().orElse("").trim();
+                    sb.append("  ").append(firstLine).append("\n");
+                }
+                if (ctx.getBranches() != null) {
+                    for (NestedWaveContext.BranchHypothesis b : ctx.getBranches()) {
+                        sb.append(String.format("  [%.0f%%] %s",
+                                b.getProbability() * 100,
+                                b.getLabel() != null ? b.getLabel() : b.getCode()));
+                        if (b.getTargetLevel() != null)
+                            sb.append(String.format(" → target=%.2f", b.getTargetLevel()));
+                        if (b.getTrigger() != null)
+                            sb.append(" | trigger=").append(b.getTrigger());
+                        if (b.isTriggered())
+                            sb.append(" [TRIGGERED]");
+                        sb.append("\n");
+                        if (b.getSubwaveLabel() != null)
+                            sb.append("    subwave: ").append(b.getSubwaveLabel()).append("\n");
+                        if (b.getSubwaveStructureType() != null)
+                            sb.append("    structure: ").append(b.getSubwaveStructureType()).append("\n");
+                        if (b.getSubwaveNextMove() != null)
+                            sb.append("    next: ").append(b.getSubwaveNextMove()).append("\n");
+                        if (b.getSubwaveInvalidation() != null)
+                            sb.append(String.format("    sub-invalidation: %.2f\n", b.getSubwaveInvalidation()));
+                    }
+                }
+                sb.append("\n");
+            }
+        }
+
+        // ── Section 4: Top Scenarios ───────────────────────────────────────────
+        if (analysis != null && analysis.getScenarios() != null && !analysis.getScenarios().isEmpty()) {
+            sb.append("=== TOP SCENARIOS ===\n");
+            List<WaveScenario> topScenarios = analysis.getScenarios().stream()
+                    .limit(3)
+                    .toList();
+            for (WaveScenario sc : topScenarios) {
+                sb.append(String.format("%s | %s | floor=%.2f\n",
+                        sc.getId() != null ? sc.getId() : "?",
+                        sc.getDirectionLabel() != null ? sc.getDirectionLabel() : (sc.getDirection() != null ? sc.getDirection().name() : "?"),
+                        sc.getScenarioInvalidation()));
+                if (sc.getHypotheses() != null) {
+                    sc.getHypotheses().stream().limit(3).forEach(h -> {
+                        String activation = h.getActivationStatus() != null ? h.getActivationStatus() : "?";
+                        if ("DISTANT".equals(activation) || "HISTORICAL".equals(activation)) return;
+                        sb.append(String.format("  %s [%s] score=%d",
+                                h.getId() != null ? h.getId() : "?",
+                                activation,
+                                h.getTotalScore()));
+                        if (h.getPrimaryTarget() != null)
+                            sb.append(String.format(" | target=%.2f(%s)",
+                                    h.getPrimaryTarget().getLevel(),
+                                    h.getPrimaryTarget().getRatio() != null ? h.getPrimaryTarget().getRatio() : ""));
+                        if (h.getInvalidationLevel() != 0)
+                            sb.append(String.format(" | inv=%.2f", h.getInvalidationLevel()));
+                        if (h.getDecisionLevel() != null)
+                            sb.append(String.format(" | decision=%.2f", h.getDecisionLevel()));
+                        sb.append("\n");
+                        if (h.getCurrentPositionDescription() != null)
+                            sb.append("    ").append(h.getCurrentPositionDescription(), 0,
+                                    Math.min(100, h.getCurrentPositionDescription().length())).append("\n");
+                    });
+                }
+                sb.append("\n");
+            }
+        }
+
+        // ── Section 5: Key Price Levels ────────────────────────────────────────
+        // Only include levels from the same hypotheses shown in TOP SCENARIOS (top 3 scenarios,
+        // top 3 non-DISTANT/non-HISTORICAL hypotheses per scenario).
+        if (analysis != null && analysis.getScenarios() != null) {
+            sb.append("=== KEY PRICE LEVELS ===\n");
+            Set<Double> seen = new java.util.LinkedHashSet<>();
+            List<WaveScenario> topScs = analysis.getScenarios().stream().limit(3).toList();
+            for (WaveScenario sc : topScs) {
+                if (sc.getHypotheses() == null) continue;
+                // Mirror the same filter used in TOP SCENARIOS output
+                List<WaveHypothesis> visibleHypotheses = sc.getHypotheses().stream()
+                        .limit(3)
+                        .filter(h -> {
+                            String activation = h.getActivationStatus() != null ? h.getActivationStatus() : "?";
+                            return !"DISTANT".equals(activation) && !"HISTORICAL".equals(activation);
+                        })
+                        .toList();
+                for (WaveHypothesis h : visibleHypotheses) {
+                    if (h.getDecisionLevel() != null && seen.add(h.getDecisionLevel()))
+                        sb.append(String.format("  decision  %.2f  (%s)\n",
+                                h.getDecisionLevel(),
+                                h.getDecisionLevelMeaning() != null ? h.getDecisionLevelMeaning() : "key level"));
+                    if (h.getInvalidationLevel() != 0 && seen.add(h.getInvalidationLevel()))
+                        sb.append(String.format("  inv       %.2f  (%s)\n",
+                                h.getInvalidationLevel(),
+                                h.getInvalidationRule() != null ? h.getInvalidationRule() : "invalidation"));
+                }
+                // Scenario floor for each of the top 3 scenarios
+                double floor = sc.getScenarioInvalidation();
+                if (floor != 0 && seen.add(floor))
+                    sb.append(String.format("  floor     %.2f  (%s floor)\n",
+                            floor, sc.getId() != null ? sc.getId() : "scenario"));
+            }
+            sb.append("\n");
+        }
+
+        // ── Section 6: Indicator State ─────────────────────────────────────────
+        if (analysis != null && analysis.getEnrichedPivots() != null
+                && !analysis.getEnrichedPivots().isEmpty()) {
+            sb.append("=== INDICATOR STATE ===\n");
+            for (Map.Entry<String, List<EnrichedPivot>> entry : analysis.getEnrichedPivots().entrySet()) {
+                String tf = entry.getKey();
+                List<EnrichedPivot> pivots = entry.getValue();
+                if (pivots == null || pivots.isEmpty()) continue;
+                // Use the last pivot (most recent)
+                EnrichedPivot last = pivots.get(pivots.size() - 1);
+                sb.append(String.format("[%s] RSI=%.1f  EWO=%.1f  MACD_hist=%.2f  ADX=%.1f  BB_pct=%.2f\n",
+                        tf,
+                        last.getRsi(),
+                        last.getEwo(),
+                        last.getMacdHistogram(),
+                        last.getAdx(),
+                        last.getBollingerPctB()));
             }
             sb.append("\n");
         }

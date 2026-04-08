@@ -142,6 +142,10 @@ public class WaveCount {
      */
     private boolean structuralOnly;
 
+    /** True when this wave count is fully in the past (all pivots older than 150 bars, count complete) */
+    @Builder.Default
+    private boolean historical = false;
+
     public boolean isValid() {
         return ruleViolations == null || ruleViolations.isEmpty();
     }

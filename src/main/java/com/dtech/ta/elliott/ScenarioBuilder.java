@@ -242,6 +242,11 @@ public class ScenarioBuilder {
             else                    activationStatus = "DISTANT";
         }
 
+        // Override for historical wave counts
+        if (wc.isHistorical()) {
+            activationStatus = "HISTORICAL";
+        }
+
         return WaveHypothesis.builder()
                 .id("H" + UUID.randomUUID().toString().substring(0, 4))
                 .waveCount(wc)
@@ -411,6 +416,44 @@ public class ScenarioBuilder {
                     targets.add(target(last.getPrice() * 1.10, "Triangle breakout estimate", "WE", 0.5));
                 }
             }
+            case LEADING_DIAGONAL -> {
+                // Leading diagonal in W1 position: expect W2 to retrace 78.6%–100% of diagonal
+                if (pivots.size() >= 2) {
+                    EnrichedPivot w1Start = pivots.get(0);
+                    EnrichedPivot w1End   = pivots.get(pivots.size() - 1);
+                    double diagLen = Math.abs(w1End.getPrice() - w1Start.getPrice());
+                    boolean bullish = wc.isBullish();
+                    // W2 retrace targets from W1 end
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 0.786 : w1End.getPrice() + diagLen * 0.786,
+                        "W2 = 78.6% retrace of leading diagonal", "W2", 0.5));
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 1.0   : w1End.getPrice() + diagLen * 1.0,
+                        "W2 = 100% retrace of leading diagonal (full retrace)", "W2", 0.35));
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 0.618 : w1End.getPrice() + diagLen * 0.618,
+                        "W2 = 61.8% retrace of leading diagonal (shallow)", "W2", 0.15));
+                }
+            }
+            case ENDING_DIAGONAL -> {
+                // Ending diagonal in W5/WC position: sharp reversal expected back to diagonal origin (W1 start)
+                if (pivots.size() >= 2) {
+                    EnrichedPivot w1Start = pivots.get(0);
+                    EnrichedPivot w1End   = pivots.get(pivots.size() - 1);
+                    double diagLen = Math.abs(w1End.getPrice() - w1Start.getPrice());
+                    // Primary target: full retrace back to diagonal origin
+                    targets.add(target(w1Start.getPrice(),
+                        "Ending diagonal reversal target = diagonal origin (W1 start)", "Reversal", 0.55));
+                    // Secondary: 61.8% retrace of diagonal
+                    boolean bullish = wc.isBullish();
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 0.618 : w1End.getPrice() + diagLen * 0.618,
+                        "Ending diagonal 61.8% retrace (conservative reversal)", "Reversal", 0.3));
+                    targets.add(target(
+                        bullish ? w1End.getPrice() - diagLen * 1.618 : w1End.getPrice() + diagLen * 1.618,
+                        "Ending diagonal 161.8% extension (extended reversal)", "Reversal", 0.15));
+                }
+            }
             case DOUBLE_ZIGZAG, COMPLEX_WXY -> {
                 // WY is the final leg — treat like WC of a ZIGZAG
                 if (wc.getCurrentWaveInProgress() == WaveLabel.WC && pivots.size() >= 3) {
@@ -461,6 +504,12 @@ public class ScenarioBuilder {
                         : pivots.get(0).getPrice() * 1.02;
             }
             case TRIANGLE -> pivots.get(0).getPrice() * 0.97;
+            case LEADING_DIAGONAL, ENDING_DIAGONAL -> {
+                // Diagonal invalidated if price breaks back through W1 start (origin)
+                yield wc.isBullish()
+                    ? pivots.get(0).getPrice() * 0.98
+                    : pivots.get(0).getPrice() * 1.02;
+            }
             default -> pivots.get(0).getPrice() * 0.97;
         };
     }
@@ -472,6 +521,8 @@ public class ScenarioBuilder {
             case ZIGZAG, FLAT, EXPANDED_FLAT ->
                     "Correction invalidated if price breaches Wave A origin at " + fmt(level);
             case TRIANGLE -> "Triangle invalidated on strong directional break below " + fmt(level);
+            case LEADING_DIAGONAL, ENDING_DIAGONAL ->
+                "Diagonal invalidated if price breaks through origin at " + fmt(level);
             default -> "Invalidated below " + fmt(level);
         };
     }

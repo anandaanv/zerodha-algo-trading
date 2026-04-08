@@ -31,7 +31,8 @@ public class NestedCorrectiveContextBuilder {
             Map<String, TfContext> tfContexts,
             Map<String, List<EnrichedPivot>> enrichedByTf,
             List<PatternMatch> patterns,
-            double currentPrice) {
+            double currentPrice,
+            List<WaveCount> waveCounts) {
 
         List<NestedWaveContext> results = new ArrayList<>();
 
@@ -113,7 +114,10 @@ public class NestedCorrectiveContextBuilder {
                     .code("TRUNCATED_C_OF_B")
                     .label("Truncated C-of-B -> early 4C")
                     .probability(truncationProb)
-                    .targetLevel(last.getPrice())
+                    .targetLevel(extensionUp
+                            ? last.getPrice() - (extensionTarget - last.getPrice())
+                            : last.getPrice() + (last.getPrice() - extensionTarget))
+                    .bullish(!extensionUp)
                     .trigger(extensionUp
                             ? "Lose the latest swing support near " + fmt(last.getPrice())
                             : "Reject back below the latest swing near " + fmt(last.getPrice()))
@@ -127,6 +131,7 @@ public class NestedCorrectiveContextBuilder {
                     .label("Extended C-of-B -> 0.618 target before 4C")
                     .probability(extensionProb)
                     .targetLevel(extensionTarget)
+                    .bullish(extensionUp)
                     .trigger(extensionUp
                             ? "Hold above " + fmt(last.getPrice()) + " and expand toward " + fmt(extensionTarget)
                             : "Stay below " + fmt(last.getPrice()) + " and continue toward " + fmt(extensionTarget))
@@ -185,7 +190,7 @@ public class NestedCorrectiveContextBuilder {
                     .build());
         }
 
-        enrichTriggeredBranchSubwaves(results, enrichedByTf, tfOrder);
+        enrichTriggeredBranchSubwaves(results, enrichedByTf, tfOrder, waveCounts);
         results.sort(Comparator.comparing(NestedWaveContext::getTimeframe));
         return results;
     }
@@ -250,6 +255,7 @@ public class NestedCorrectiveContextBuilder {
                     .trigger(b.getTrigger())
                     .rationale(b.getRationale())
                     .nextHigherDegreeMove(b.getNextHigherDegreeMove())
+                    .bullish(b.getBullish())
                     .triggerPrice(anchorPrice)
                     .currentPrice(currentPrice)
                     .triggered(b.getCode() != null && b.getCode().startsWith("TRUNCATED") && truncationTriggered)
@@ -294,7 +300,8 @@ public class NestedCorrectiveContextBuilder {
      */
     private void enrichTriggeredBranchSubwaves(List<NestedWaveContext> contexts,
                                                 Map<String, List<EnrichedPivot>> enrichedByTf,
-                                                List<String> tfOrder) {
+                                                List<String> tfOrder,
+                                                List<WaveCount> waveCounts) {
         for (NestedWaveContext ctx : contexts) {
             java.time.Instant anchorTs = ctx.getAnchorTimestamp();
             if (anchorTs == null) continue;
@@ -349,6 +356,26 @@ public class NestedCorrectiveContextBuilder {
                     subwaveLabel    = "4C1 in progress";
                     subwaveInvalidation = p0.getPrice();
                     subwaveNextMove = "4C1 in progress — watch for bounce to confirm 4C2";
+
+                    // Check if an ENDING_DIAGONAL on the same timeframe matches this sub-wave
+                    if (waveCounts != null) {
+                        double subAtr = p0.getAtrAtPivot() > 0 ? p0.getAtrAtPivot() : Math.abs(ctx.getAnchorLevel() - p0.getPrice()) * 0.05;
+                        WaveCount matchingDiag = waveCounts.stream()
+                            .filter(wc -> WaveCount.WaveType.ENDING_DIAGONAL.equals(wc.getWaveType()))
+                            .filter(wc -> ctx.getTimeframe().equals(wc.getPrimaryTimeframe())
+                                       || (wc.getPrimaryTimeframe() != null && ctx.getTimeframe() != null
+                                           && (ctx.getTimeframe().equals(wc.getPrimaryTimeframe())
+                                               || tfOrder.indexOf(ctx.getTimeframe()) + 1 == tfOrder.indexOf(wc.getPrimaryTimeframe()))))
+                            .filter(wc -> wc.getPivots() != null && !wc.getPivots().isEmpty())
+                            .filter(wc -> Math.abs(wc.getPivots().get(wc.getPivots().size() - 1).getPrice() - p0.getPrice()) <= subAtr * 2)
+                            .findFirst().orElse(null);
+                        if (matchingDiag != null) {
+                            double diagOrigin = matchingDiag.getPivots().get(0).getPrice();
+                            subwaveStructureType = "ENDING_DIAGONAL";
+                            subwaveNextMove = String.format("Ending diagonal complete — expect sharp reversal to %.2f", diagOrigin);
+                            subwaveInvalidation = diagOrigin;
+                        }
+                    }
                 } else if (n == 2) {
                     EnrichedPivot p0 = subPivots.get(0);
                     EnrichedPivot p1 = subPivots.get(1);
@@ -384,6 +411,7 @@ public class NestedCorrectiveContextBuilder {
                         .trigger(b.getTrigger())
                         .rationale(b.getRationale())
                         .nextHigherDegreeMove(b.getNextHigherDegreeMove())
+                        .bullish(b.getBullish())
                         .triggered(b.isTriggered())
                         .triggerPrice(b.getTriggerPrice())
                         .currentPrice(b.getCurrentPrice())

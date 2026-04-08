@@ -61,5 +61,8 @@ public class NestedWaveContext {
 
         /** Price level that invalidates the current sub-wave count (typically the 4C1 high/low). */
         private Double subwaveInvalidation;
+
+        /** True = bullish branch (price expected to go up), False = bearish, null = unknown */
+        private Boolean bullish;
     }
 }

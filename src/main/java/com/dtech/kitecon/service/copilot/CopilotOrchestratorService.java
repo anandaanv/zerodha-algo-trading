@@ -319,19 +319,16 @@ public class CopilotOrchestratorService {
             - If the pre-computed evidence is ambiguous, say so in confidenceLayers
             - If no trade setup is actionable right now, say so clearly
             - Always reference which scenario and hypothesis ID you are confirming
-            - The prompt contains numbered ZIGZAG PIVOTS (Z0, Z1, ...) per timeframe — these are the
-              raw price pivots the engine detected. Wave counts and patterns reference these by Zn index.
-            - ACTIVE PATTERNS are pre-filtered to only those whose price range contains the current price.
-              Do not invent or reference patterns not listed.
-            - When writing waveContext, always cite actual Zn pivot references and their prices/dates.
-              E.g. 'W3 peaked at Z5 (28400, 2024-02-20), W4 correction underway from Z5, currently Z6 (26100).'
+            - When writing waveContext, cite actual wave prices and dates from the wave counts provided.
+            - When multiple hypotheses exist within a scenario, prefer ACTIVE status over WATCHING status unless the score difference exceeds 15 points. ACTIVE means price is at the decision level NOW.
+            - Pay special attention to ENDING_DIAGONAL hypotheses in S2. An ending diagonal at current price signals potential sharp reversal. If such a hypothesis exists and is ACTIVE, it must be addressed in anomalyFlags even if not selected as the primary scenario.
 
             Return a JSON FINDING response:
             {
               "type": "FINDING",
               "hypothesisLabel": "short label e.g. Wave 4 Triangle → Wave 5 Launch",
               "hypothesisDescription": "detailed description of the confirmed scenario",
-              "waveContext": "Wave position with actual prices from wave_key_points. Example: 'W3 peaked at 25432 (2024-03-15), W4 correction from that peak, B-wave high at 24800 (2024-04-10), now in C-of-B targeting 23200.' Always cite actual pivot prices and dates.",
+              "waveContext": "Wave position with actual prices and dates from the wave counts provided.",
               "pattern": "the key pattern driving the setup (or null)",
               "currentStage": "WATCHING | ENTRY_READY | INVALIDATED",
               "confidenceLayers": {
