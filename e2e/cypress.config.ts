@@ -17,6 +17,14 @@ export default defineConfig({
       on('after:screenshot', (details) => {
         console.log('[Evidence]', details.path);
       });
+
+      // Task for logging messages from test code
+      on('task', {
+        log(message: string) {
+          console.log(message);
+          return null;
+        },
+      });
     },
   },
   env: {
