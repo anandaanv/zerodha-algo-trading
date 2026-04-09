@@ -124,6 +124,42 @@ public class PivotIndicatorEnricher {
             bandWidths[i] = mid > 0 ? (up - lo) / mid : 0;
         }
 
+        // Stoch-RSI: over 14 bars of RSI, compute (rsi - min14) / (max14 - min14), then K=SMA3, D=SMA3(K)
+        double[] rsiValues = new double[totalBars];
+        for (int i = 0; i < totalBars; i++) {
+            rsiValues[i] = safeDouble(rsi.getValue(i));
+        }
+        double[] stochRsiRaw = new double[totalBars];
+        for (int i = 0; i < totalBars; i++) {
+            int start = Math.max(0, i - 13);
+            double minRsi = rsiValues[start];
+            double maxRsi = rsiValues[start];
+            for (int j = start + 1; j <= i; j++) {
+                if (rsiValues[j] < minRsi) minRsi = rsiValues[j];
+                if (rsiValues[j] > maxRsi) maxRsi = rsiValues[j];
+            }
+            double range = maxRsi - minRsi;
+            stochRsiRaw[i] = range > 0 ? (rsiValues[i] - minRsi) / range : 0.0;
+        }
+        // K = 3-period SMA of stochRsiRaw
+        double[] stochRsiK = new double[totalBars];
+        for (int i = 0; i < totalBars; i++) {
+            if (i < 2) {
+                stochRsiK[i] = stochRsiRaw[i];
+            } else {
+                stochRsiK[i] = (stochRsiRaw[i] + stochRsiRaw[i-1] + stochRsiRaw[i-2]) / 3.0;
+            }
+        }
+        // D = 3-period SMA of K
+        double[] stochRsiD = new double[totalBars];
+        for (int i = 0; i < totalBars; i++) {
+            if (i < 2) {
+                stochRsiD[i] = stochRsiK[i];
+            } else {
+                stochRsiD[i] = (stochRsiK[i] + stochRsiK[i-1] + stochRsiK[i-2]) / 3.0;
+            }
+        }
+
         // MACD histogram amplitudes (for W4 contraction detection)
         double[] macdAmplitudes = new double[totalBars];
         for (int i = 0; i < totalBars; i++) {
@@ -212,6 +248,8 @@ public class PivotIndicatorEnricher {
                     .bollingerWalk(zp.isHigh() ? price >= upper : price <= lower)
                     .bollingerSqueeze(squeeze)
                     .emaStackOrder(emaStack)
+                    .stochRsiK(stochRsiK[idx])
+                    .stochRsiD(stochRsiD[idx])
                     .build());
         }
 
