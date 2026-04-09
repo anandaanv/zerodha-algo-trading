@@ -99,6 +99,10 @@ public class EnrichedPivot {
      */
     private String emaStackOrder;
 
+    // ── Stoch-RSI ─────────────────────────────────────────────────────────────
+    private double stochRsiK;
+    private double stochRsiD;
+
     // ── Convenience ──────────────────────────────────────────────────────────
     public boolean isHigh() { return type == ZigZagPoint.Type.HIGH; }
     public boolean isLow()  { return type == ZigZagPoint.Type.LOW; }
