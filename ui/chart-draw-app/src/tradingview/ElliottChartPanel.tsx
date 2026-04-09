@@ -9,11 +9,14 @@ interface Props {
   layoutId: number | null;
   getChartState?: () => string;
   onPatternsDetected?: (patterns: any[]) => void;
+  onAnalysisReady?: (result: any) => void;
+  onPatternSelect?: (idx: number | null) => void;
+  selectedPatternIdx?: number | null;
 }
 
 type LoadingAction = 'scan' | 'scan-ai' | null;
 
-export default function ElliottChartPanel({ open, onClose, symbol, timeframes, layoutId, getChartState, onPatternsDetected }: Props) {
+export default function ElliottChartPanel({ open, onClose, symbol, timeframes, layoutId, getChartState, onPatternsDetected, onAnalysisReady, onPatternSelect, selectedPatternIdx }: Props) {
   const [loading, setLoading] = useState<LoadingAction>(null);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,14 +27,16 @@ export default function ElliottChartPanel({ open, onClose, symbol, timeframes, l
   const runScan = useCallback(async (withAi: boolean) => {
     const action: LoadingAction = withAi ? 'scan-ai' : 'scan';
     setLoading(action); setError(null); setResult(null);
+    onPatternSelect?.(null);
     try {
       const res = await runFullElliott(symbol, primaryTf, tfParam, withAi);
       setResult(res);
+      onAnalysisReady?.(res);
       const patterns = res?.waveAnalysis?.allPatterns ?? [];
       if (patterns.length > 0) onPatternsDetected?.(patterns);
     } catch (e: any) { setError(e.message ?? 'Scan failed'); }
     finally { setLoading(null); }
-  }, [symbol, primaryTf, tfParam, onPatternsDetected]);
+  }, [symbol, primaryTf, tfParam, onPatternsDetected, onAnalysisReady]);
 
   return (
     <div style={{ width: 400, height: '100%', background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -157,15 +162,38 @@ export default function ElliottChartPanel({ open, onClose, symbol, timeframes, l
             {/* Detected Patterns (from waveAnalysis) */}
             {result.waveAnalysis?.allPatterns?.length > 0 && (
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontWeight: 600, color: '#555', marginBottom: 3 }}>Detected Patterns</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                  <div style={{ fontWeight: 600, color: '#555' }}>Detected Patterns</div>
+                  {selectedPatternIdx != null && (
+                    <button
+                      onClick={() => onPatternSelect?.(null)}
+                      style={{ fontSize: 10, padding: '2px 7px', background: '#e3f2fd', border: '1px solid #90caf9', borderRadius: 4, cursor: 'pointer', color: '#1565c0' }}
+                    >
+                      Clear selection
+                    </button>
+                  )}
+                </div>
                 {result.waveAnalysis.allPatterns
                   .filter((p: any) => p.status !== 'INVALIDATED')
                   .slice(0, 8)
                   .map((p: any, i: number) => {
                     const isBull = ['DOUBLE_BOTTOM','TRIPLE_BOTTOM','INVERTED_HEAD_AND_SHOULDERS','CUP_AND_HANDLE','ROUNDING_BOTTOM','ASCENDING_TRIANGLE','BULL_FLAG','BULL_PENNANT','FALLING_WEDGE'].includes(p.type);
                     const statusColor = p.status === 'CONFIRMED' ? '#388e3c' : p.status === 'WATCHING' ? '#f57c00' : '#607d8b';
+                    const isSelected = selectedPatternIdx === i;
                     return (
-                      <div key={i} style={{ padding: '4px 8px', background: '#fafafa', border: `1px solid ${statusColor}`, borderRadius: 4, marginBottom: 4 }}>
+                      <div
+                        key={i}
+                        onClick={() => onPatternSelect?.(isSelected ? null : i)}
+                        style={{
+                          padding: '4px 8px',
+                          background: isSelected ? '#e8f5e9' : '#fafafa',
+                          border: `1px solid ${isSelected ? '#2e7d32' : statusColor}`,
+                          borderRadius: 4,
+                          marginBottom: 4,
+                          cursor: 'pointer',
+                          boxShadow: isSelected ? '0 0 0 2px #a5d6a7' : 'none',
+                        }}
+                      >
                         <span style={{ fontWeight: 600, color: isBull ? '#2e7d32' : '#c62828' }}>{p.type?.replace(/_/g, ' ')}</span>
                         {p.timeframe && <span style={{ color: '#888', marginLeft: 6, fontSize: 10 }}>[{p.timeframe}]</span>}
                         <span style={{ color: statusColor, marginLeft: 6, fontSize: 10 }}>{p.status}</span>

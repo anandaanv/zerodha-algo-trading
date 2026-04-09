@@ -40,6 +40,8 @@ export default function TVChartApp() {
   const widgetRef = useRef<any>(null);
   const widgetReadyRef = useRef(false);
   const patternShapeIdsRef = useRef<any[]>([]);
+  const lastAnalysisResultRef = useRef<any>(null);
+  const selectedPatternIdxRef = useRef<number | null>(null);
   const [isAnalysisPanelOpen, setIsAnalysisPanelOpen] = useState(false);
   const [isElliottPanelOpen, setIsElliottPanelOpen] = useState(false);
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
@@ -399,50 +401,242 @@ export default function TVChartApp() {
     };
   }, []); // Run once — tab switching is handled imperatively
 
-  // ─── drawPatternsOnChart: render detected patterns on the chart ──────────
+  // ─── drawAnalysisOnChart: render full Elliott analysis on the chart ──────
 
-  const drawPatternsOnChart = useCallback((patterns: any[]) => {
+  const drawAnalysisOnChart = useCallback((result: any, selectedIdx: number | null = null) => {
     if (!widgetRef.current || !widgetReadyRef.current) return;
     try {
       const chart = widgetRef.current.activeChart();
-      // Remove previous pattern drawings
+      // Remove previous drawings
       patternShapeIdsRef.current.forEach(id => { try { chart.removeEntity(id); } catch {} });
       patternShapeIdsRef.current = [];
+      lastAnalysisResultRef.current = result;
+      selectedPatternIdxRef.current = selectedIdx;
 
+      const pushId = (id: any) => { if (id) patternShapeIdsRef.current.push(id); };
+
+      const toEpoch = (ts: string | null | undefined): number =>
+        ts ? Math.floor(new Date(ts).getTime() / 1000) : 0;
+
+      // ── helper: draw a trend_line between two points ──────────────────────
+      const drawTrendLine = (
+        p1: { time: number; price: number },
+        p2: { time: number; price: number },
+        color: string,
+        linestyle: number,
+        linewidth = 1
+      ) => {
+        try {
+          const id = chart.createMultipointShape(
+            [{ time: p1.time, price: p1.price }, { time: p2.time, price: p2.price }],
+            { shape: 'trend_line', lock: false, overrides: { linecolor: color, linestyle, linewidth } }
+          );
+          pushId(id);
+        } catch {}
+      };
+
+      // ── helper: draw polyline through array of points ─────────────────────
+      const drawPolyline = (
+        pts: { time: number; price: number }[],
+        color: string,
+        linestyle: number,
+        linewidth = 1
+      ) => {
+        for (let i = 0; i < pts.length - 1; i++) {
+          drawTrendLine(pts[i], pts[i + 1], color, linestyle, linewidth);
+        }
+      };
+
+      // ── helper: draw horizontal line ──────────────────────────────────────
       const now = Math.floor(Date.now() / 1000);
+      const drawHLine = (price: number, label: string, color: string, linestyle: number) => {
+        try {
+          const id = chart.createShape(
+            { time: now, price },
+            {
+              shape: 'horizontal_line', text: label, lock: false,
+              overrides: { linecolor: color, linestyle, linewidth: 1, showLabel: true, textcolor: color, horzLabelsAlign: 'right', vertLabelsAlign: 'bottom' },
+            }
+          );
+          pushId(id);
+        } catch {}
+      };
+
+      // ── helper: draw text label at a point ────────────────────────────────
+      const drawLabel = (time: number, price: number, text: string, color: string) => {
+        try {
+          const id = chart.createShape(
+            { time, price },
+            {
+              shape: 'text', text, lock: false,
+              overrides: { color, fontsize: 11, bold: true },
+            }
+          );
+          pushId(id);
+        } catch {}
+      };
+
+      // ════════════════════════════════════════════════════════════════════════
+      // LAYER 1: Pattern shapes
+      // ════════════════════════════════════════════════════════════════════════
+      const patterns: any[] = result?.waveAnalysis?.allPatterns ?? [];
+      const BULLISH_TYPES = ['DOUBLE_BOTTOM','TRIPLE_BOTTOM','INVERTED_HEAD_AND_SHOULDERS','CUP_AND_HANDLE','ROUNDING_BOTTOM','ASCENDING_TRIANGLE','BULL_FLAG','BULL_PENNANT','FALLING_WEDGE','BROADENING_BOTTOM','LEADING_DIAGONAL'];
+
       patterns
         .filter((p: any) => p.status !== 'INVALIDATED')
-        .forEach((p: any) => {
-          const isBull = ['DOUBLE_BOTTOM','TRIPLE_BOTTOM','INVERTED_HEAD_AND_SHOULDERS','CUP_AND_HANDLE','ROUNDING_BOTTOM','ASCENDING_TRIANGLE','BULL_FLAG','BULL_PENNANT','FALLING_WEDGE'].includes(p.type);
+        .forEach((p: any, idx: number) => {
+          // If a pattern is selected, skip all others
+          if (selectedIdx !== null && idx !== selectedIdx) return;
+          const isBull = BULLISH_TYPES.includes(p.type);
           const baseColor = isBull ? '#2e7d32' : '#c62828';
           const isDashed = p.status !== 'CONFIRMED';
+          const linestyle = isDashed ? 2 : 0;
           const tf = p.timeframe ? ` [${p.timeframe}]` : '';
-          const patLabel = p.type?.replace(/_/g, ' ') ?? '';
+          const patLabel = (p.type?.replace(/_/g, ' ') ?? '') + tf;
 
-          const drawLine = (price: number, label: string, color: string, linestyle: number) => {
-            try {
-              const id = chart.createShape(
-                { time: now, price },
-                {
-                  shape: 'horizontal_line',
-                  text: label,
-                  lock: false,
-                  overrides: { linecolor: color, linestyle, linewidth: 1, showLabel: true, textcolor: color, horzLabelsAlign: 'right', vertLabelsAlign: 'bottom' },
-                }
-              );
-              if (id) patternShapeIdsRef.current.push(id);
-            } catch {}
-          };
+          // Build pivot points if available
+          const timestamps: string[] = p.pivotTimestamps ?? [];
+          const prices: number[] = p.pivotPrices ?? [];
+          const hasPoints = timestamps.length >= 2 && prices.length === timestamps.length;
 
-          if (p.support != null)    drawLine(p.support,    `${patLabel} support${tf}`,    baseColor, isDashed ? 2 : 0);
-          if (p.resistance != null) drawLine(p.resistance, `${patLabel} resistance${tf}`, baseColor, isDashed ? 2 : 0);
-          if (p.neckline != null)   drawLine(p.neckline,   `${patLabel} neckline${tf}`,   '#ff9800',  1);
-          if (p.target != null)     drawLine(p.target,     `${patLabel} target${tf}`,     isBull ? '#1565c0' : '#880e4f', 2);
+          if (hasPoints) {
+            const pts = timestamps.map((ts: string, idx: number) => ({
+              time: toEpoch(ts),
+              price: prices[idx],
+            })).filter(pt => pt.time > 0);
+
+            if (pts.length >= 2) {
+              // Determine drawing strategy by pattern type
+              const type: string = p.type ?? '';
+              const isTwoTrendline = ['ASCENDING_TRIANGLE','DESCENDING_TRIANGLE','RISING_WEDGE','FALLING_WEDGE',
+                'BULL_FLAG','BEAR_FLAG','BULL_PENNANT','BEAR_PENNANT','BROADENING_TOP','BROADENING_BOTTOM'].includes(type);
+              const isHnS = ['HEAD_AND_SHOULDERS','INVERTED_HEAD_AND_SHOULDERS'].includes(type);
+
+              if (isTwoTrendline && pts.length >= 4) {
+                // Split into even (highs/resistance side) and odd (lows/support side) indices
+                const side1 = pts.filter((_: any, i: number) => i % 2 === 0);
+                const side2 = pts.filter((_: any, i: number) => i % 2 === 1);
+                if (side1.length >= 2) drawPolyline(side1, baseColor, linestyle, 1);
+                if (side2.length >= 2) drawPolyline(side2, baseColor, linestyle, 1);
+              } else if (isHnS && pts.length >= 5) {
+                // Polyline through all pivots, plus slanted neckline between pts[1] and pts[3]
+                drawPolyline(pts, baseColor, linestyle, 1);
+                drawTrendLine(pts[1], pts[3], '#ff9800', 1, 1); // neckline
+              } else {
+                // Default: polyline through all pivots
+                drawPolyline(pts, baseColor, linestyle, 1);
+              }
+
+              // Label at first pivot
+              drawLabel(pts[0].time, pts[0].price, patLabel, baseColor);
+            }
+          } else {
+            // Fallback: horizontal lines
+            if (p.support != null)    drawHLine(p.support,    `${patLabel} support`,    baseColor, linestyle);
+            if (p.resistance != null) drawHLine(p.resistance, `${patLabel} resistance`, baseColor, linestyle);
+            if (p.neckline != null)   drawHLine(p.neckline,   `${patLabel} neckline`,   '#ff9800',  1);
+          }
+
+          // Always draw target as dashed horizontal line
+          if (p.target != null) drawHLine(p.target, `${patLabel} target`, isBull ? '#1565c0' : '#880e4f', 2);
         });
+
+      // ════════════════════════════════════════════════════════════════════════
+      // LAYER 2: Elliott Wave counts
+      // ════════════════════════════════════════════════════════════════════════
+      const waveCounts: any[] = result?.waveAnalysis?.waveCounts ?? [];
+
+      // Sort by total score desc, skip historical, take top 3
+      const labelDisplay: Record<string, string> = {
+        W1:'1', W2:'2', W3:'3', W4:'4', W5:'5',
+        WA:'A', WB:'B', WC:'C', WD:'D', WE:'E',
+        WX:'X', WY:'Y', WZ:'Z',
+      };
+
+      const waveColor = (wc: any, rank: number) => {
+        if (rank === 0) {
+          if (wc.waveType === 'LEADING_DIAGONAL' || wc.waveType === 'ENDING_DIAGONAL') return '#6a1b9a';
+          if (wc.waveType?.includes('ZIGZAG') || wc.waveType?.includes('FLAT') || wc.waveType?.includes('TRIANGLE') || wc.waveType?.includes('COMPLEX') || wc.waveType?.includes('DOUBLE')) return '#ff8f00';
+          return wc.bullish ? '#1565c0' : '#c62828';
+        }
+        return '#9e9e9e'; // secondary counts in grey
+      };
+
+      const totalScore = (wc: any) =>
+        (wc.fibonacciScore ?? 0) + (wc.indicatorScore ?? 0) + (wc.crossTfScore ?? 0) +
+        (wc.alternationScore ?? 0) + (wc.proportionalityBonus ?? 0);
+
+      const activeWaveCounts = waveCounts
+        .filter((wc: any) => !wc.historical && wc.pivots?.length >= 2)
+        .sort((a: any, b: any) => totalScore(b) - totalScore(a))
+        .slice(0, 3);
+
+      activeWaveCounts.forEach((wc: any, rank: number) => {
+        const color = waveColor(wc, rank);
+        const linestyle = rank === 0 ? 0 : 2; // top count solid, others dashed
+        const linewidth = rank === 0 ? 2 : 1;
+        const tfSuffix = wc.primaryTimeframe ? ` [${wc.primaryTimeframe}]` : '';
+
+        // Build points with wave labels
+        const pivotToWave: Record<number, string> = wc.pivotToWave ?? {};
+        const pts: { time: number; price: number; label: string }[] = (wc.pivots ?? [])
+          .map((p: any) => ({
+            time: toEpoch(p.timestamp),
+            price: p.price,
+            label: labelDisplay[pivotToWave[p.barIndex]] ?? '',
+          }))
+          .filter((pt: any) => pt.time > 0);
+
+        if (pts.length < 2) return;
+
+        // Draw wave polyline
+        drawPolyline(pts, color, linestyle, linewidth);
+
+        // Label each pivot
+        pts.forEach(pt => {
+          if (pt.label) {
+            drawLabel(pt.time, pt.price, pt.label + tfSuffix, color);
+          }
+        });
+
+        // Draw current-wave-in-progress as dashed line from last pivot to now
+        if (wc.currentWaveInProgress && wc.currentWaveInProgress !== 'UNKNOWN') {
+          const last = pts[pts.length - 1];
+          const wipLabel = labelDisplay[wc.currentWaveInProgress] ?? wc.currentWaveInProgress;
+          drawTrendLine(last, { time: now, price: last.price }, color, 2, 1);
+          drawLabel(now, last.price, `→${wipLabel}${tfSuffix}`, color);
+        }
+      });
+
+      // ════════════════════════════════════════════════════════════════════════
+      // LAYER 3: Entry candidates + confluence zones
+      // ════════════════════════════════════════════════════════════════════════
+      const entryCandidates: any[] = result?.entryCandidates ?? [];
+      entryCandidates.slice(0, 3).forEach((ec: any, i: number) => {
+        const isBull = ec.direction === 'LONG' || ec.bullish;
+        const tfLabel = ec.timeframe ? ` [${ec.timeframe}]` : '';
+        if (ec.entryPrice != null) drawHLine(ec.entryPrice, `ENTRY${tfLabel}`, isBull ? '#00796b' : '#ad1457', 2);
+        if (ec.stopLoss != null)   drawHLine(ec.stopLoss,   `SL${tfLabel}`,    '#ff6f00', 2);
+        if (ec.target != null)     drawHLine(ec.target,     `T1${tfLabel}`,    isBull ? '#1565c0' : '#880e4f', 2);
+      });
+
+      const confluenceZones: any[] = result?.confluenceZones ?? [];
+      confluenceZones.slice(0, 5).forEach((cz: any) => {
+        if (cz.priceTop != null)    drawHLine(cz.priceTop,    `CONF ↑`, '#f57f17', 1);
+        if (cz.priceBottom != null) drawHLine(cz.priceBottom, `CONF ↓`, '#f57f17', 1);
+      });
+
     } catch (e) {
-      console.error('Failed to draw patterns:', e);
+      console.error('Failed to draw analysis:', e);
     }
   }, []);
+
+  const handlePatternSelect = useCallback((idx: number | null) => {
+    selectedPatternIdxRef.current = idx;
+    if (lastAnalysisResultRef.current) {
+      drawAnalysisOnChart(lastAnalysisResultRef.current, idx);
+    }
+  }, [drawAnalysisOnChart]);
 
   // ─── getChartState: for AI analysis (active chart, live) ─────────────────
 
@@ -569,7 +763,9 @@ export default function TVChartApp() {
             )]}
             layoutId={Number(localStorage.getItem('lastLayoutId')) || null}
             getChartState={getChartState}
-            onPatternsDetected={drawPatternsOnChart}
+            onAnalysisReady={drawAnalysisOnChart}
+            onPatternSelect={handlePatternSelect}
+            selectedPatternIdx={selectedPatternIdxRef.current}
           />
         </div>
       </div>
