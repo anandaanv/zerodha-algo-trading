@@ -20,6 +20,10 @@ public class DetectedPattern {
     double  keyLevel;
     Instant keyLevelTime;
 
+    // For triangle watching patterns: MACD histogram trendline anchors (B and D pivots)
+    Instant pivotBTime;   // first same-type pivot (B): low for ascending/symmetric-bull, high for descending/symmetric-bear
+    Instant pivotDTime;   // second same-type pivot (D)
+
     // For confirmation patterns (and combo entry): actual trade fields
     double  entryPrice;
     double  stopLoss;

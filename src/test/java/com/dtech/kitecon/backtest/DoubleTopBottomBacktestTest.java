@@ -80,4 +80,21 @@ class DoubleTopBottomBacktestTest {
         assertTrue(f.exists());
         assertTrue(f.length() >= 0);
     }
+
+    @Test
+    void runTop20ComboBacktest() throws Exception {
+        List<String> top20 = List.of(
+            "RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK",
+            "INFY", "SBIN", "BAJFINANCE", "HINDUNILVR", "ITC",
+            "LT", "KOTAKBANK", "AXISBANK", "ASIANPAINT", "HCLTECH",
+            "MARUTI", "SUNPHARMA", "TITAN", "ADANIENT", "NTPC"
+        );
+        String csvPath = "/tmp/top20_combo_backtest.csv";
+        patternComboBacktestService.runMultipleAndWriteCsv(top20, csvPath);
+        System.out.println("CSV written to: " + csvPath);
+        File f = new File(csvPath);
+        assertTrue(f.exists());
+        assertTrue(f.length() >= 0);
+    }
+
 }
