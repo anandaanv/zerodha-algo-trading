@@ -238,7 +238,7 @@ public class DoubleTopBottomBacktestService {
                     buildAndAddSetup("DOUBLE_BOTTOM", "C1", symbol, low1Price, low2Price, neckline,
                             low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                             macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2, macdHistAtPriorLow, macdHistAtLow2, results);
+                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2, macdHistAtPriorLow, macdHistAtLow2, true, results);
                     break;
                 }
             }
@@ -282,11 +282,30 @@ public class DoubleTopBottomBacktestService {
                         buildAndAddSetup("DOUBLE_BOTTOM", "C3", symbol, low1Price, low2Price, neckline,
                                 low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                                 macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2, macdHistAtPriorLow, macdHistAtLow2, results);
+                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2, macdHistAtPriorLow, macdHistAtLow2, true, results);
                         break;
                     }
                 }
                 break; // only first retest
+            }
+        }
+
+        // ── FAILURE: price closes below pattern SL → reverse SHORT trade ──────
+        double patternSL = Math.min(low1Price, low2Price);
+        for (int i = low2BarIdx + 1; i < Math.min(bars.size(), low2BarIdx + 30); i++) {
+            Bar b = bars.get(i);
+            if (b.getClosePrice().doubleValue() < patternSL) {
+                if (i + 1 >= bars.size()) break;
+                double failureEntry  = bars.get(i + 1).getOpenPrice().doubleValue();
+                double failureSL     = b.getHighPrice().doubleValue();
+                double failureTarget = failureEntry - patternHeight;
+                buildAndAddSetup("DOUBLE_BOTTOM_FAILURE", "FAILURE", symbol, low1Price, low2Price, neckline,
+                        low2Retrace, patternHeight, bars, i, i, i + 1, failureEntry, failureSL, failureTarget,
+                        macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
+                        dailyIndicators, CandlestickPatternDetector.CandlePattern.NONE,
+                        macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2,
+                        macdHistAtPriorLow, macdHistAtLow2, false, results);
+                break;
             }
         }
     }
@@ -352,7 +371,7 @@ public class DoubleTopBottomBacktestService {
                     buildAndAddSetup("DOUBLE_TOP", "C1", symbol, high1Price, high2Price, neckline,
                             high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                             macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2, macdHistAtPriorHigh, macdHistAtHigh2, results);
+                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2, macdHistAtPriorHigh, macdHistAtHigh2, false, results);
                     break;
                 }
             }
@@ -387,10 +406,29 @@ public class DoubleTopBottomBacktestService {
                         buildAndAddSetup("DOUBLE_TOP", "C3", symbol, high1Price, high2Price, neckline,
                                 high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                                 macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2, macdHistAtPriorHigh, macdHistAtHigh2, results);
+                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2, macdHistAtPriorHigh, macdHistAtHigh2, false, results);
                         break;
                     }
                 }
+                break;
+            }
+        }
+
+        // ── FAILURE: price closes above pattern SL → reverse LONG trade ───────
+        double patternSL = Math.max(high1Price, high2Price);
+        for (int i = high2BarIdx + 1; i < Math.min(bars.size(), high2BarIdx + 30); i++) {
+            Bar b = bars.get(i);
+            if (b.getClosePrice().doubleValue() > patternSL) {
+                if (i + 1 >= bars.size()) break;
+                double failureEntry  = bars.get(i + 1).getOpenPrice().doubleValue();
+                double failureSL     = b.getLowPrice().doubleValue();
+                double failureTarget = failureEntry + patternHeight;
+                buildAndAddSetup("DOUBLE_TOP_FAILURE", "FAILURE", symbol, high1Price, high2Price, neckline,
+                        high2Retrace, patternHeight, bars, i, i, i + 1, failureEntry, failureSL, failureTarget,
+                        macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
+                        dailyIndicators, CandlestickPatternDetector.CandlePattern.NONE,
+                        macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2,
+                        macdHistAtPriorHigh, macdHistAtHigh2, true, results);
                 break;
             }
         }
@@ -414,6 +452,7 @@ public class DoubleTopBottomBacktestService {
             double[] macdHistArr, double[] macdSignalArr,
             double rsiAtP1, double rsiAtP2,
             double macdHistAtP1, double macdHistAtP2,
+            boolean bullish,
             List<TradeSetup> results) {
 
         if (entryBarIdx >= bars.size()) return;
@@ -452,7 +491,6 @@ public class DoubleTopBottomBacktestService {
         double pnlPct = 0.0;
         double exitPrice = 0.0;
         String exitReason = "OPEN";
-        boolean bullish = "DOUBLE_BOTTOM".equals(patternType);
 
         // Start from entryBarIdx + 1 and check SL/exit triggers
         for (int k = entryBarIdx + 1; k < bars.size(); k++) {
