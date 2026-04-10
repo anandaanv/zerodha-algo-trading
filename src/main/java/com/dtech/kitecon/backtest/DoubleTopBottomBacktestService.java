@@ -36,6 +36,7 @@ public class DoubleTopBottomBacktestService {
     private static final int RSI_PERIOD = 14;
     private static final int BB_PERIOD = 20;
     private static final int ATR_PERIOD = 14;
+    private static final double TRADE_OVERHEAD_PCT = 0.1;
 
     private final ZigZagService zigZagService;
     private final InstrumentRepository instrumentRepository;
@@ -113,6 +114,16 @@ public class DoubleTopBottomBacktestService {
             bbWidths[i] = mid > 0 ? (up - lo) / mid : 0;
         }
 
+        // Compute MACD histogram array
+        double[] macdHistArr = new double[n];
+        double[] macdSignalArr = new double[n];
+        for (int i = 0; i < n; i++) {
+            double macdVal = safeDouble(macd.getValue(i));
+            double signalVal = safeDouble(macdSignalLine.getValue(i));
+            macdHistArr[i] = macdVal - signalVal;
+            macdSignalArr[i] = signalVal;
+        }
+
         // Pre-compute daily indicators for parent TF lookup
         DailyIndicators dailyIndicators = computeDailyIndicators(dailySeries);
 
@@ -127,14 +138,14 @@ public class DoubleTopBottomBacktestService {
             if (p0.isLow() && p1.isHigh() && p2.isLow()) {
                 detectDoubleBottom(p0, p1, p2, symbol, hourlyBars, hourlyTsToIdx,
                         macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                        dailyIndicators, tradeSetups);
+                        dailyIndicators, macdHistArr, macdSignalArr, tradeSetups);
             }
 
             // Double Top: HIGH, LOW (neckline), HIGH
             if (p0.isHigh() && p1.isLow() && p2.isHigh()) {
                 detectDoubleTop(p0, p1, p2, symbol, hourlyBars, hourlyTsToIdx,
                         macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                        dailyIndicators, tradeSetups);
+                        dailyIndicators, macdHistArr, macdSignalArr, tradeSetups);
             }
         }
 
@@ -152,7 +163,7 @@ public class DoubleTopBottomBacktestService {
             MACDIndicator macd, EMAIndicator macdSignalLine,
             double[] stochRsiK, double[] stochRsiD,
             double[] bbWidths, double[] atrArr,
-            DailyIndicators dailyIndicators, List<TradeSetup> results) {
+            DailyIndicators dailyIndicators, double[] macdHistArr, double[] macdSignalArr, List<TradeSetup> results) {
 
         double low1Price    = low1.getValue();
         double neckline     = necklinePoint.getValue();
@@ -191,7 +202,7 @@ public class DoubleTopBottomBacktestService {
                     buildAndAddSetup("DOUBLE_BOTTOM", "C1", symbol, low1Price, low2Price, neckline,
                             low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                             macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                            dailyIndicators, rev.pattern(), results);
+                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, results);
                     break;
                 }
             }
@@ -235,7 +246,7 @@ public class DoubleTopBottomBacktestService {
                         buildAndAddSetup("DOUBLE_BOTTOM", "C3", symbol, low1Price, low2Price, neckline,
                                 low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                                 macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                                dailyIndicators, rev.pattern(), results);
+                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, results);
                         break;
                     }
                 }
@@ -254,7 +265,7 @@ public class DoubleTopBottomBacktestService {
             MACDIndicator macd, EMAIndicator macdSignalLine,
             double[] stochRsiK, double[] stochRsiD,
             double[] bbWidths, double[] atrArr,
-            DailyIndicators dailyIndicators, List<TradeSetup> results) {
+            DailyIndicators dailyIndicators, double[] macdHistArr, double[] macdSignalArr, List<TradeSetup> results) {
 
         double high1Price   = high1.getValue();
         double neckline     = necklinePoint.getValue();
@@ -291,7 +302,7 @@ public class DoubleTopBottomBacktestService {
                     buildAndAddSetup("DOUBLE_TOP", "C1", symbol, high1Price, high2Price, neckline,
                             high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                             macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                            dailyIndicators, rev.pattern(), results);
+                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, results);
                     break;
                 }
             }
@@ -326,7 +337,7 @@ public class DoubleTopBottomBacktestService {
                         buildAndAddSetup("DOUBLE_TOP", "C3", symbol, high1Price, high2Price, neckline,
                                 high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                                 macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                                dailyIndicators, rev.pattern(), results);
+                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, results);
                         break;
                     }
                 }
@@ -350,6 +361,7 @@ public class DoubleTopBottomBacktestService {
             double[] bbWidths, double[] atrArr,
             DailyIndicators dailyIndicators,
             CandlestickPatternDetector.CandlePattern reversalPattern,
+            double[] macdHistArr, double[] macdSignalArr,
             List<TradeSetup> results) {
 
         if (entryBarIdx >= bars.size()) return;
@@ -385,33 +397,86 @@ public class DoubleTopBottomBacktestService {
         String result = "OPEN";
         int barsToResult = 0;
         double pnlPct = 0.0;
+        double exitPrice = 0.0;
+        String exitReason = "OPEN";
         boolean bullish = "DOUBLE_BOTTOM".equals(patternType);
+
+        // Start from entryBarIdx + 1 and check SL/exit triggers
         for (int k = entryBarIdx + 1; k < bars.size(); k++) {
             Bar b = bars.get(k);
-            if (bullish) {
-                if (b.getHighPrice().doubleValue() >= target) {
-                    result = "TARGET_HIT";
-                    barsToResult = k - entryBarIdx;
-                    pnlPct = (target - entryPrice) / entryPrice * 100.0;
-                    break;
+
+            // --- SL check (highest priority) ---
+            if (bullish && b.getLowPrice().doubleValue() <= stopLoss) {
+                result = "STOP_HIT";
+                exitReason = "STOP_HIT";
+                exitPrice = (k + 1 < bars.size()) ? bars.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
+                pnlPct = (exitPrice - entryPrice) / entryPrice * 100.0 - TRADE_OVERHEAD_PCT;
+                barsToResult = k - entryBarIdx;
+                break;
+            }
+            if (!bullish && b.getHighPrice().doubleValue() >= stopLoss) {
+                result = "STOP_HIT";
+                exitReason = "STOP_HIT";
+                exitPrice = (k + 1 < bars.size()) ? bars.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
+                pnlPct = (entryPrice - exitPrice) / entryPrice * 100.0 - TRADE_OVERHEAD_PCT;
+                barsToResult = k - entryBarIdx;
+                break;
+            }
+
+            // --- Exit triggers (only after 3 bars) ---
+            if (k >= entryBarIdx + 3) {
+                boolean exitTriggered = false;
+
+                // Trigger A: Candlestick reversal pattern
+                if (bullish) {
+                    CandlestickPatternDetector.PatternResult bearishCandle = candlestickPatternDetector.detectBearish(bars, k);
+                    if (bearishCandle.pattern() != CandlestickPatternDetector.CandlePattern.NONE) {
+                        exitTriggered = true;
+                        exitReason = "BEARISH_CANDLE";
+                    }
+                } else {
+                    CandlestickPatternDetector.PatternResult bullishCandle = candlestickPatternDetector.detectBullish(bars, k);
+                    if (bullishCandle.pattern() != CandlestickPatternDetector.CandlePattern.NONE) {
+                        exitTriggered = true;
+                        exitReason = "BULLISH_CANDLE";
+                    }
                 }
-                if (b.getLowPrice().doubleValue() <= stopLoss) {
-                    result = "STOP_HIT";
-                    barsToResult = k - entryBarIdx;
-                    pnlPct = (stopLoss - entryPrice) / entryPrice * 100.0;
-                    break;
+
+                // Trigger B1: MACD histogram sign flip
+                if (!exitTriggered && k > 0 && k < macdHistArr.length) {
+                    if (bullish && macdHistArr[k-1] > 0 && macdHistArr[k] <= 0) {
+                        exitTriggered = true;
+                        exitReason = "MACD_HIST_CROSS";
+                    } else if (!bullish && macdHistArr[k-1] < 0 && macdHistArr[k] >= 0) {
+                        exitTriggered = true;
+                        exitReason = "MACD_HIST_CROSS";
+                    }
                 }
-            } else {
-                if (b.getLowPrice().doubleValue() <= target) {
-                    result = "TARGET_HIT";
-                    barsToResult = k - entryBarIdx;
-                    pnlPct = (entryPrice - target) / entryPrice * 100.0;
-                    break;
+
+                // Trigger B2: MACD signal line crossover
+                if (!exitTriggered && k > 0 && k < macdHistArr.length && k < macdSignalArr.length) {
+                    double macdLinePrev = macdHistArr[k-1] + macdSignalArr[k-1];
+                    double macdLineCurr = macdHistArr[k] + macdSignalArr[k];
+                    double signalPrev = macdSignalArr[k-1];
+                    double signalCurr = macdSignalArr[k];
+                    if (bullish && macdLinePrev >= signalPrev && macdLineCurr < signalCurr) {
+                        exitTriggered = true;
+                        exitReason = "MACD_SIGNAL_CROSS";
+                    } else if (!bullish && macdLinePrev <= signalPrev && macdLineCurr > signalCurr) {
+                        exitTriggered = true;
+                        exitReason = "MACD_SIGNAL_CROSS";
+                    }
                 }
-                if (b.getHighPrice().doubleValue() >= stopLoss) {
-                    result = "STOP_HIT";
+
+                if (exitTriggered) {
+                    exitPrice = (k + 1 < bars.size()) ? bars.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
+                    if (bullish) {
+                        pnlPct = (exitPrice - entryPrice) / entryPrice * 100.0 - TRADE_OVERHEAD_PCT;
+                    } else {
+                        pnlPct = (entryPrice - exitPrice) / entryPrice * 100.0 - TRADE_OVERHEAD_PCT;
+                    }
+                    result = pnlPct > 0 ? "WIN" : "LOSS";
                     barsToResult = k - entryBarIdx;
-                    pnlPct = (entryPrice - stopLoss) / entryPrice * 100.0;
                     break;
                 }
             }
@@ -455,6 +520,8 @@ public class DoubleTopBottomBacktestService {
                 .result(result)
                 .barsToResult(barsToResult)
                 .pnlPct(pnlPct)
+                .exitPrice(exitPrice)
+                .exitReason(exitReason)
                 .build());
     }
 
@@ -470,7 +537,7 @@ public class DoubleTopBottomBacktestService {
                 "entry_price,stop_loss,target,risk_pct,reward_pct,rr_ratio," +
                 "macd_histogram,macd_signal,stoch_rsi_k,stoch_rsi_d,bb_width,bb_contracting," +
                 "daily_macd_histogram,daily_rsi,daily_stoch_rsi_k," +
-                "result,bars_to_result,pnl_pct\n";
+                "result,bars_to_result,pnl_pct,exit_price,exit_reason\n";
 
         try (FileWriter fw = new FileWriter(csvPath)) {
             fw.write(header);

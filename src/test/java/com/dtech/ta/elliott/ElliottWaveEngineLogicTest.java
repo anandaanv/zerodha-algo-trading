@@ -36,7 +36,7 @@ class ElliottWaveEngineLogicTest {
                 .ruleViolations(List.of())
                 .build();
 
-        List<WaveScenario> scenarios = scenarioBuilder.build(List.of(bearishW4), List.of(), "1h");
+        List<WaveScenario> scenarios = scenarioBuilder.build(List.of(bearishW4), List.of(), "1h", 0.0);
 
         assertEquals(1, scenarios.size());
         assertEquals(WaveScenario.ScenarioDirection.BEARISH_CONTINUATION, scenarios.get(0).getDirection());
@@ -111,7 +111,7 @@ class ElliottWaveEngineLogicTest {
                         pivot(2, ZigZagPoint.Type.HIGH, 302.70),
                         pivot(3, ZigZagPoint.Type.LOW, 272.25)
                 )),
-                List.of(triangle, wedge));
+                List.of(triangle, wedge), 0.0, List.of());
 
         assertEquals(1, nested.size());
         NestedWaveContext context = nested.get(0);
