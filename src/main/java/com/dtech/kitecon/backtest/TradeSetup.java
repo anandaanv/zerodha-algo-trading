@@ -44,6 +44,8 @@ public class TradeSetup {
     private double dailyStochRsiK;
     private double rsiAtP1;
     private double rsiAtP2;
+    private double macdHistAtP1;
+    private double macdHistAtP2;
     private String result;
     private int barsToResult;
     private double pnlPct;
@@ -59,7 +61,7 @@ public class TradeSetup {
                 "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f," +
                 "%.6f,%.6f,%.6f,%.6f,%.6f,%s," +
                 "%.6f,%.4f,%.6f," +
-                "%s,%d,%.4f,%.4f,%s,%.4f,%.4f",
+                "%s,%d,%.4f,%.4f,%s,%.4f,%.4f,%.6f,%.6f",
                 datetime, symbol, patternType, confirmationType,
                 level1Price, level2Price, neckline, fibRetracePct, patternHeight,
                 reversalPattern, revCandleOpen, revCandleHigh, revCandleLow, revCandleClose,
@@ -67,6 +69,6 @@ public class TradeSetup {
                 entryPrice, stopLoss, target, riskPct, rewardPct, rrRatio,
                 macdHistogram, macdSignal, stochRsiK, stochRsiD, bbWidth, bbContracting,
                 dailyMacdHistogram, dailyRsi, dailyStochRsiK,
-                result, barsToResult, pnlPct, exitPrice, exitReason, rsiAtP1, rsiAtP2);
+                result, barsToResult, pnlPct, exitPrice, exitReason, rsiAtP1, rsiAtP2, macdHistAtP1, macdHistAtP2);
     }
 }
