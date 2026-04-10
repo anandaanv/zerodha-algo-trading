@@ -157,7 +157,23 @@ public class PatternComboBacktestService {
         DailyIndicators dailyInd = computeDailyIndicators(seriesDaily);
 
         // Get 15m ZigZag pivots
-        ZigZagParams params15m = zigZagService.resolveParams(symbol, Interval.FifteenMinute);
+        // Custom ZigZag params for 15m confirmation patterns.
+        // The default params use dynamicPctEnabled=true with volMult*rvol which dominates
+        // and keeps sensitivity the same as 1h regardless of scaling. Disable it and use
+        // a fixed pctMin=0.3% so pivots form every ~1-2h (vs ~8h with 1h defaults).
+        // A 5-pivot 15m triangle then fits comfortably within the 20h confirmation window.
+        ZigZagParams base = zigZagService.resolveParams(symbol, Interval.OneHour);
+        ZigZagParams params15m = ZigZagParams.builder()
+                .atrLength(base.getAtrLength())
+                .atrMult(0.5)
+                .pctMin(0.003)
+                .hysteresis(1.2)
+                .minBarsBetweenPivots(3)
+                .dynamicPctEnabled(false)
+                .volMult(base.getVolMult())
+                .rvolWindow(base.getRvolWindow())
+                .mode(ZigZagParams.Mode.BACKTEST)
+                .build();
         List<ZigZagPoint> pivots15m = zigZagService.detect(series15m, params15m);
         log.info("[Combo] 15m: {} pivots", pivots15m.size());
 
