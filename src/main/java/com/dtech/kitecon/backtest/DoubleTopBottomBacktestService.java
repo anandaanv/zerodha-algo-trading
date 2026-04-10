@@ -212,7 +212,7 @@ public class DoubleTopBottomBacktestService {
         double rsiAtPriorLow = rsiValues[priorLowBarIdx];
         double rsiAtLow2 = rsiValues[low2BarIdx];
         // Bullish RSI divergence: RSI at L2 higher than RSI at prior low despite lower/similar price
-        if (rsiAtLow2 <= rsiAtPriorLow) return;
+        boolean hasDivergence = rsiAtLow2 > rsiAtPriorLow;
         // Record MACD histogram at both pivots for analysis (not a hard filter)
         double macdHistAtPriorLow = priorLowBarIdx < macdHistArr.length ? macdHistArr[priorLowBarIdx] : 0;
         double macdHistAtLow2 = low2BarIdx < macdHistArr.length ? macdHistArr[low2BarIdx] : 0;
@@ -221,91 +221,97 @@ public class DoubleTopBottomBacktestService {
         double target = neckline + patternHeight;
 
         // ── C1: reversal candle at Low2, then breakout ─────────────────────
-        int scanStart = Math.max(0, low2BarIdx - 3);
-        int scanEnd   = Math.min(bars.size() - 1, low2BarIdx + 3);
-        for (int i = scanStart; i <= scanEnd; i++) {
-            CandlestickPatternDetector.PatternResult rev = candlestickPatternDetector.detectBullish(bars, i);
-            if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
-
-            double breakoutLevel = rev.breakoutLevel();
-            // Scan forward for breakout
-            for (int j = i + 1; j < Math.min(bars.size(), i + 20); j++) {
-                Bar bar = bars.get(j);
-                if (bar.getHighPrice().doubleValue() > breakoutLevel) {
-                    // Entry = open of bar j
-                    double entryPrice = bar.getOpenPrice().doubleValue();
-                    double stopLoss   = Math.min(low1Price, low2Price);
-                    buildAndAddSetup("DOUBLE_BOTTOM", "C1", symbol, low1Price, low2Price, neckline,
-                            low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
-                            macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2, macdHistAtPriorLow, macdHistAtLow2, true, results);
-                    break;
-                }
-            }
-            break; // only first reversal candle found
-        }
-
-        // ── C3: neckline break → retest → reversal candle → breakout ──────
-        Integer necklineBarIdx = tsToIdx.get(necklinePoint.getTimestamp());
-        if (necklineBarIdx == null) return;
-
-        // Scan forward from low2 for neckline break
-        int searchStart = low2BarIdx + 1;
-        int neckBreakIdx = -1;
-        for (int i = searchStart; i < bars.size(); i++) {
-            if (bars.get(i).getClosePrice().doubleValue() > neckline) {
-                neckBreakIdx = i;
-                break;
-            }
-        }
-        if (neckBreakIdx < 0) return;
-
-        // Look for retest within 1 ATR of neckline
-        double atrAtBreak = neckBreakIdx < atrArr.length ? atrArr[neckBreakIdx] : 0;
-        for (int i = neckBreakIdx + 1; i < Math.min(bars.size(), neckBreakIdx + 40); i++) {
-            Bar b = bars.get(i);
-            double low = b.getLowPrice().doubleValue();
-            double high = b.getHighPrice().doubleValue();
-            // Retest: bar touches within 1 ATR of neckline
-            if (low <= neckline + atrAtBreak && low >= neckline - atrAtBreak) {
-                // Look for reversal candle
+        if (hasDivergence) {
+            int scanStart = Math.max(0, low2BarIdx - 3);
+            int scanEnd   = Math.min(bars.size() - 1, low2BarIdx + 3);
+            for (int i = scanStart; i <= scanEnd; i++) {
                 CandlestickPatternDetector.PatternResult rev = candlestickPatternDetector.detectBullish(bars, i);
                 if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
 
                 double breakoutLevel = rev.breakoutLevel();
                 // Scan forward for breakout
                 for (int j = i + 1; j < Math.min(bars.size(), i + 20); j++) {
-                    Bar bj = bars.get(j);
-                    if (bj.getHighPrice().doubleValue() > breakoutLevel) {
-                        double entryPrice = bj.getOpenPrice().doubleValue();
+                    Bar bar = bars.get(j);
+                    if (bar.getHighPrice().doubleValue() > breakoutLevel) {
+                        // Entry = open of bar j
+                        double entryPrice = bar.getOpenPrice().doubleValue();
                         double stopLoss   = Math.min(low1Price, low2Price);
-                        buildAndAddSetup("DOUBLE_BOTTOM", "C3", symbol, low1Price, low2Price, neckline,
+                        buildAndAddSetup("DOUBLE_BOTTOM", "C1", symbol, low1Price, low2Price, neckline,
                                 low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                                 macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
                                 dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2, macdHistAtPriorLow, macdHistAtLow2, true, results);
                         break;
                     }
                 }
-                break; // only first retest
+                break; // only first reversal candle found
+            }
+        }
+
+        // ── C3: neckline break → retest → reversal candle → breakout ──────
+        if (hasDivergence) {
+            Integer necklineBarIdx = tsToIdx.get(necklinePoint.getTimestamp());
+            if (necklineBarIdx == null) return;
+
+            // Scan forward from low2 for neckline break
+            int searchStart = low2BarIdx + 1;
+            int neckBreakIdx = -1;
+            for (int i = searchStart; i < bars.size(); i++) {
+                if (bars.get(i).getClosePrice().doubleValue() > neckline) {
+                    neckBreakIdx = i;
+                    break;
+                }
+            }
+            if (neckBreakIdx < 0) return;
+
+            // Look for retest within 1 ATR of neckline
+            double atrAtBreak = neckBreakIdx < atrArr.length ? atrArr[neckBreakIdx] : 0;
+            for (int i = neckBreakIdx + 1; i < Math.min(bars.size(), neckBreakIdx + 40); i++) {
+                Bar b = bars.get(i);
+                double low = b.getLowPrice().doubleValue();
+                double high = b.getHighPrice().doubleValue();
+                // Retest: bar touches within 1 ATR of neckline
+                if (low <= neckline + atrAtBreak && low >= neckline - atrAtBreak) {
+                    // Look for reversal candle
+                    CandlestickPatternDetector.PatternResult rev = candlestickPatternDetector.detectBullish(bars, i);
+                    if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
+
+                    double breakoutLevel = rev.breakoutLevel();
+                    // Scan forward for breakout
+                    for (int j = i + 1; j < Math.min(bars.size(), i + 20); j++) {
+                        Bar bj = bars.get(j);
+                        if (bj.getHighPrice().doubleValue() > breakoutLevel) {
+                            double entryPrice = bj.getOpenPrice().doubleValue();
+                            double stopLoss   = Math.min(low1Price, low2Price);
+                            buildAndAddSetup("DOUBLE_BOTTOM", "C3", symbol, low1Price, low2Price, neckline,
+                                    low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
+                                    macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
+                                    dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2, macdHistAtPriorLow, macdHistAtLow2, true, results);
+                            break;
+                        }
+                    }
+                    break; // only first retest
+                }
             }
         }
 
         // ── FAILURE: price closes below pattern SL → reverse SHORT trade ──────
-        double patternSL = Math.min(low1Price, low2Price);
-        for (int i = low2BarIdx + 1; i < Math.min(bars.size(), low2BarIdx + 30); i++) {
-            Bar b = bars.get(i);
-            if (b.getClosePrice().doubleValue() < patternSL) {
-                if (i + 1 >= bars.size()) break;
-                double failureEntry  = bars.get(i + 1).getOpenPrice().doubleValue();
-                double failureSL     = b.getHighPrice().doubleValue();
-                double failureTarget = failureEntry - patternHeight;
-                buildAndAddSetup("DOUBLE_BOTTOM_FAILURE", "FAILURE", symbol, low1Price, low2Price, neckline,
-                        low2Retrace, patternHeight, bars, i, i, i + 1, failureEntry, failureSL, failureTarget,
-                        macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                        dailyIndicators, CandlestickPatternDetector.CandlePattern.NONE,
-                        macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2,
-                        macdHistAtPriorLow, macdHistAtLow2, false, results);
-                break;
+        if (!hasDivergence) {
+            double patternSL = Math.min(low1Price, low2Price);
+            for (int i = low2BarIdx + 1; i < Math.min(bars.size(), low2BarIdx + 30); i++) {
+                Bar b = bars.get(i);
+                if (b.getClosePrice().doubleValue() < patternSL) {
+                    if (i + 1 >= bars.size()) break;
+                    double failureEntry  = bars.get(i + 1).getOpenPrice().doubleValue();
+                    double failureSL     = b.getHighPrice().doubleValue();
+                    double failureTarget = failureEntry - patternHeight;
+                    buildAndAddSetup("DOUBLE_BOTTOM_FAILURE", "FAILURE", symbol, low1Price, low2Price, neckline,
+                            low2Retrace, patternHeight, bars, i, i, i + 1, failureEntry, failureSL, failureTarget,
+                            macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
+                            dailyIndicators, CandlestickPatternDetector.CandlePattern.NONE,
+                            macdHistArr, macdSignalArr, rsiAtPriorLow, rsiAtLow2,
+                            macdHistAtPriorLow, macdHistAtLow2, false, results);
+                    break;
+                }
             }
         }
     }
@@ -347,7 +353,7 @@ public class DoubleTopBottomBacktestService {
         double rsiAtPriorHigh = rsiValues[priorHighBarIdx];
         double rsiAtHigh2 = rsiValues[high2BarIdx];
         // Bearish RSI divergence: RSI at H2 lower than RSI at prior high despite higher/similar price
-        if (rsiAtHigh2 >= rsiAtPriorHigh) return;
+        boolean hasDivergence = rsiAtHigh2 < rsiAtPriorHigh;
         // Record MACD histogram at both pivots for analysis (not a hard filter)
         double macdHistAtPriorHigh = priorHighBarIdx < macdHistArr.length ? macdHistArr[priorHighBarIdx] : 0;
         double macdHistAtHigh2 = high2BarIdx < macdHistArr.length ? macdHistArr[high2BarIdx] : 0;
@@ -356,54 +362,20 @@ public class DoubleTopBottomBacktestService {
         double target = neckline - patternHeight;
 
         // ── C1: reversal candle at High2, then breakdown ───────────────────
-        int scanStart = Math.max(0, high2BarIdx - 3);
-        int scanEnd   = Math.min(bars.size() - 1, high2BarIdx + 3);
-        for (int i = scanStart; i <= scanEnd; i++) {
-            CandlestickPatternDetector.PatternResult rev = candlestickPatternDetector.detectBearish(bars, i);
-            if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
-
-            double breakoutLevel = rev.breakoutLevel();
-            for (int j = i + 1; j < Math.min(bars.size(), i + 20); j++) {
-                Bar bar = bars.get(j);
-                if (bar.getLowPrice().doubleValue() < breakoutLevel) {
-                    double entryPrice = bar.getOpenPrice().doubleValue();
-                    double stopLoss   = Math.max(high1Price, high2Price);
-                    buildAndAddSetup("DOUBLE_TOP", "C1", symbol, high1Price, high2Price, neckline,
-                            high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
-                            macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2, macdHistAtPriorHigh, macdHistAtHigh2, false, results);
-                    break;
-                }
-            }
-            break;
-        }
-
-        // ── C3: neckline break → retest → reversal candle → breakdown ─────
-        int searchStart = high2BarIdx + 1;
-        int neckBreakIdx = -1;
-        for (int i = searchStart; i < bars.size(); i++) {
-            if (bars.get(i).getClosePrice().doubleValue() < neckline) {
-                neckBreakIdx = i;
-                break;
-            }
-        }
-        if (neckBreakIdx < 0) return;
-
-        double atrAtBreak = neckBreakIdx < atrArr.length ? atrArr[neckBreakIdx] : 0;
-        for (int i = neckBreakIdx + 1; i < Math.min(bars.size(), neckBreakIdx + 40); i++) {
-            Bar b = bars.get(i);
-            double highPrice = b.getHighPrice().doubleValue();
-            if (highPrice >= neckline - atrAtBreak && highPrice <= neckline + atrAtBreak) {
+        if (hasDivergence) {
+            int scanStart = Math.max(0, high2BarIdx - 3);
+            int scanEnd   = Math.min(bars.size() - 1, high2BarIdx + 3);
+            for (int i = scanStart; i <= scanEnd; i++) {
                 CandlestickPatternDetector.PatternResult rev = candlestickPatternDetector.detectBearish(bars, i);
                 if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
 
                 double breakoutLevel = rev.breakoutLevel();
                 for (int j = i + 1; j < Math.min(bars.size(), i + 20); j++) {
-                    Bar bj = bars.get(j);
-                    if (bj.getLowPrice().doubleValue() < breakoutLevel) {
-                        double entryPrice = bj.getOpenPrice().doubleValue();
+                    Bar bar = bars.get(j);
+                    if (bar.getLowPrice().doubleValue() < breakoutLevel) {
+                        double entryPrice = bar.getOpenPrice().doubleValue();
                         double stopLoss   = Math.max(high1Price, high2Price);
-                        buildAndAddSetup("DOUBLE_TOP", "C3", symbol, high1Price, high2Price, neckline,
+                        buildAndAddSetup("DOUBLE_TOP", "C1", symbol, high1Price, high2Price, neckline,
                                 high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                                 macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
                                 dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2, macdHistAtPriorHigh, macdHistAtHigh2, false, results);
@@ -414,22 +386,62 @@ public class DoubleTopBottomBacktestService {
             }
         }
 
+        // ── C3: neckline break → retest → reversal candle → breakdown ─────
+        if (hasDivergence) {
+            int searchStart = high2BarIdx + 1;
+            int neckBreakIdx = -1;
+            for (int i = searchStart; i < bars.size(); i++) {
+                if (bars.get(i).getClosePrice().doubleValue() < neckline) {
+                    neckBreakIdx = i;
+                    break;
+                }
+            }
+            if (neckBreakIdx < 0) return;
+
+            double atrAtBreak = neckBreakIdx < atrArr.length ? atrArr[neckBreakIdx] : 0;
+            for (int i = neckBreakIdx + 1; i < Math.min(bars.size(), neckBreakIdx + 40); i++) {
+                Bar b = bars.get(i);
+                double highPrice = b.getHighPrice().doubleValue();
+                if (highPrice >= neckline - atrAtBreak && highPrice <= neckline + atrAtBreak) {
+                    CandlestickPatternDetector.PatternResult rev = candlestickPatternDetector.detectBearish(bars, i);
+                    if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
+
+                    double breakoutLevel = rev.breakoutLevel();
+                    for (int j = i + 1; j < Math.min(bars.size(), i + 20); j++) {
+                        Bar bj = bars.get(j);
+                        if (bj.getLowPrice().doubleValue() < breakoutLevel) {
+                            double entryPrice = bj.getOpenPrice().doubleValue();
+                            double stopLoss   = Math.max(high1Price, high2Price);
+                            buildAndAddSetup("DOUBLE_TOP", "C3", symbol, high1Price, high2Price, neckline,
+                                    high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
+                                    macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
+                                    dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2, macdHistAtPriorHigh, macdHistAtHigh2, false, results);
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
         // ── FAILURE: price closes above pattern SL → reverse LONG trade ───────
-        double patternSL = Math.max(high1Price, high2Price);
-        for (int i = high2BarIdx + 1; i < Math.min(bars.size(), high2BarIdx + 30); i++) {
-            Bar b = bars.get(i);
-            if (b.getClosePrice().doubleValue() > patternSL) {
-                if (i + 1 >= bars.size()) break;
-                double failureEntry  = bars.get(i + 1).getOpenPrice().doubleValue();
-                double failureSL     = b.getLowPrice().doubleValue();
-                double failureTarget = failureEntry + patternHeight;
-                buildAndAddSetup("DOUBLE_TOP_FAILURE", "FAILURE", symbol, high1Price, high2Price, neckline,
-                        high2Retrace, patternHeight, bars, i, i, i + 1, failureEntry, failureSL, failureTarget,
-                        macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                        dailyIndicators, CandlestickPatternDetector.CandlePattern.NONE,
-                        macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2,
-                        macdHistAtPriorHigh, macdHistAtHigh2, true, results);
-                break;
+        if (!hasDivergence) {
+            double patternSL = Math.max(high1Price, high2Price);
+            for (int i = high2BarIdx + 1; i < Math.min(bars.size(), high2BarIdx + 30); i++) {
+                Bar b = bars.get(i);
+                if (b.getClosePrice().doubleValue() > patternSL) {
+                    if (i + 1 >= bars.size()) break;
+                    double failureEntry  = bars.get(i + 1).getOpenPrice().doubleValue();
+                    double failureSL     = b.getLowPrice().doubleValue();
+                    double failureTarget = failureEntry + patternHeight;
+                    buildAndAddSetup("DOUBLE_TOP_FAILURE", "FAILURE", symbol, high1Price, high2Price, neckline,
+                            high2Retrace, patternHeight, bars, i, i, i + 1, failureEntry, failureSL, failureTarget,
+                            macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
+                            dailyIndicators, CandlestickPatternDetector.CandlePattern.NONE,
+                            macdHistArr, macdSignalArr, rsiAtPriorHigh, rsiAtHigh2,
+                            macdHistAtPriorHigh, macdHistAtHigh2, true, results);
+                    break;
+                }
             }
         }
     }
