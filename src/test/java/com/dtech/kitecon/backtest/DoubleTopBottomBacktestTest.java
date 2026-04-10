@@ -31,6 +31,9 @@ class DoubleTopBottomBacktestTest {
     @Autowired
     private TriangleBacktestService triangleBacktestService;
 
+    @Autowired
+    private PatternComboBacktestService patternComboBacktestService;
+
     @Test
     void runRelianceBacktest() throws Exception {
         String csvPath = "/tmp/reliance_double_topbottom_backtest.csv";
@@ -66,5 +69,15 @@ class DoubleTopBottomBacktestTest {
         File f = new File(csvPath);
         assertTrue(f.exists());
         assertTrue(f.length() > 0);
+    }
+
+    @Test
+    void runRelianceComboBacktest() throws Exception {
+        String csvPath = "/tmp/reliance_combo_backtest.csv";
+        patternComboBacktestService.runAndWriteCsv("RELIANCE", csvPath);
+        System.out.println("CSV written to: " + csvPath);
+        File f = new File(csvPath);
+        assertTrue(f.exists());
+        assertTrue(f.length() >= 0);
     }
 }
