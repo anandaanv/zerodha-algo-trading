@@ -47,12 +47,26 @@ public class DoubleTopBottomBacktestService {
     // ─────────────────────────────────────────────────────────────────────────
 
     public void runAndWriteCsv(String symbol, String csvPath) throws IOException {
-        log.info("[Backtest] Starting Double Top/Bottom backtest for {} → {}", symbol, csvPath);
+        List<TradeSetup> setups = runForSymbol(symbol);
+        writeCsv(setups, csvPath);
+    }
+
+    public void runMultipleAndWriteCsv(List<String> symbols, String csvPath) throws IOException {
+        List<TradeSetup> allSetups = new ArrayList<>();
+        for (String symbol : symbols) {
+            allSetups.addAll(runForSymbol(symbol));
+        }
+        log.info("[Backtest] Total setups across {} symbols: {}", symbols.size(), allSetups.size());
+        writeCsv(allSetups, csvPath);
+    }
+
+    private List<TradeSetup> runForSymbol(String symbol) {
+        log.info("[Backtest] Starting Double Top/Bottom backtest for {}", symbol);
 
         Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
         if (instrument == null) {
             log.error("[Backtest] Instrument not found: {}", symbol);
-            return;
+            return new ArrayList<>();
         }
 
         // Load bar series
@@ -61,7 +75,7 @@ public class DoubleTopBottomBacktestService {
 
         if (hourlySeries == null || hourlySeries.isEmpty()) {
             log.warn("[Backtest] No hourly data for {}", symbol);
-            return;
+            return new ArrayList<>();
         }
 
         log.info("[Backtest] Loaded {} hourly bars, {} daily bars",
@@ -150,7 +164,7 @@ public class DoubleTopBottomBacktestService {
         }
 
         log.info("[Backtest] Found {} trade setups", tradeSetups.size());
-        writeCsv(tradeSetups, csvPath);
+        return tradeSetups;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
