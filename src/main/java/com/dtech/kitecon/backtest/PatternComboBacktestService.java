@@ -136,6 +136,7 @@ public class PatternComboBacktestService {
         watchingPatterns.addAll(scanDtbWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(scanTriangleWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(scanHnsWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
+        watchingPatterns.addAll(scanFlagWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         Map<String, Long> wpByType = watchingPatterns.stream()
                 .collect(java.util.stream.Collectors.groupingBy(DetectedPattern::getPatternType, java.util.stream.Collectors.counting()));
         log.info("[Combo] Found {} watching patterns ({}): {}", watchingPatterns.size(), watchingTf.getUiKey(), wpByType);
@@ -214,6 +215,13 @@ public class PatternComboBacktestService {
         }
         confirmPatterns.addAll(scanHnsCandleConfirmation(hnsWatching,
                 barsC, atrArrC, rsiValuesC, stochRsiKC, dailyInd));
+        // Flag confirmations: reversal candle on 15m near flag low (C1) or breakout retrace (C2)
+        List<DetectedPattern> flagWatchingList = new ArrayList<>();
+        for (DetectedPattern wp : watchingPatterns) {
+            if (wp.getPatternType().startsWith("FLAG")) flagWatchingList.add(wp);
+        }
+        confirmPatterns.addAll(scanFlagCandleConfirmation(flagWatchingList,
+                barsC, atrArrC, rsiValuesC, stochRsiKC, dailyInd));
         log.info("[Combo] Found {} confirmation patterns ({})", confirmPatterns.size(), confirmTf.getUiKey());
 
         // Cross-match watching × confirmation
@@ -230,6 +238,9 @@ public class PatternComboBacktestService {
 
                 // H&S: confirmation must be HNS_CANDLE type only
                 if (wp.getPatternType().startsWith("HNS") && !"HNS_CANDLE".equals(cp.getPatternType())) continue;
+
+                // Flag: confirmation must be FLAG_CANDLE type only
+                if (wp.getPatternType().startsWith("FLAG") && !"FLAG_CANDLE".equals(cp.getPatternType())) continue;
 
                 // Time window check (wall-clock: 20h)
                 if (cp.getKeyLevelTime().isBefore(wp.getKeyLevelTime())) continue;
@@ -1164,6 +1175,192 @@ public class PatternComboBacktestService {
         }
     }
 
+    // ── Flag Watching ────────────────────────────────────────────────────────────
+
+    private List<DetectedPattern> scanFlagWatching(List<ZigZagPoint> pivots, List<Bar> barsW,
+            Map<Instant, Integer> tsToIdxW, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        List<DetectedPattern> results = new ArrayList<>();
+        for (int i = 1; i < pivots.size(); i++) {
+            if (pivots.get(i - 1).isLow() && pivots.get(i).isHigh()) {
+                processFlagPole(i - 1, i, pivots, barsW, tsToIdxW, atrArr, rsiValues, macdHistArr, stochRsiK, results, true);
+            }
+            if (pivots.get(i - 1).isHigh() && pivots.get(i).isLow()) {
+                processFlagPole(i - 1, i, pivots, barsW, tsToIdxW, atrArr, rsiValues, macdHistArr, stochRsiK, results, false);
+            }
+        }
+        return results;
+    }
+
+    private void processFlagPole(int poleStartPivIdx, int poleEndPivIdx,
+            List<ZigZagPoint> pivots, List<Bar> barsW, Map<Instant, Integer> tsToIdxW,
+            double[] atrArr, double[] rsiValues, double[] macdHistArr, double[] stochRsiK,
+            List<DetectedPattern> results, boolean bullish) {
+
+        ZigZagPoint poleStart = pivots.get(poleStartPivIdx);
+        ZigZagPoint poleEnd   = pivots.get(poleEndPivIdx);
+
+        Integer peIdx = tsToIdxW.get(poleEnd.getTimestamp());
+        if (peIdx == null) return;
+
+        double poleHeight = Math.abs(poleEnd.getValue() - poleStart.getValue());
+        double atrAtPoleEnd = peIdx < atrArr.length ? atrArr[peIdx] : 0;
+        if (atrAtPoleEnd <= 0) return;
+        if (poleHeight < 4.0 * atrAtPoleEnd) return;
+
+        double halfPoleLevel = bullish
+                ? poleStart.getValue() + 0.5 * poleHeight
+                : poleStart.getValue() - 0.5 * poleHeight;
+
+        double resBase    = poleEnd.getValue();
+        int    resBaseIdx = peIdx;
+
+        List<ZigZagPoint> flagLows  = new ArrayList<>();
+        List<ZigZagPoint> flagHighs = new ArrayList<>();
+
+        int    breakoutPivIdx   = -1;
+        double breakoutResPrice = 0;
+
+        for (int j = poleEndPivIdx + 1; j < pivots.size() && (j - poleEndPivIdx) <= 8; j++) {
+            ZigZagPoint pj  = pivots.get(j);
+            Integer     pjI = tsToIdxW.get(pj.getTimestamp());
+            if (pjI == null) continue;
+
+            if (bullish) {
+                if (pj.isLow()) {
+                    if (pj.getValue() < halfPoleLevel) break;
+                    flagLows.add(pj);
+                } else {
+                    double resTl = computeFlagResTrendline(resBase, resBaseIdx, flagHighs, tsToIdxW, pjI);
+                    if (pj.getValue() > resTl + 0.3 * atrAtPoleEnd) {
+                        breakoutPivIdx  = j;
+                        breakoutResPrice = resTl;
+                        break;
+                    }
+                    flagHighs.add(pj);
+                }
+            } else {
+                if (pj.isHigh()) {
+                    if (pj.getValue() > halfPoleLevel) break;
+                    flagLows.add(pj);
+                } else {
+                    double resTl = computeFlagResTrendline(resBase, resBaseIdx, flagHighs, tsToIdxW, pjI);
+                    if (pj.getValue() < resTl - 0.3 * atrAtPoleEnd) {
+                        breakoutPivIdx  = j;
+                        breakoutResPrice = resTl;
+                        break;
+                    }
+                    flagHighs.add(pj);
+                }
+            }
+        }
+
+        if (flagLows.isEmpty() || flagHighs.isEmpty()) return;
+
+        double rsiAtPoleEnd  = peIdx < rsiValues.length  ? rsiValues[peIdx]   : 0;
+        double macdAtPoleEnd = peIdx < macdHistArr.length ? macdHistArr[peIdx] : 0;
+
+        // ── C2: post-breakout retrace ──────────────────────────────────────────
+        if (breakoutPivIdx >= 0) {
+            ZigZagPoint breakoutPiv = pivots.get(breakoutPivIdx);
+            double lowestFlagLow;
+            if (bullish) {
+                lowestFlagLow = flagLows.stream().mapToDouble(ZigZagPoint::getValue).min()
+                        .orElse(poleEnd.getValue() - poleHeight);
+            } else {
+                lowestFlagLow = flagLows.stream().mapToDouble(ZigZagPoint::getValue).max()
+                        .orElse(poleEnd.getValue() + poleHeight);
+            }
+            boolean shortFlag = flagLows.size() <= 2;
+            double  poleMultiplier = shortFlag ? 0.618 : 1.0;
+            double  c2Target = bullish
+                    ? lowestFlagLow + poleMultiplier * poleHeight
+                    : lowestFlagLow - poleMultiplier * poleHeight;
+            double  c2SL = bullish
+                    ? breakoutResPrice - atrAtPoleEnd
+                    : breakoutResPrice + atrAtPoleEnd;
+
+            results.add(DetectedPattern.builder()
+                    .patternType(bullish ? "FLAG_BULL" : "FLAG_BEAR")
+                    .confirmationType("C2")
+                    .bullish(bullish)
+                    .keyLevel(breakoutResPrice)
+                    .keyLevelTime(breakoutPiv.getTimestamp())
+                    .entryPrice(0)
+                    .stopLoss(c2SL)
+                    .ownTarget(c2Target)
+                    .patternHeight(poleHeight)
+                    .atr(atrAtPoleEnd)
+                    .pivotBTime(poleEnd.getTimestamp())
+                    .pivotDTime(breakoutPiv.getTimestamp())
+                    .rsiAtP1(rsiAtPoleEnd)
+                    .rsiAtP2(rsiAtPoleEnd)
+                    .macdHistAtP1(resBase)
+                    .macdHistAtP2(macdAtPoleEnd)
+                    .stochRsiK(peIdx < stochRsiK.length ? stochRsiK[peIdx] : 0)
+                    .dailyRsi(0)
+                    .macdHistogram(macdAtPoleEnd)
+                    .reversalPattern(null)
+                    .build());
+        }
+
+        // ── C1: entries at 3rd+ flag low (leg 6 from pole start) ──────────────
+        if (flagLows.size() < 3) return;
+
+        ZigZagPoint L2 = flagLows.get(0);
+        ZigZagPoint L4 = flagLows.get(1);
+        Integer l2I = tsToIdxW.get(L2.getTimestamp());
+        Integer l4I = tsToIdxW.get(L4.getTimestamp());
+        if (l2I == null || l4I == null || l4I <= l2I) return;
+
+        double supSlope = (L4.getValue() - L2.getValue()) / (double)(l4I - l2I);
+
+        for (int k = 2; k < flagLows.size(); k++) {
+            ZigZagPoint Lk = flagLows.get(k);
+            Integer lkI = tsToIdxW.get(Lk.getTimestamp());
+            if (lkI == null) continue;
+
+            double projectedSupport = L2.getValue() + supSlope * (lkI - l2I);
+            if (Math.abs(Lk.getValue() - projectedSupport) > atrAtPoleEnd) continue;
+
+            if (k - 1 >= flagHighs.size()) continue;
+            ZigZagPoint prevHigh = flagHighs.get(k - 1);
+
+            double lastLegHeight = Math.abs(prevHigh.getValue() - Lk.getValue());
+            if (lastLegHeight <= 0) continue;
+
+            double c1Target = bullish
+                    ? Lk.getValue() + 0.78 * lastLegHeight
+                    : Lk.getValue() - 0.78 * lastLegHeight;
+            double c1SL = bullish
+                    ? Lk.getValue() - atrAtPoleEnd
+                    : Lk.getValue() + atrAtPoleEnd;
+
+            results.add(DetectedPattern.builder()
+                    .patternType(bullish ? "FLAG_BULL" : "FLAG_BEAR")
+                    .confirmationType("C1")
+                    .bullish(bullish)
+                    .keyLevel(Lk.getValue())
+                    .keyLevelTime(Lk.getTimestamp())
+                    .entryPrice(0)
+                    .stopLoss(c1SL)
+                    .ownTarget(c1Target)
+                    .patternHeight(poleHeight)
+                    .atr(atrAtPoleEnd)
+                    .pivotBTime(poleEnd.getTimestamp())
+                    .pivotDTime(Lk.getTimestamp())
+                    .rsiAtP1(rsiAtPoleEnd)
+                    .rsiAtP2(lkI < rsiValues.length ? rsiValues[lkI] : 0)
+                    .macdHistAtP1(resBase)
+                    .macdHistAtP2(lastLegHeight)
+                    .stochRsiK(lkI < stochRsiK.length ? stochRsiK[lkI] : 0)
+                    .dailyRsi(0)
+                    .macdHistogram(lkI < macdHistArr.length ? macdHistArr[lkI] : 0)
+                    .reversalPattern(null)
+                    .build());
+        }
+    }
+
     /**
      * Detects RSI crossover entry for triangle watching patterns on the WATCHING TF (1h).
      *
@@ -1451,6 +1648,155 @@ public class PatternComboBacktestService {
         return results;
     }
 
+    /**
+     * Flag candle confirmation on lower TF (15m).
+     * C1: reversal near flag low (wp.keyLevel ± 1.5 ATR), entry on breakout. Target = wp.ownTarget (78% of last leg).
+     * C2: after breakout, retrace to breakout level (wp.keyLevel ± 1.5 ATR), reversal candle. Target = pole projection.
+     */
+    private List<DetectedPattern> scanFlagCandleConfirmation(
+            List<DetectedPattern> flagWatching,
+            List<Bar> barsC, double[] atrArrC,
+            double[] rsiValuesC, double[] stochRsiKC,
+            DailyIndicators dailyInd) {
+
+        List<DetectedPattern> results = new ArrayList<>();
+
+        for (DetectedPattern wp : flagWatching) {
+            boolean bullish = wp.isBullish();
+            boolean isC2    = "C2".equals(wp.getConfirmationType());
+            double  atr     = wp.getAtr();
+            if (atr <= 0) continue;
+
+            if (!isC2) {
+                // C1: reversal candle near flag low
+                double  flagLowPrice = wp.getKeyLevel();
+                Instant flagLowTime  = wp.getKeyLevelTime();
+
+                int startIdx = findIdxAtOrAfter(barsC, flagLowTime.minusSeconds(2 * 3600L));
+                if (startIdx < 0) startIdx = 0;
+                int scanEnd = findIdxAtOrAfter(barsC, flagLowTime.plusSeconds(20 * 3600L));
+                if (scanEnd < 0) scanEnd = Math.min(barsC.size() - 1, startIdx + 80);
+
+                for (int i = startIdx; i < scanEnd && i < barsC.size(); i++) {
+                    Bar bar = barsC.get(i);
+                    double barLow  = bar.getLowPrice().doubleValue();
+                    double barHigh = bar.getHighPrice().doubleValue();
+                    if (barLow > flagLowPrice + 1.5 * atr || barHigh < flagLowPrice - 1.5 * atr) continue;
+
+                    CandlestickPatternDetector.PatternResult rev = bullish
+                            ? candlestickPatternDetector.detectBullish(barsC, i)
+                            : candlestickPatternDetector.detectBearish(barsC, i);
+                    if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
+
+                    double breakoutLevel = rev.breakoutLevel();
+                    for (int j = i + 1; j < Math.min(barsC.size(), i + 10); j++) {
+                        Bar entryBar = barsC.get(j);
+                        boolean bo = bullish
+                                ? entryBar.getHighPrice().doubleValue() > breakoutLevel
+                                : entryBar.getLowPrice().doubleValue() < breakoutLevel;
+                        if (!bo) continue;
+
+                        double entryPrice = entryBar.getOpenPrice().doubleValue();
+                        double sl = bullish ? barLow - 0.5 * atr : barHigh + 0.5 * atr;
+                        if (bullish && sl >= entryPrice) break;
+                        if (!bullish && sl <= entryPrice) break;
+                        double localAtr = j < atrArrC.length ? atrArrC[j] : atr;
+                        if (Math.abs(entryPrice - sl) < 0.3 * localAtr) break;
+
+                        results.add(DetectedPattern.builder()
+                                .patternType("FLAG_CANDLE")
+                                .confirmationType("C1")
+                                .bullish(bullish)
+                                .keyLevel(entryPrice)
+                                .keyLevelTime(entryBar.getEndTime())
+                                .entryPrice(entryPrice)
+                                .stopLoss(sl)
+                                .ownTarget(wp.getOwnTarget())
+                                .patternHeight(wp.getPatternHeight())
+                                .atr(localAtr)
+                                .rsiAtP1(i < rsiValuesC.length ? rsiValuesC[i] : 0)
+                                .rsiAtP2(j < rsiValuesC.length ? rsiValuesC[j] : 0)
+                                .macdHistAtP1(0).macdHistAtP2(0)
+                                .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
+                                .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .macdHistogram(0)
+                                .reversalPattern(rev.pattern().name())
+                                .build());
+                        break;
+                    }
+                    if (!results.isEmpty() && results.get(results.size() - 1).getKeyLevelTime() != null
+                            && !results.get(results.size() - 1).getKeyLevelTime().isBefore(bar.getEndTime())) {
+                        break;
+                    }
+                }
+            } else {
+                // C2: after breakout, retrace to breakout level
+                double  breakoutLevel = wp.getKeyLevel();
+                Instant breakoutTime  = wp.getKeyLevelTime();
+
+                int startIdx = findIdxAtOrAfter(barsC, breakoutTime);
+                if (startIdx < 0) continue;
+                int scanEnd = Math.min(barsC.size() - 1, startIdx + 80);
+
+                for (int i = startIdx; i < scanEnd; i++) {
+                    Bar bar = barsC.get(i);
+                    double barClose = bar.getClosePrice().doubleValue();
+                    boolean inRetrace = bullish
+                            ? barClose >= breakoutLevel - 1.5 * atr && barClose <= breakoutLevel + atr
+                            : barClose <= breakoutLevel + 1.5 * atr && barClose >= breakoutLevel - atr;
+                    if (!inRetrace) continue;
+
+                    CandlestickPatternDetector.PatternResult rev = bullish
+                            ? candlestickPatternDetector.detectBullish(barsC, i)
+                            : candlestickPatternDetector.detectBearish(barsC, i);
+                    if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
+
+                    double revBo = rev.breakoutLevel();
+                    for (int j = i + 1; j < Math.min(barsC.size(), i + 10); j++) {
+                        Bar entryBar = barsC.get(j);
+                        boolean bo = bullish
+                                ? entryBar.getHighPrice().doubleValue() > revBo
+                                : entryBar.getLowPrice().doubleValue() < revBo;
+                        if (!bo) continue;
+
+                        double entryPrice = entryBar.getOpenPrice().doubleValue();
+                        double sl = bullish ? breakoutLevel - atr : breakoutLevel + atr;
+                        if (bullish && sl >= entryPrice) break;
+                        if (!bullish && sl <= entryPrice) break;
+                        double localAtr = j < atrArrC.length ? atrArrC[j] : atr;
+                        if (Math.abs(entryPrice - sl) < 0.3 * localAtr) break;
+
+                        results.add(DetectedPattern.builder()
+                                .patternType("FLAG_CANDLE")
+                                .confirmationType("C2")
+                                .bullish(bullish)
+                                .keyLevel(entryPrice)
+                                .keyLevelTime(entryBar.getEndTime())
+                                .entryPrice(entryPrice)
+                                .stopLoss(sl)
+                                .ownTarget(wp.getOwnTarget())
+                                .patternHeight(wp.getPatternHeight())
+                                .atr(localAtr)
+                                .rsiAtP1(i < rsiValuesC.length ? rsiValuesC[i] : 0)
+                                .rsiAtP2(j < rsiValuesC.length ? rsiValuesC[j] : 0)
+                                .macdHistAtP1(0).macdHistAtP2(0)
+                                .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
+                                .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .macdHistogram(0)
+                                .reversalPattern(rev.pattern().name())
+                                .build());
+                        break;
+                    }
+                    if (!results.isEmpty() && results.get(results.size() - 1).getKeyLevelTime() != null
+                            && !results.get(results.size() - 1).getKeyLevelTime().isBefore(bar.getEndTime())) {
+                        break;
+                    }
+                }
+            }
+        }
+        return results;
+    }
+
     private List<DetectedPattern> scanRsiCrossoverConfirmation(
             List<DetectedPattern> triangleWatching,
             List<Bar> barsW, double[] rsiW,
@@ -1570,6 +1916,18 @@ public class PatternComboBacktestService {
     /** Scan window in bars for confirmation TF (default 80 * 15m-equivalent bars). */
     private int confirmWindowBarsForWp(DetectedPattern wp) {
         return 80; // 80 × 15m bars ≈ 20h; parameterized if needed
+    }
+
+    /** Compute projected resistance trendline at targetIdx.
+     *  Anchored at resBase (H1 price at resBaseIdx); tilts through the last flag high if available. */
+    private double computeFlagResTrendline(double resBase, int resBaseIdx,
+            List<ZigZagPoint> flagHighs, Map<Instant, Integer> tsToIdx, int targetIdx) {
+        if (flagHighs.isEmpty()) return resBase;
+        ZigZagPoint lastHigh = flagHighs.get(flagHighs.size() - 1);
+        Integer lastHighIdx = tsToIdx.get(lastHigh.getTimestamp());
+        if (lastHighIdx == null || lastHighIdx <= resBaseIdx) return resBase;
+        double slope = (lastHigh.getValue() - resBase) / (double)(lastHighIdx - resBaseIdx);
+        return resBase + slope * (targetIdx - resBaseIdx);
     }
 
     /** SL = highest high (bearish) or lowest low (bullish) from slStart to entryIdx, with 0.1-ATR buffer. */
