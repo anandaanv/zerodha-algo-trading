@@ -426,6 +426,7 @@ public class DoubleTopBottomBacktestService {
         double riskPct   = Math.abs(entryPrice - stopLoss) / entryPrice * 100.0;
         double rewardPct = Math.abs(target - entryPrice) / entryPrice * 100.0;
         double rrRatio   = riskPct > 0 ? rewardPct / riskPct : 0;
+        if (rrRatio < 2.0) return; // skip low R:R setups
 
         // BB contracting check: compare current width vs avg of last 5
         double bbWidth = sigCandleIdx < bbWidths.length ? bbWidths[sigCandleIdx] : 0;
@@ -491,32 +492,6 @@ public class DoubleTopBottomBacktestService {
                     if (bullishCandle.pattern() != CandlestickPatternDetector.CandlePattern.NONE) {
                         exitTriggered = true;
                         exitReason = "BULLISH_CANDLE";
-                    }
-                }
-
-                // Trigger B1: MACD histogram sign flip
-                if (!exitTriggered && k > 0 && k < macdHistArr.length) {
-                    if (bullish && macdHistArr[k-1] > 0 && macdHistArr[k] <= 0) {
-                        exitTriggered = true;
-                        exitReason = "MACD_HIST_CROSS";
-                    } else if (!bullish && macdHistArr[k-1] < 0 && macdHistArr[k] >= 0) {
-                        exitTriggered = true;
-                        exitReason = "MACD_HIST_CROSS";
-                    }
-                }
-
-                // Trigger B2: MACD signal line crossover
-                if (!exitTriggered && k > 0 && k < macdHistArr.length && k < macdSignalArr.length) {
-                    double macdLinePrev = macdHistArr[k-1] + macdSignalArr[k-1];
-                    double macdLineCurr = macdHistArr[k] + macdSignalArr[k];
-                    double signalPrev = macdSignalArr[k-1];
-                    double signalCurr = macdSignalArr[k];
-                    if (bullish && macdLinePrev >= signalPrev && macdLineCurr < signalCurr) {
-                        exitTriggered = true;
-                        exitReason = "MACD_SIGNAL_CROSS";
-                    } else if (!bullish && macdLinePrev <= signalPrev && macdLineCurr > signalCurr) {
-                        exitTriggered = true;
-                        exitReason = "MACD_SIGNAL_CROSS";
                     }
                 }
 
