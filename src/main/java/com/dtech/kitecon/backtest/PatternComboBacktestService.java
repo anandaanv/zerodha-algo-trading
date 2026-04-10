@@ -135,6 +135,7 @@ public class PatternComboBacktestService {
         List<DetectedPattern> watchingPatterns = new ArrayList<>();
         watchingPatterns.addAll(scanDtbWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(scanTriangleWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
+        watchingPatterns.addAll(scanHnsWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         Map<String, Long> wpByType = watchingPatterns.stream()
                 .collect(java.util.stream.Collectors.groupingBy(DetectedPattern::getPatternType, java.util.stream.Collectors.counting()));
         log.info("[Combo] Found {} watching patterns ({}): {}", watchingPatterns.size(), watchingTf.getUiKey(), wpByType);
@@ -206,6 +207,13 @@ public class PatternComboBacktestService {
         }
         confirmPatterns.addAll(scanTriangleCandleConfirmation(triangleWatching,
                 barsC, atrArrC, rsiValuesC, stochRsiKC, dailyInd));
+        // H&S confirmations: reversal candle on 15m near E (C1) or neckline retrace (C2)
+        List<DetectedPattern> hnsWatching = new ArrayList<>();
+        for (DetectedPattern wp : watchingPatterns) {
+            if (wp.getPatternType().startsWith("HNS")) hnsWatching.add(wp);
+        }
+        confirmPatterns.addAll(scanHnsCandleConfirmation(hnsWatching,
+                barsC, atrArrC, rsiValuesC, stochRsiKC, dailyInd));
         log.info("[Combo] Found {} confirmation patterns ({})", confirmPatterns.size(), confirmTf.getUiKey());
 
         // Cross-match watching × confirmation
@@ -219,6 +227,9 @@ public class PatternComboBacktestService {
 
                 // Triangles: entry is on MACD histogram trendline breakout only
                 if (wp.getPatternType().startsWith("TRIANGLE") && !"TRIANGLE_CANDLE".equals(cp.getPatternType())) continue;
+
+                // H&S: confirmation must be HNS_CANDLE type only
+                if (wp.getPatternType().startsWith("HNS") && !"HNS_CANDLE".equals(cp.getPatternType())) continue;
 
                 // Time window check (wall-clock: 20h)
                 if (cp.getKeyLevelTime().isBefore(wp.getKeyLevelTime())) continue;
@@ -399,6 +410,7 @@ public class PatternComboBacktestService {
                         .confirmPatternHeight(cp.getPatternHeight())
                         .targetEventuallyHit(targetEventuallyHit)
                         .postExitMaxRetracePct(postExitMaxRetracePct)
+                        .eSymmetry(wp.getPatternType().startsWith("HNS") ? cp.getMacdHistAtP1() : 0.0)
                         .build());
             }
         }
@@ -1004,6 +1016,154 @@ public class PatternComboBacktestService {
         return results;
     }
 
+    // ── Head & Shoulders Watching (5-pivot ABCDE) ───────────────────────────────
+
+    private List<DetectedPattern> scanHnsWatching(List<ZigZagPoint> pivots, List<Bar> barsW,
+            Map<Instant, Integer> tsToIdxW, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        List<DetectedPattern> results = new ArrayList<>();
+
+        for (int i = 4; i < pivots.size(); i++) {
+            ZigZagPoint pA = pivots.get(i - 4);
+            ZigZagPoint pB = pivots.get(i - 3);
+            ZigZagPoint pC = pivots.get(i - 2);
+            ZigZagPoint pD = pivots.get(i - 1);
+            ZigZagPoint pE = pivots.get(i);
+
+            // Bullish inverse H&S: A=low(left shoulder), B=high, C=low(head), D=high, E=low(right shoulder)
+            if (pA.isLow() && pB.isHigh() && pC.isLow() && pD.isHigh() && pE.isLow()) {
+                processHnsWatching(pA, pB, pC, pD, pE, barsW, tsToIdxW, atrArr, rsiValues, macdHistArr, stochRsiK, results, true);
+            }
+            // Bearish regular H&S: A=high(left shoulder), B=low, C=high(head), D=low, E=high(right shoulder)
+            if (pA.isHigh() && pB.isLow() && pC.isHigh() && pD.isLow() && pE.isHigh()) {
+                processHnsWatching(pA, pB, pC, pD, pE, barsW, tsToIdxW, atrArr, rsiValues, macdHistArr, stochRsiK, results, false);
+            }
+        }
+        return results;
+    }
+
+    private void processHnsWatching(ZigZagPoint pA, ZigZagPoint pB, ZigZagPoint pC, ZigZagPoint pD, ZigZagPoint pE,
+            List<Bar> barsW, Map<Instant, Integer> tsToIdxW, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK, List<DetectedPattern> results, boolean bullish) {
+
+        Integer aIdx = tsToIdxW.get(pA.getTimestamp());
+        Integer bIdx = tsToIdxW.get(pB.getTimestamp());
+        Integer cIdx = tsToIdxW.get(pC.getTimestamp());
+        Integer dIdx = tsToIdxW.get(pD.getTimestamp());
+        Integer eIdx = tsToIdxW.get(pE.getTimestamp());
+        if (aIdx == null || bIdx == null || cIdx == null || dIdx == null || eIdx == null) return;
+
+        double A = pA.getValue();
+        double B = pB.getValue();
+        double C = pC.getValue();
+        double D = pD.getValue();
+        double E = pE.getValue();
+
+        double AB = Math.abs(B - A);
+        double BC = Math.abs(B - C);
+        double CD = Math.abs(D - C);
+        double DE = Math.abs(D - E);
+
+        if (AB <= 0 || BC <= 0) return;
+
+        // Rule 1: 1.6×AB ≤ BC ≤ 2.61×AB (head bigger than shoulder but not too big)
+        if (BC < 1.6 * AB || BC > 2.61 * AB) return;
+
+        // Rule 2: CD ≥ 82% of BC
+        if (CD < 0.82 * BC) return;
+
+        double atrAtE = eIdx < atrArr.length ? atrArr[eIdx] : 0;
+        if (atrAtE <= 0) return;
+
+        // Rule 3: |DE − AB| ≤ ATR (symmetric shoulders)
+        if (Math.abs(DE - AB) > atrAtE) return;
+
+        // Head must be on correct side (deeper than shoulders)
+        if (bullish  && C >= Math.min(A, E)) return;  // head must be BELOW both shoulder lows
+        if (!bullish && C <= Math.max(A, E)) return;  // head must be ABOVE both shoulder highs
+
+        // Neckline: line through B and D
+        double necklineSlope = (D - B) / (double) Math.max(1, dIdx - bIdx);
+        double necklineAtE = B + necklineSlope * (eIdx - bIdx);
+
+        // E must be on the right side of neckline
+        if (bullish  && E >= necklineAtE) return;
+        if (!bullish && E <= necklineAtE) return;
+
+        // eSymmetry = E - A (tracking, not filter)
+        double eSymmetry = E - A;
+
+        // patternHeight = distance from head to neckline (measured move target)
+        double patternHeight = Math.abs(necklineAtE - C);
+
+        double rsiAtC = cIdx < rsiValues.length ? rsiValues[cIdx] : 0;
+        double rsiAtE = eIdx < rsiValues.length ? rsiValues[eIdx] : 0;
+        double macdHistAtE = eIdx < macdHistArr.length ? macdHistArr[eIdx] : 0;
+
+        // C1 target: neckline + patternHeight (full measured move from neckline)
+        double ownTargetC1 = bullish ? necklineAtE + patternHeight : necklineAtE - patternHeight;
+
+        // Emit C1 watching pattern (entry near E on lower TF)
+        results.add(DetectedPattern.builder()
+                .patternType(bullish ? "HNS_BULL" : "HNS_BEAR")
+                .confirmationType("C1")
+                .bullish(bullish)
+                .keyLevel(E)
+                .keyLevelTime(pE.getTimestamp())
+                .entryPrice(0)
+                .stopLoss(bullish ? E - atrAtE : E + atrAtE)  // SL hint for C1
+                .ownTarget(ownTargetC1)
+                .patternHeight(patternHeight)
+                .atr(atrAtE)
+                .rsiAtP1(rsiAtC)
+                .rsiAtP2(rsiAtE)
+                .macdHistAtP1(eSymmetry)   // reuse field to carry eSymmetry for CSV
+                .macdHistAtP2(macdHistAtE)
+                .stochRsiK(eIdx < stochRsiK.length ? stochRsiK[eIdx] : 0)
+                .dailyRsi(0)
+                .macdHistogram(macdHistAtE)
+                .reversalPattern(null)
+                .build());
+
+        // Scan for F breaking neckline → emit C2 watching pattern
+        int scanEnd = Math.min(barsW.size() - 1, eIdx + 40); // up to 40 × 1h bars
+        for (int k = eIdx + 1; k <= scanEnd; k++) {
+            Bar bar = barsW.get(k);
+            double necklineAtK = B + necklineSlope * (k - bIdx);
+            boolean fBreaks = bullish
+                    ? bar.getHighPrice().doubleValue() >= necklineAtK
+                    : bar.getLowPrice().doubleValue() <= necklineAtK;
+            if (!fBreaks) continue;
+
+            double ownTargetC2 = bullish ? necklineAtK + patternHeight : necklineAtK - patternHeight;
+
+            // For C2: store E price in stopLoss field so the confirmation scanner can compute EF
+            results.add(DetectedPattern.builder()
+                    .patternType(bullish ? "HNS_BULL" : "HNS_BEAR")
+                    .confirmationType("C2")
+                    .bullish(bullish)
+                    .keyLevel(necklineAtK)      // C2 confirmation zone = near neckline
+                    .keyLevelTime(bar.getEndTime())
+                    .entryPrice(0)
+                    .stopLoss(E)               // reuse: stores E price so scanner can compute EF
+                    .ownTarget(ownTargetC2)
+                    .patternHeight(patternHeight)
+                    .atr(atrAtE)
+                    .pivotBTime(pE.getTimestamp())   // E time
+                    .pivotDTime(bar.getEndTime())    // F time
+                    .rsiAtP1(rsiAtC)
+                    .rsiAtP2(rsiAtE)
+                    .macdHistAtP1(eSymmetry)   // carry eSymmetry
+                    .macdHistAtP2(macdHistAtE)
+                    .stochRsiK(k < stochRsiK.length ? stochRsiK[k] : 0)
+                    .dailyRsi(0)
+                    .macdHistogram(k < macdHistArr.length ? macdHistArr[k] : 0)
+                    .reversalPattern(null)
+                    .build());
+            break; // first F break only
+        }
+    }
+
     /**
      * Detects RSI crossover entry for triangle watching patterns on the WATCHING TF (1h).
      *
@@ -1109,6 +1269,182 @@ public class PatternComboBacktestService {
                 if (!results.isEmpty() && results.get(results.size()-1).getKeyLevelTime() != null
                         && !results.get(results.size()-1).getKeyLevelTime().isBefore(bar.getEndTime())) {
                     break; // found first confirmation for this triangle, stop scanning
+                }
+            }
+        }
+        return results;
+    }
+
+    /**
+     * H&S candle confirmation on lower TF.
+     * C1: reversal candle near E price (wp.keyLevel) within ±1.5 ATR, entry on breakout.
+     * C2: after F breaks neckline, retrace ≥ 38%+ATR of EF swing but still above neckline,
+     *     reversal candle in retrace zone.
+     */
+    private List<DetectedPattern> scanHnsCandleConfirmation(
+            List<DetectedPattern> hnsWatching,
+            List<Bar> barsC, double[] atrArrC,
+            double[] rsiValuesC, double[] stochRsiKC,
+            DailyIndicators dailyInd) {
+
+        List<DetectedPattern> results = new ArrayList<>();
+
+        for (DetectedPattern wp : hnsWatching) {
+            boolean bullish = wp.isBullish();
+            boolean isC2 = "C2".equals(wp.getConfirmationType());
+            double atr = wp.getAtr();
+            if (atr <= 0) continue;
+
+            if (!isC2) {
+                // C1: scan 15m bars around E time for reversal candle within ePrice ± 1.5 ATR
+                double ePrice = wp.getKeyLevel();
+                Instant eTime = wp.getKeyLevelTime();
+
+                int startIdx = findIdxAtOrAfter(barsC, eTime.minusSeconds(2 * 3600L));
+                if (startIdx < 0) startIdx = 0;
+                int scanEnd15m = findIdxAtOrAfter(barsC, eTime.plusSeconds(20 * 3600L));
+                if (scanEnd15m < 0) scanEnd15m = Math.min(barsC.size() - 1, startIdx + 80);
+
+                for (int i = startIdx; i < scanEnd15m && i < barsC.size(); i++) {
+                    Bar bar = barsC.get(i);
+                    double barLow  = bar.getLowPrice().doubleValue();
+                    double barHigh = bar.getHighPrice().doubleValue();
+                    boolean nearE = barLow <= ePrice + 1.5 * atr && barHigh >= ePrice - 1.5 * atr;
+                    if (!nearE) continue;
+
+                    CandlestickPatternDetector.PatternResult rev = bullish
+                            ? candlestickPatternDetector.detectBullish(barsC, i)
+                            : candlestickPatternDetector.detectBearish(barsC, i);
+                    if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
+
+                    double breakoutLevel = rev.breakoutLevel();
+                    for (int j = i + 1; j < Math.min(barsC.size(), i + 10); j++) {
+                        Bar entryBar = barsC.get(j);
+                        boolean breakout = bullish
+                                ? entryBar.getHighPrice().doubleValue() > breakoutLevel
+                                : entryBar.getLowPrice().doubleValue() < breakoutLevel;
+                        if (!breakout) continue;
+
+                        double entryPrice = entryBar.getOpenPrice().doubleValue();
+                        double sl = bullish ? barLow - 0.5 * atr : barHigh + 0.5 * atr;
+
+                        if (bullish  && sl >= entryPrice) break;
+                        if (!bullish && sl <= entryPrice) break;
+                        double localAtr = j < atrArrC.length ? atrArrC[j] : atr;
+                        if (Math.abs(entryPrice - sl) < 0.3 * localAtr) break;
+
+                        double ownTarget = bullish
+                                ? entryPrice + wp.getPatternHeight()
+                                : entryPrice - wp.getPatternHeight();
+
+                        results.add(DetectedPattern.builder()
+                                .patternType("HNS_CANDLE")
+                                .confirmationType("C1")
+                                .bullish(bullish)
+                                .keyLevel(entryPrice)
+                                .keyLevelTime(entryBar.getEndTime())
+                                .entryPrice(entryPrice)
+                                .stopLoss(sl)
+                                .ownTarget(ownTarget)
+                                .patternHeight(wp.getPatternHeight())
+                                .atr(localAtr)
+                                .rsiAtP1(i < rsiValuesC.length ? rsiValuesC[i] : 0)
+                                .rsiAtP2(j < rsiValuesC.length ? rsiValuesC[j] : 0)
+                                .macdHistAtP1(wp.getMacdHistAtP1())  // carry eSymmetry
+                                .macdHistAtP2(0)
+                                .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
+                                .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .macdHistogram(0)
+                                .reversalPattern(rev.pattern().name())
+                                .build());
+                        break;
+                    }
+                    // one C1 confirmation per H&S watching pattern
+                    if (!results.isEmpty() && results.get(results.size() - 1).getKeyLevelTime() != null
+                            && !results.get(results.size() - 1).getKeyLevelTime().isBefore(bar.getEndTime())) {
+                        break;
+                    }
+                }
+            } else {
+                // C2: after F breaks neckline (wp.keyLevelTime), scan 15m for retrace zone
+                // wp.keyLevel = necklineAtF, wp.stopLoss = E price
+                double necklineAtF = wp.getKeyLevel();
+                double ePrice = wp.getStopLoss();  // E price stored here
+                double EF = Math.abs(necklineAtF - ePrice);
+                if (EF <= 0) continue;
+
+                // Retrace zone: at least 38% of EF + 1 ATR back from neckline, but above neckline
+                double minRetrace = 0.382 * EF + atr;
+                // Price must be in range: [necklineAtF - minRetrace, necklineAtF] (bull)
+                double retraceZoneLow  = bullish ? necklineAtF - minRetrace : necklineAtF;
+                double retraceZoneHigh = bullish ? necklineAtF             : necklineAtF + minRetrace;
+
+                Instant fTime = wp.getKeyLevelTime();
+                int startIdx = findIdxAtOrAfter(barsC, fTime);
+                if (startIdx < 0) continue;
+                int scanEnd15m = Math.min(barsC.size() - 1, startIdx + 80);
+
+                for (int i = startIdx; i < scanEnd15m; i++) {
+                    Bar bar = barsC.get(i);
+                    double barClose = bar.getClosePrice().doubleValue();
+                    // Bar must be in retrace zone and above neckline (bullish) or below (bearish)
+                    boolean inZone = bullish
+                            ? barClose >= retraceZoneLow && barClose <= necklineAtF
+                            : barClose <= retraceZoneHigh && barClose >= necklineAtF;
+                    if (!inZone) continue;
+
+                    CandlestickPatternDetector.PatternResult rev = bullish
+                            ? candlestickPatternDetector.detectBullish(barsC, i)
+                            : candlestickPatternDetector.detectBearish(barsC, i);
+                    if (rev.pattern() == CandlestickPatternDetector.CandlePattern.NONE) continue;
+
+                    double breakoutLevel = rev.breakoutLevel();
+                    for (int j = i + 1; j < Math.min(barsC.size(), i + 10); j++) {
+                        Bar entryBar = barsC.get(j);
+                        boolean breakout = bullish
+                                ? entryBar.getHighPrice().doubleValue() > breakoutLevel
+                                : entryBar.getLowPrice().doubleValue() < breakoutLevel;
+                        if (!breakout) continue;
+
+                        double entryPrice = entryBar.getOpenPrice().doubleValue();
+                        // SL = neckline - ATR (bull): below neckline means pattern failed
+                        double sl = bullish ? necklineAtF - atr : necklineAtF + atr;
+
+                        if (bullish  && sl >= entryPrice) break;
+                        if (!bullish && sl <= entryPrice) break;
+                        double localAtr = j < atrArrC.length ? atrArrC[j] : atr;
+                        if (Math.abs(entryPrice - sl) < 0.3 * localAtr) break;
+
+                        double ownTarget = bullish
+                                ? entryPrice + wp.getPatternHeight()
+                                : entryPrice - wp.getPatternHeight();
+
+                        results.add(DetectedPattern.builder()
+                                .patternType("HNS_CANDLE")
+                                .confirmationType("C2")
+                                .bullish(bullish)
+                                .keyLevel(entryPrice)
+                                .keyLevelTime(entryBar.getEndTime())
+                                .entryPrice(entryPrice)
+                                .stopLoss(sl)
+                                .ownTarget(ownTarget)
+                                .patternHeight(wp.getPatternHeight())
+                                .atr(localAtr)
+                                .rsiAtP1(i < rsiValuesC.length ? rsiValuesC[i] : 0)
+                                .rsiAtP2(j < rsiValuesC.length ? rsiValuesC[j] : 0)
+                                .macdHistAtP1(wp.getMacdHistAtP1())  // carry eSymmetry
+                                .macdHistAtP2(0)
+                                .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
+                                .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .macdHistogram(0)
+                                .reversalPattern(rev.pattern().name())
+                                .build());
+                        break;
+                    }
+                    if (!results.isEmpty() && results.get(results.size() - 1).getKeyLevelTime() != null
+                            && !results.get(results.size() - 1).getKeyLevelTime().isBefore(bar.getEndTime())) {
+                        break;
+                    }
                 }
             }
         }
@@ -1350,7 +1686,7 @@ public class PatternComboBacktestService {
                 "entry_price,stop_loss,watching_target,confirm_own_target,rr_watching,key_level," +
                 "result,bars_to_result,pnl_pct,exit_price,exit_reason," +
                 "rsi_at_p1,rsi_at_p2,macd_hist_at_p1,macd_hist_at_p2," +
-                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct\n";
+                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry\n";
         try (FileWriter fw = new FileWriter(csvPath)) {
             fw.write(header);
             for (ComboRow r : rows) {
@@ -1533,15 +1869,16 @@ public class PatternComboBacktestService {
         double  confirmPatternHeight;
         boolean targetEventuallyHit;
         double  postExitMaxRetracePct;  // deepest retrace from peak after early exit (for analysis)
+        double  eSymmetry;   // E - A price diff (H&S shoulder symmetry tracking; 0 for non-H&S)
 
         public String toCsvRow() {
             return String.format(Locale.US,
-                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f",
+                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f",
                 entryTime, symbol, watchingPattern, watchingTf, confirmPattern, confirmTf, confirmType,
                 entryPrice, stopLoss, watchingTarget, confirmOwnTarget, rrWatching, keyLevel,
                 result, barsToResult, pnlPct, exitPrice, exitReason,
                 rsiAtP1, rsiAtP2, macdHistAtP1, macdHistAtP2, stochRsiK15m, dailyRsi,
-                watchingPatternHeight, confirmPatternHeight, targetEventuallyHit, postExitMaxRetracePct);
+                watchingPatternHeight, confirmPatternHeight, targetEventuallyHit, postExitMaxRetracePct, eSymmetry);
         }
     }
 
