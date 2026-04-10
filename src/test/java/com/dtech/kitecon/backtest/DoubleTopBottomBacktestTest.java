@@ -7,6 +7,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.io.File;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,6 +34,22 @@ class DoubleTopBottomBacktestTest {
         backtestService.runAndWriteCsv("RELIANCE", csvPath);
         System.out.println("CSV written to: " + csvPath);
         // Just verify file exists and has content
+        File f = new File(csvPath);
+        assertTrue(f.exists());
+        assertTrue(f.length() > 0);
+    }
+
+    @Test
+    void runTop20Backtest() throws Exception {
+        List<String> top20 = List.of(
+            "RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK",
+            "INFY", "SBIN", "BAJFINANCE", "HINDUNILVR", "ITC",
+            "LT", "KOTAKBANK", "AXISBANK", "ASIANPAINT", "HCLTECH",
+            "MARUTI", "SUNPHARMA", "TITAN", "ADANIENT", "NTPC"
+        );
+        String csvPath = "/tmp/top20_double_topbottom_backtest.csv";
+        backtestService.runMultipleAndWriteCsv(top20, csvPath);
+        System.out.println("CSV written to: " + csvPath);
         File f = new File(csvPath);
         assertTrue(f.exists());
         assertTrue(f.length() > 0);
