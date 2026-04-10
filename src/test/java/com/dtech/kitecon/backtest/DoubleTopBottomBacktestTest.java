@@ -28,6 +28,9 @@ class DoubleTopBottomBacktestTest {
     @Autowired
     private DoubleTopBottomBacktestService backtestService;
 
+    @Autowired
+    private TriangleBacktestService triangleBacktestService;
+
     @Test
     void runRelianceBacktest() throws Exception {
         String csvPath = "/tmp/reliance_double_topbottom_backtest.csv";
@@ -49,6 +52,16 @@ class DoubleTopBottomBacktestTest {
         );
         String csvPath = "/tmp/top20_double_topbottom_backtest.csv";
         backtestService.runMultipleAndWriteCsv(top20, csvPath);
+        System.out.println("CSV written to: " + csvPath);
+        File f = new File(csvPath);
+        assertTrue(f.exists());
+        assertTrue(f.length() > 0);
+    }
+
+    @Test
+    void runRelianceTriangleBacktest() throws Exception {
+        String csvPath = "/tmp/reliance_triangle_backtest.csv";
+        triangleBacktestService.runAndWriteCsv("RELIANCE", csvPath);
         System.out.println("CSV written to: " + csvPath);
         File f = new File(csvPath);
         assertTrue(f.exists());

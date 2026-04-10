@@ -69,10 +69,10 @@ public class TradeSignal {
     private Boolean rsiDivergence;
 
     @Column(precision = 6, scale = 2)
-    private Double dailyRsi;
+    private BigDecimal dailyRsi;
 
     @Column(precision = 8, scale = 4)
-    private Double stochRsiK;
+    private BigDecimal stochRsiK;
 
     @Column(length = 10)
     private String timeframe;
