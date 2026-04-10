@@ -242,12 +242,15 @@ public class PatternComboBacktestService {
                 // Flag: confirmation must be FLAG_CANDLE type only
                 if (wp.getPatternType().startsWith("FLAG") && !"FLAG_CANDLE".equals(cp.getPatternType())) continue;
 
-                // Time window check (wall-clock: 20h)
+                // Time window check: flags can retrace over 1-2 days; others use 20h
+                long timeWindowSecs = wp.getPatternType().startsWith("FLAG") ? 72 * 3600L : 20 * 3600L;
                 if (cp.getKeyLevelTime().isBefore(wp.getKeyLevelTime())) continue;
-                if (cp.getKeyLevelTime().isAfter(wp.getKeyLevelTime().plusSeconds(20 * 3600L))) continue;
+                if (cp.getKeyLevelTime().isAfter(wp.getKeyLevelTime().plusSeconds(timeWindowSecs))) continue;
 
-                // Price proximity check — triangles: trendline entry may be offset from apex
-                double proximityMultiplier = wp.getPatternType().startsWith("TRIANGLE") ? 3.0 : KEY_LEVEL_PROXIMITY_ATR;
+                // Price proximity check: flags use 4×ATR (retrace can be 38-61.8% of EF); triangles 3×; others 1.5×
+                double proximityMultiplier = wp.getPatternType().startsWith("FLAG")     ? 4.0
+                                           : wp.getPatternType().startsWith("TRIANGLE") ? 3.0
+                                           : KEY_LEVEL_PROXIMITY_ATR;
                 if (Math.abs(cp.getEntryPrice() - wp.getKeyLevel()) > proximityMultiplier * wp.getAtr()) continue;
 
                 // Compute combo parameters
@@ -1206,7 +1209,7 @@ public class PatternComboBacktestService {
         double poleHeight = Math.abs(poleEnd.getValue() - poleStart.getValue());
         double atrAtPoleEnd = peIdx < atrArr.length ? atrArr[peIdx] : 0;
         if (atrAtPoleEnd <= 0) return;
-        if (poleHeight < 4.0 * atrAtPoleEnd) return;
+        if (poleHeight < 2.5 * atrAtPoleEnd) return;
 
         double halfPoleLevel = bullish
                 ? poleStart.getValue() + 0.5 * poleHeight
@@ -1294,7 +1297,7 @@ public class PatternComboBacktestService {
                     .pivotBTime(poleEnd.getTimestamp())
                     .pivotDTime(breakoutPiv.getTimestamp())
                     .rsiAtP1(rsiAtPoleEnd)
-                    .rsiAtP2(rsiAtPoleEnd)
+                    .rsiAtP2(lowestFlagLow)   // carries lowestFlagLow so C2 scanner can compute EF swing
                     .macdHistAtP1(resBase)
                     .macdHistAtP2(macdAtPoleEnd)
                     .stochRsiK(peIdx < stochRsiK.length ? stochRsiK[peIdx] : 0)
@@ -1736,14 +1739,25 @@ public class PatternComboBacktestService {
 
                 int startIdx = findIdxAtOrAfter(barsC, breakoutTime);
                 if (startIdx < 0) continue;
-                int scanEnd = Math.min(barsC.size() - 1, startIdx + 80);
+                int scanEnd = Math.min(barsC.size() - 1, startIdx + 200); // 200×15m ≈ 50h (flags retrace over 1-2 days)
+
+                // EF swing: from the lowest flag low (stored in rsiAtP2) to breakout trendline
+                double lowestFlagLow = wp.getRsiAtP2();
+                double efSwing = Math.abs(breakoutLevel - lowestFlagLow);
+                // Retrace ≥ 38% of EF: price pulls back at least 0.382×EF from breakoutLevel
+                // Also accept retest within ATR of trendline (two equivalent conditions, union)
+                double retrace38 = 0.382 * efSwing;
 
                 for (int i = startIdx; i < scanEnd; i++) {
                     Bar bar = barsC.get(i);
                     double barClose = bar.getClosePrice().doubleValue();
-                    boolean inRetrace = bullish
+                    boolean nearTrendline = bullish
                             ? barClose >= breakoutLevel - 1.5 * atr && barClose <= breakoutLevel + atr
                             : barClose <= breakoutLevel + 1.5 * atr && barClose >= breakoutLevel - atr;
+                    boolean retracedEnough = efSwing > 0 && (bullish
+                            ? barClose <= breakoutLevel - retrace38 && barClose >= lowestFlagLow + 0.236 * efSwing
+                            : barClose >= breakoutLevel + retrace38 && barClose <= lowestFlagLow - 0.236 * efSwing);
+                    boolean inRetrace = nearTrendline || retracedEnough;
                     if (!inRetrace) continue;
 
                     CandlestickPatternDetector.PatternResult rev = bullish
