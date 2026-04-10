@@ -152,14 +152,14 @@ public class DoubleTopBottomBacktestService {
             if (p0.isLow() && p1.isHigh() && p2.isLow()) {
                 detectDoubleBottom(p0, p1, p2, symbol, hourlyBars, hourlyTsToIdx,
                         macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                        dailyIndicators, macdHistArr, macdSignalArr, tradeSetups);
+                        rsiValues, dailyIndicators, macdHistArr, macdSignalArr, tradeSetups);
             }
 
             // Double Top: HIGH, LOW (neckline), HIGH
             if (p0.isHigh() && p1.isLow() && p2.isHigh()) {
                 detectDoubleTop(p0, p1, p2, symbol, hourlyBars, hourlyTsToIdx,
                         macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                        dailyIndicators, macdHistArr, macdSignalArr, tradeSetups);
+                        rsiValues, dailyIndicators, macdHistArr, macdSignalArr, tradeSetups);
             }
         }
 
@@ -177,6 +177,7 @@ public class DoubleTopBottomBacktestService {
             MACDIndicator macd, EMAIndicator macdSignalLine,
             double[] stochRsiK, double[] stochRsiD,
             double[] bbWidths, double[] atrArr,
+            double[] rsiValues,
             DailyIndicators dailyIndicators, double[] macdHistArr, double[] macdSignalArr, List<TradeSetup> results) {
 
         double low1Price    = low1.getValue();
@@ -195,6 +196,13 @@ public class DoubleTopBottomBacktestService {
         Integer low2BarIdx = tsToIdx.get(low2.getTimestamp());
         if (low2BarIdx == null) return;
 
+        // RSI divergence: RSI at low2 must be higher than RSI at low1 (bullish divergence)
+        Integer low1BarIdx = tsToIdx.get(low1.getTimestamp());
+        if (low1BarIdx == null) return;
+        double rsiAtLow1 = rsiValues[low1BarIdx];
+        double rsiAtLow2 = rsiValues[low2BarIdx];
+        if (rsiAtLow2 <= rsiAtLow1) return; // no bullish divergence, skip
+
         double patternHeight = neckline - Math.min(low1Price, low2Price);
         double target = neckline + patternHeight;
 
@@ -212,11 +220,11 @@ public class DoubleTopBottomBacktestService {
                 if (bar.getHighPrice().doubleValue() > breakoutLevel) {
                     // Entry = open of bar j
                     double entryPrice = bar.getOpenPrice().doubleValue();
-                    double stopLoss   = bars.get(j - 1).getLowPrice().doubleValue();
+                    double stopLoss   = Math.min(low1Price, low2Price);
                     buildAndAddSetup("DOUBLE_BOTTOM", "C1", symbol, low1Price, low2Price, neckline,
                             low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                             macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, results);
+                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtLow1, rsiAtLow2, results);
                     break;
                 }
             }
@@ -256,11 +264,11 @@ public class DoubleTopBottomBacktestService {
                     Bar bj = bars.get(j);
                     if (bj.getHighPrice().doubleValue() > breakoutLevel) {
                         double entryPrice = bj.getOpenPrice().doubleValue();
-                        double stopLoss   = bars.get(j - 1).getLowPrice().doubleValue();
+                        double stopLoss   = Math.min(low1Price, low2Price);
                         buildAndAddSetup("DOUBLE_BOTTOM", "C3", symbol, low1Price, low2Price, neckline,
                                 low2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                                 macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, results);
+                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtLow1, rsiAtLow2, results);
                         break;
                     }
                 }
@@ -279,6 +287,7 @@ public class DoubleTopBottomBacktestService {
             MACDIndicator macd, EMAIndicator macdSignalLine,
             double[] stochRsiK, double[] stochRsiD,
             double[] bbWidths, double[] atrArr,
+            double[] rsiValues,
             DailyIndicators dailyIndicators, double[] macdHistArr, double[] macdSignalArr, List<TradeSetup> results) {
 
         double high1Price   = high1.getValue();
@@ -297,6 +306,13 @@ public class DoubleTopBottomBacktestService {
         Integer high2BarIdx = tsToIdx.get(high2.getTimestamp());
         if (high2BarIdx == null) return;
 
+        // RSI divergence: RSI at high2 must be lower than RSI at high1 (bearish divergence)
+        Integer high1BarIdx = tsToIdx.get(high1.getTimestamp());
+        if (high1BarIdx == null) return;
+        double rsiAtHigh1 = rsiValues[high1BarIdx];
+        double rsiAtHigh2 = rsiValues[high2BarIdx];
+        if (rsiAtHigh2 >= rsiAtHigh1) return; // no bearish divergence, skip
+
         double patternHeight = Math.max(high1Price, high2Price) - neckline;
         double target = neckline - patternHeight;
 
@@ -312,11 +328,11 @@ public class DoubleTopBottomBacktestService {
                 Bar bar = bars.get(j);
                 if (bar.getLowPrice().doubleValue() < breakoutLevel) {
                     double entryPrice = bar.getOpenPrice().doubleValue();
-                    double stopLoss   = bars.get(j - 1).getHighPrice().doubleValue();
+                    double stopLoss   = Math.max(high1Price, high2Price);
                     buildAndAddSetup("DOUBLE_TOP", "C1", symbol, high1Price, high2Price, neckline,
                             high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                             macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, results);
+                            dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtHigh1, rsiAtHigh2, results);
                     break;
                 }
             }
@@ -347,11 +363,11 @@ public class DoubleTopBottomBacktestService {
                     Bar bj = bars.get(j);
                     if (bj.getLowPrice().doubleValue() < breakoutLevel) {
                         double entryPrice = bj.getOpenPrice().doubleValue();
-                        double stopLoss   = bars.get(j - 1).getHighPrice().doubleValue();
+                        double stopLoss   = Math.max(high1Price, high2Price);
                         buildAndAddSetup("DOUBLE_TOP", "C3", symbol, high1Price, high2Price, neckline,
                                 high2Retrace, patternHeight, bars, i, j - 1, j, entryPrice, stopLoss, target,
                                 macd, macdSignalLine, stochRsiK, stochRsiD, bbWidths, atrArr,
-                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, results);
+                                dailyIndicators, rev.pattern(), macdHistArr, macdSignalArr, rsiAtHigh1, rsiAtHigh2, results);
                         break;
                     }
                 }
@@ -376,6 +392,7 @@ public class DoubleTopBottomBacktestService {
             DailyIndicators dailyIndicators,
             CandlestickPatternDetector.CandlePattern reversalPattern,
             double[] macdHistArr, double[] macdSignalArr,
+            double rsiAtP1, double rsiAtP2,
             List<TradeSetup> results) {
 
         if (entryBarIdx >= bars.size()) return;
@@ -531,6 +548,8 @@ public class DoubleTopBottomBacktestService {
                 .dailyMacdHistogram(dailyMacdHist)
                 .dailyRsi(dailyRsiVal)
                 .dailyStochRsiK(dailyStochRsiK)
+                .rsiAtP1(rsiAtP1)
+                .rsiAtP2(rsiAtP2)
                 .result(result)
                 .barsToResult(barsToResult)
                 .pnlPct(pnlPct)
@@ -551,7 +570,7 @@ public class DoubleTopBottomBacktestService {
                 "entry_price,stop_loss,target,risk_pct,reward_pct,rr_ratio," +
                 "macd_histogram,macd_signal,stoch_rsi_k,stoch_rsi_d,bb_width,bb_contracting," +
                 "daily_macd_histogram,daily_rsi,daily_stoch_rsi_k," +
-                "result,bars_to_result,pnl_pct,exit_price,exit_reason\n";
+                "result,bars_to_result,pnl_pct,exit_price,exit_reason,rsi_at_p1,rsi_at_p2\n";
 
         try (FileWriter fw = new FileWriter(csvPath)) {
             fw.write(header);
