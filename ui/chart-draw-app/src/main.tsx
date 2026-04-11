@@ -41,8 +41,15 @@ import KiteConfigPage from './admin/kiteConfig/KiteConfigPage';
 // Group Management
 import GroupManagementPage from './admin/groups/GroupManagementPage';
 
+// Pattern Screener
+import PatternScreenerPage from "./patternScanner/pages/PatternScreenerPage";
+
 // Settings
 import SettingsPage from './settings/SettingsPage';
+
+// Trade Monitor
+import SegmentConfigPage from './tradeMonitor/pages/SegmentConfigPage';
+import TradeOrdersPage from './tradeMonitor/pages/TradeOrdersPage';
 
 // Trade Alerts
 import TradeAlertToast from './elliottScreener/components/TradeAlertToast';
@@ -198,6 +205,30 @@ root.render(
           element={
             <ProtectedRoute requiredRole="USER">
               <SettingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pattern-screener"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <PatternScreenerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/segment-config"
+          element={
+            <ProtectedRoute requiredRole="ADMIN">
+              <SegmentConfigPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/trade-orders"
+          element={
+            <ProtectedRoute requiredRole="ADMIN">
+              <TradeOrdersPage />
             </ProtectedRoute>
           }
         />
