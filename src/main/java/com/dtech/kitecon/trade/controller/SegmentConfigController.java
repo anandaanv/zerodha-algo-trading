@@ -106,7 +106,7 @@ public class SegmentConfigController {
                 SegmentConfig config = SegmentConfig.builder()
                         .symbol(symbol)
                         .segment(seg)
-                        .enabled(false)
+                        .enabled(true)
                         .capitalPct(capitalPct)
                         .provider("KITE")
                         .build();
