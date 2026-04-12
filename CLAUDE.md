@@ -39,6 +39,10 @@ Always invalidate **only `/index.html`**, never `/*`:
 aws cloudfront create-invalidation --distribution-id E3GNIWHAP6FDTM --paths "/index.html"
 ```
 
+## New Pages — Add to Dashboard
+
+Any new top-level page that doesn't belong under an existing parent section **must** be linked from the Dashboard (`src/components/Dashboard.tsx`). This ensures all features are discoverable from the home screen.
+
 ## Kite OAuth Flow (Production)
 
 - Frontend navigates to `/api/admin/kite-configs/1/connect` (NOT `/kite-login`)
