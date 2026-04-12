@@ -30,10 +30,7 @@ export const getApiUrl = (path: string): URL => {
   return new URL(p, API_BASE_URL || window.location.origin);
 };
 
-export const apiFetch = (path: string, options: any) => {
-    let url = path;
-    if (!path.includes(API_BASE_URL)) {
-        url = `${API_BASE_URL}${path}`;
-    }
-    return fetch(url, options || {});
+export const apiFetch = (path: string, options?: RequestInit) => {
+  const url = path.startsWith('http') ? path : getApiUrl(path).toString();
+  return fetch(url, options || {});
 };
