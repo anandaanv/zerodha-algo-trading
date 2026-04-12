@@ -1,6 +1,7 @@
 package com.dtech.kitecon.trade.controller;
 
 import com.dtech.kitecon.patternscanner.PatternScanService;
+import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.trade.entity.SegmentConfig;
 import com.dtech.kitecon.trade.enums.TradingSegment;
 import com.dtech.kitecon.trade.repository.SegmentConfigRepository;
@@ -24,6 +25,7 @@ public class SegmentConfigController {
 
     private final SegmentConfigRepository segmentConfigRepository;
     private final PatternScanService patternScanService;
+    private final InstrumentRepository instrumentRepository;
 
     @GetMapping("/")
     public ResponseEntity<List<SegmentConfig>> getAll() {
@@ -76,42 +78,36 @@ public class SegmentConfigController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/seed")
-    public ResponseEntity<Map<String, Integer>> seed() {
-        int seeded = 0;
-
-        for (String symbol : patternScanService.getNifty50()) {
-            Optional<SegmentConfig> existing = segmentConfigRepository.findBySymbolAndSegment(symbol, TradingSegment.EQ);
-            if (existing.isEmpty()) {
-                SegmentConfig config = SegmentConfig.builder()
-                        .symbol(symbol)
-                        .segment(TradingSegment.EQ)
-                        .enabled(false)
-                        .capitalPct(BigDecimal.valueOf(2.0))
-                        .provider("KITE")
-                        .build();
-                segmentConfigRepository.save(config);
-                seeded++;
-            }
-        }
-
-        Map<String, Integer> result = new HashMap<>();
-        result.put("seeded", seeded);
-        return ResponseEntity.ok(result);
+    @DeleteMapping("/all")
+    public ResponseEntity<Void> deleteAll() {
+        segmentConfigRepository.deleteAll();
+        return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/seed-fno")
-    public ResponseEntity<Map<String, Integer>> seedFno() {
+    @PostMapping("/seed")
+    public ResponseEntity<Map<String, Integer>> seed(
+            @RequestParam String list,
+            @RequestParam String segment) {
         int seeded = 0;
 
-        for (String symbol : patternScanService.getNifty50()) {
-            Optional<SegmentConfig> existing = segmentConfigRepository.findBySymbolAndSegment(symbol, TradingSegment.OPT);
+        List<String> symbols;
+        if ("FNO".equalsIgnoreCase(list)) {
+            symbols = instrumentRepository.findDistinctFutureUnderlyingNames();
+        } else {
+            symbols = patternScanService.getNifty50();
+        }
+
+        TradingSegment seg = TradingSegment.valueOf(segment.toUpperCase());
+
+        for (String symbol : symbols) {
+            Optional<SegmentConfig> existing = segmentConfigRepository.findBySymbolAndSegment(symbol, seg);
             if (existing.isEmpty()) {
+                BigDecimal capitalPct = seg == TradingSegment.OPT ? BigDecimal.valueOf(1.0) : BigDecimal.valueOf(2.0);
                 SegmentConfig config = SegmentConfig.builder()
                         .symbol(symbol)
-                        .segment(TradingSegment.OPT)
+                        .segment(seg)
                         .enabled(false)
-                        .capitalPct(BigDecimal.valueOf(1.0))
+                        .capitalPct(capitalPct)
                         .provider("KITE")
                         .build();
                 segmentConfigRepository.save(config);

@@ -5,7 +5,7 @@ import {
   updateSegmentConfig,
   deleteSegmentConfig,
   seedSegmentConfigs,
-  seedFnoSegmentConfigs,
+  clearAllSegmentConfigs,
   SegmentConfig,
   TradingSegment,
 } from "../api";
@@ -18,6 +18,8 @@ const SegmentConfigPage: React.FC = () => {
   const [newConfig, setNewConfig] = useState<Omit<SegmentConfig, "id"> | null>(
     null
   );
+  const [seedList, setSeedList] = useState<'NIFTY50' | 'FNO'>('FNO');
+  const [seedSegment, setSeedSegment] = useState<TradingSegment>('EQ');
 
   const fetchConfigs = async () => {
     setLoading(true);
@@ -69,7 +71,7 @@ const SegmentConfigPage: React.FC = () => {
 
   const handleSeed = async () => {
     try {
-      const result = await seedSegmentConfigs();
+      const result = await seedSegmentConfigs(seedList, seedSegment);
       alert(`Seeded ${result.seeded} configurations`);
       fetchConfigs();
     } catch (err) {
@@ -77,13 +79,13 @@ const SegmentConfigPage: React.FC = () => {
     }
   };
 
-  const handleSeedFno = async () => {
+  const handleClearAll = async () => {
+    if (!window.confirm('Delete ALL segment configurations? This cannot be undone.')) return;
     try {
-      const result = await seedFnoSegmentConfigs();
-      alert(`Seeded ${result.seeded} FNO (OPT) configurations`);
+      await clearAllSegmentConfigs();
       fetchConfigs();
     } catch (err) {
-      setError(`Error seeding FNO configs: ${err}`);
+      setError(`Error clearing configs: ${err}`);
     }
   };
 
@@ -197,11 +199,31 @@ const SegmentConfigPage: React.FC = () => {
       <div style={headerStyle}>
         <h1 style={titleStyle}>Segment Config</h1>
         <div style={buttonGroupStyle}>
+          <select
+            style={inputStyle}
+            value={seedList}
+            onChange={(e) => setSeedList(e.target.value as 'NIFTY50' | 'FNO')}
+          >
+            <option value="NIFTY50">Nifty50</option>
+            <option value="FNO">FNO</option>
+          </select>
+          <select
+            style={inputStyle}
+            value={seedSegment}
+            onChange={(e) => setSeedSegment(e.target.value as TradingSegment)}
+          >
+            <option value="EQ">EQ</option>
+            <option value="FUT">FUT</option>
+            <option value="OPT">OPT</option>
+          </select>
           <button style={buttonStyle} onClick={handleSeed}>
-            Seed Nifty50 EQ
+            Seed
           </button>
-          <button style={buttonStyle} onClick={handleSeedFno}>
-            Seed Nifty50 FNO
+          <button
+            style={{ ...buttonStyle, backgroundColor: '#d32f2f', color: '#fff' }}
+            onClick={handleClearAll}
+          >
+            Clear All
           </button>
           <button
             style={buttonStyle}

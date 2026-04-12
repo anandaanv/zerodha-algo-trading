@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ElliottScreener, CreateScreenerRequest } from '../types';
-import { createScreener, updateScreener, triggerRun } from '../api';
+import { createScreener, updateScreener, triggerRun, deleteScreener } from '../api';
 import IndexSymbolPicker from './IndexSymbolPicker';
 import RunResultsPanel from './RunResultsPanel';
 
@@ -10,6 +10,7 @@ interface Props {
   onCancel?: () => void;
   onRun?: (run: any) => void;
   runningId?: number | null;
+  onDeleted?: (id: number) => void;
 }
 
 const SCHEDULE_PRESETS = [
@@ -29,6 +30,7 @@ export default function ScreenerConfigPanel({
   onCancel,
   onRun,
   runningId,
+  onDeleted,
 }: Props) {
   const [name, setName] = useState(screener?.name ?? '');
   const [symbols, setSymbols] = useState(screener?.symbols ?? '');
@@ -104,6 +106,34 @@ export default function ScreenerConfigPanel({
     }
   };
 
+  const handleDelete = async () => {
+    if (!screener) return;
+    if (!window.confirm(`Delete screener "${screener.name}"?`)) return;
+    try {
+      await deleteScreener(screener.id);
+      onDeleted?.(screener.id);
+    } catch (e: any) {
+      setSaveError(e.message);
+    }
+  };
+
+  const handleToggleEnabled = async () => {
+    if (!screener) return;
+    try {
+      const updated = await updateScreener(screener.id, {
+        name: screener.name,
+        symbols: screener.symbols,
+        timeframes: screener.timeframes,
+        primaryTimeframe: screener.primaryTimeframe ?? undefined,
+        scheduleCron: screener.scheduleCron,
+        enabled: !screener.enabled,
+      });
+      onSaved(updated);
+    } catch (e: any) {
+      setSaveError(e.message);
+    }
+  };
+
   const fmtDate = (iso: string | null) => {
     if (!iso) return 'Never';
     try {
@@ -156,8 +186,40 @@ export default function ScreenerConfigPanel({
               {screener.symbols.split(',').length} symbol(s) · {screener.timeframes}
             </span>
           </div>
-          <div style={{ color: '#aaa', fontSize: 12 }}>
-            Next: {fmtDate(screener.nextRunAt)} {expanded ? '▲' : '▼'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ color: '#aaa', fontSize: 12 }}>
+              Next: {fmtDate(screener.nextRunAt)}
+            </div>
+            {/* Toggle slider */}
+            <div
+              onClick={(e) => { e.stopPropagation(); handleToggleEnabled(); }}
+              title={screener.enabled ? 'Disable screener' : 'Enable screener'}
+              style={{
+                width: 40, height: 22, borderRadius: 11, cursor: 'pointer',
+                backgroundColor: screener.enabled ? '#2e7d32' : '#555',
+                position: 'relative', transition: 'background 0.2s',
+                flexShrink: 0,
+              }}
+            >
+              <div style={{
+                width: 16, height: 16, borderRadius: '50%', backgroundColor: '#fff',
+                position: 'absolute', top: 3,
+                left: screener.enabled ? 21 : 3,
+                transition: 'left 0.2s',
+              }} />
+            </div>
+            {/* Delete button */}
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+              title="Delete screener"
+              style={{
+                background: 'transparent', color: '#ef5350', border: '1px solid #ef5350',
+                borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 12,
+              }}
+            >
+              ✕
+            </button>
+            <span style={{ color: '#aaa', fontSize: 12 }}>{expanded ? '▲' : '▼'}</span>
           </div>
         </div>
       )}

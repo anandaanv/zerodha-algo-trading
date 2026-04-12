@@ -124,6 +124,7 @@ export default function ElliottScreenerPage() {
               }
               onRun={handleRun}
               runningId={runningId}
+              onDeleted={(id) => setScreeners(prev => prev.filter(x => x.id !== id))}
             />
           ))}
 
