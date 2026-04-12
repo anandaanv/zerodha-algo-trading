@@ -46,6 +46,7 @@ public class TradeEntryHandler {
     private final TradeSignalRepository signalRepository;
     private final TradeExecutionRepository executionRepository;
     private final TradeMonitorLogRepository logRepository;
+    private final TradeOrchestrationService tradeOrchestrationService;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -86,6 +87,7 @@ public class TradeEntryHandler {
             executionRepository.save(execution);
             signal.setStatus(TradeStatus.ACTIVE);
             signalRepository.save(signal);
+            tradeOrchestrationService.onEntryTriggered(signal);
             writeLog(signal, ltp, null, MonitorAction.ENTRY_ORDER_PLACED,
                     "[DRY RUN] Entry simulated at " + ltp, dryRun);
         } else {

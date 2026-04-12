@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -34,4 +36,7 @@ public interface InstrumentRepository extends JpaRepository<Instrument, Long> {
 
   List<Instrument> findAllByNameAndInstrumentTypeAndExpiryBetween(String name, String instrumentType,
                                                                    LocalDateTime expiryStart, LocalDateTime expiryEnd);
+
+  @Query("SELECT DISTINCT i.name FROM Instrument i WHERE i.exchange = 'NFO' AND i.instrumentType = 'FUT' ORDER BY i.name")
+  List<String> findDistinctFutureUnderlyingNames();
 }
