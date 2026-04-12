@@ -15,7 +15,9 @@ import org.ta4j.core.Bar;
 import org.ta4j.core.BarSeries;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +43,16 @@ public class PatternScanService {
 
     public List<String> getNifty50() {
         return NIFTY50;
+    }
+
+    public List<String> getFnoSymbols() {
+        List<String> names = instrumentRepository.findDistinctFutureUnderlyingNames();
+        List<String> indexFutures = List.of("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "NIFTYNXT50");
+        return names.stream()
+                .filter(n -> n != null && !n.isBlank())
+                .filter(n -> !indexFutures.contains(n.toUpperCase()))
+                .sorted()
+                .collect(Collectors.toList());
     }
 
     public PatternScanResultDto scan(String symbol, Interval watchingTf, Interval confirmTf) {
