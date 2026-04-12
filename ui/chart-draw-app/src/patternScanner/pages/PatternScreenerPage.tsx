@@ -396,60 +396,14 @@ export default function PatternScreenerPage() {
                         color: "#90caf9",
                       }}
                     >
-                      <th
-                        style={{
-                          padding: "8px",
-                          textAlign: "left",
-                          fontWeight: "600",
-                        }}
-                      >
-                        Type
-                      </th>
-                      <th
-                        style={{
-                          padding: "8px",
-                          textAlign: "left",
-                          fontWeight: "600",
-                        }}
-                      >
-                        Direction
-                      </th>
-                      <th
-                        style={{
-                          padding: "8px",
-                          textAlign: "right",
-                          fontWeight: "600",
-                        }}
-                      >
-                        Key Level
-                      </th>
-                      <th
-                        style={{
-                          padding: "8px",
-                          textAlign: "right",
-                          fontWeight: "600",
-                        }}
-                      >
-                        Target
-                      </th>
-                      <th
-                        style={{
-                          padding: "8px",
-                          textAlign: "right",
-                          fontWeight: "600",
-                        }}
-                      >
-                        RSI@P1
-                      </th>
-                      <th
-                        style={{
-                          padding: "8px",
-                          textAlign: "right",
-                          fontWeight: "600",
-                        }}
-                      >
-                        RSI@P2
-                      </th>
+                      <th style={{ padding: "8px", textAlign: "left", fontWeight: "600" }}>Type</th>
+                      <th style={{ padding: "8px", textAlign: "left", fontWeight: "600" }}>Dir</th>
+                      <th style={{ padding: "8px", textAlign: "right", fontWeight: "600" }}>Entry</th>
+                      <th style={{ padding: "8px", textAlign: "right", fontWeight: "600" }}>Target</th>
+                      <th style={{ padding: "8px", textAlign: "right", fontWeight: "600" }}>SL</th>
+                      <th style={{ padding: "8px", textAlign: "right", fontWeight: "600" }}>ATR</th>
+                      <th style={{ padding: "8px", textAlign: "right", fontWeight: "600" }}>RSI@P1</th>
+                      <th style={{ padding: "8px", textAlign: "right", fontWeight: "600" }}>RSI@P2</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -479,6 +433,15 @@ export default function PatternScreenerPage() {
                         </td>
                         <td style={{ padding: "8px", textAlign: "right" }}>
                           {pattern.target.toFixed(2)}
+                        </td>
+                        <td style={{ padding: "8px", textAlign: "right", color: "#ef5350" }}>
+                          {(pattern.bullish
+                            ? pattern.keyLevel - 2 * pattern.atr
+                            : pattern.keyLevel + 2 * pattern.atr
+                          ).toFixed(2)}
+                        </td>
+                        <td style={{ padding: "8px", textAlign: "right", color: "#888" }}>
+                          {pattern.atr.toFixed(2)}
                         </td>
                         <td style={{ padding: "8px", textAlign: "right" }}>
                           {pattern.rsiAtP1.toFixed(1)}

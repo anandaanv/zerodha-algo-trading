@@ -26,6 +26,7 @@ export default function PatternChartPanel({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const trendlineSeriesRef = useRef<ISeriesApi<"Line">[]>([]);
 
   // Load chart and candles when symbol/timeframe change
   useEffect(() => {
@@ -121,6 +122,8 @@ export default function PatternChartPanel({
         window.removeEventListener("resize", resizeHandler);
       }
 
+      trendlineSeriesRef.current = [];
+
       try {
         chartRef.current?.remove?.();
       } catch {}
@@ -130,25 +133,63 @@ export default function PatternChartPanel({
     };
   }, [symbol, timeframe, mapping]);
 
-  // Update markers when selectedPattern changes
+  // Draw trendlines + marker when selectedPattern changes
   useEffect(() => {
-    if (!seriesRef.current) return;
+    if (!chartRef.current || !seriesRef.current) return;
+
+    // Remove old trendline series
+    trendlineSeriesRef.current.forEach((s) => {
+      try { chartRef.current?.removeSeries(s); } catch {}
+    });
+    trendlineSeriesRef.current = [];
 
     if (selectedPattern === null) {
       seriesRef.current.setMarkers([]);
-    } else {
-      const marker: SeriesMarker<Time> = {
-        time: Math.floor(
-          new Date(selectedPattern.keyLevelTime).getTime() / 1000
-        ) as Time,
-        position: selectedPattern.bullish ? "belowBar" : "aboveBar",
-        color: selectedPattern.bullish ? "#4caf50" : "#f44336",
-        shape: selectedPattern.bullish ? "arrowUp" : "arrowDown",
-        text: selectedPattern.patternType.replace(/_/g, " "),
-      };
-
-      seriesRef.current.setMarkers([marker]);
+      return;
     }
+
+    // Marker at entry bar
+    const marker: SeriesMarker<Time> = {
+      time: Math.floor(new Date(selectedPattern.keyLevelTime).getTime() / 1000) as Time,
+      position: selectedPattern.bullish ? "belowBar" : "aboveBar",
+      color: selectedPattern.bullish ? "#4caf50" : "#f44336",
+      shape: selectedPattern.bullish ? "arrowUp" : "arrowDown",
+      text: selectedPattern.patternType.replace(/_/g, " "),
+    };
+    seriesRef.current.setMarkers([marker]);
+
+    // Compute trendline time range
+    const t0 = Math.floor(new Date(selectedPattern.p0Time).getTime() / 1000);
+    const t1 = Math.floor(new Date(selectedPattern.keyLevelTime).getTime() / 1000);
+    const patternWidth = Math.max(t1 - t0, 3600); // at least 1h
+    const tEnd = (t1 + patternWidth) as Time;
+    const tStart = t0 as Time;
+
+    const sl = selectedPattern.bullish
+      ? selectedPattern.keyLevel - 2 * selectedPattern.atr
+      : selectedPattern.keyLevel + 2 * selectedPattern.atr;
+
+    const lines: Array<{ price: number; color: string; label: string }> = [
+      { price: selectedPattern.keyLevel, color: "#29b6f6", label: "Entry" },
+      { price: selectedPattern.target,   color: "#ffb300", label: "Target" },
+      { price: sl,                        color: "#ef5350", label: "SL" },
+    ];
+
+    lines.forEach(({ price, color }) => {
+      const s = chartRef.current!.addLineSeries({
+        color,
+        lineWidth: 1,
+        lineStyle: 2, // dashed
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      s.setData([
+        { time: tStart, value: price },
+        { time: tEnd,   value: price },
+      ]);
+      trendlineSeriesRef.current.push(s);
+    });
   }, [selectedPattern]);
 
   return (
