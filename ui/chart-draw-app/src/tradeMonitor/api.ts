@@ -81,11 +81,13 @@ export const updateSegmentConfig = (id: number, cfg: SegmentConfig) =>
 export const deleteSegmentConfig = (id: number) =>
   apiFetch(`/api/segment-config/${id}`, withAuth({ method: "DELETE" }));
 
-export const seedSegmentConfigs = () =>
-  apiJson<{ seeded: number }>("/api/segment-config/seed", { method: "POST" });
+export async function seedSegmentConfigs(list: 'NIFTY50' | 'FNO', segment: 'EQ' | 'FUT' | 'OPT'): Promise<{ seeded: number }> {
+  return apiJson(`/api/segment-config/seed?list=${list}&segment=${segment}`, { method: 'POST' });
+}
 
-export const seedFnoSegmentConfigs = () =>
-  apiJson<{ seeded: number }>("/api/segment-config/seed-fno", { method: "POST" });
+export async function clearAllSegmentConfigs(): Promise<void> {
+  await apiJson('/api/segment-config/all', { method: 'DELETE' });
+}
 
 export const getTradeOrders = (status?: string) => {
   const q = status ? `?status=${status}` : "";

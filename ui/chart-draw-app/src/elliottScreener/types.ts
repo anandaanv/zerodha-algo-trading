@@ -72,6 +72,7 @@ export interface CreateScreenerRequest {
   timeframes: string;
   primaryTimeframe?: string;
   scheduleCron: string;
+  enabled?: boolean;
 }
 
 export type RunResultStatus = 'PASSED' | 'SKIPPED' | 'FAILED' | 'ERROR';
