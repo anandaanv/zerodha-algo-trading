@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Manages real-time data feed from Zerodha's KiteTicker WebSocket API.
@@ -49,6 +50,7 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
     private final AtomicInteger ticksReceived = new AtomicInteger(0);
     private final AtomicInteger ticksProcessed = new AtomicInteger(0);
+    private final AtomicLong lastTickAt = new AtomicLong(0);
 
     private final ExecutorService tickProcessorPool =
             Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
@@ -107,6 +109,17 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
         }
     }
 
+    /**
+     * Returns true if a tick was received within the last 5 minutes.
+     * Use this to detect trading holidays — on holidays the WebSocket
+     * may be connected but Zerodha sends no ticks.
+     */
+    public boolean isMarketLive() {
+        long last = lastTickAt.get();
+        if (last == 0) return false;
+        return (System.currentTimeMillis() - last) < 5 * 60 * 1000L;
+    }
+
     public void subscribe(List<Instrument> instruments) {
         if (instruments == null || instruments.isEmpty()) return;
         if (!connected.get()) connect();
@@ -157,6 +170,7 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
         if (ticks == null || ticks.isEmpty()) return;
 
         ticksReceived.addAndGet(ticks.size());
+        lastTickAt.set(System.currentTimeMillis());
 
         tickProcessorPool.submit(() -> {
             try {
