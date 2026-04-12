@@ -9,7 +9,7 @@ import {withAuth} from "../utils/apiHelper";
 export default function KiteLogin() {
   useEffect(() => {
     // Redirect to backend endpoint which will redirect to Kite
-    const kiteLoginUrl = getApiUrl("/kite-login");
+    const kiteLoginUrl = getApiUrl("/api/admin/kite-configs/1/connect");
     window.location.href = kiteLoginUrl;
   }, []);
 

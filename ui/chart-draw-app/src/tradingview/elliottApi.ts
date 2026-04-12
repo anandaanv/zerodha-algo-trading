@@ -1,15 +1,11 @@
-const BASE = '/api';
+import { getApiUrl, apiFetch } from "../config/api";
+import { withAuth } from "../utils/apiHelper";
 
 async function request<T>(path: string, opts?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('auth_token');
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await apiFetch(getApiUrl(`/api${path}`).toString(), withAuth({
     ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...opts?.headers,
-    },
-  });
+    headers: { 'Content-Type': 'application/json', ...opts?.headers },
+  }));
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`${res.status}: ${text}`);
@@ -75,14 +71,15 @@ export async function importCsvToWatchlist(
   watchlistId: number,
   file: File,
 ): Promise<{ imported: number }> {
-  const token = localStorage.getItem('auth_token');
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch(`${BASE}/watchlists/${watchlistId}/import-csv`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: formData,
-  });
+  const res = await apiFetch(
+    getApiUrl(`/api/watchlists/${watchlistId}/import-csv`).toString(),
+    withAuth({
+      method: 'POST',
+      body: formData,
+    }),
+  );
   if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
   return res.json();
 }
