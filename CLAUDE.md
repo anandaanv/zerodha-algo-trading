@@ -1,0 +1,33 @@
+# Project Guidelines
+
+## Frontend API Calls — ALWAYS use getApiUrl + withAuth
+
+Every backend API call from the React frontend **must**:
+1. Build the URL using `getApiUrl(path)` from `src/config/api.ts` — this resolves the correct backend origin in both dev (Vite proxy) and production (nginx)
+2. Include the auth header using `withAuth()` from `src/utils/apiHelper.ts` — without this, Spring Security returns 403
+
+```ts
+import { getApiUrl } from "../config/api";
+import { withAuth } from "../utils/apiHelper";
+
+const res = await fetch(getApiUrl("/api/ohlc?symbol=HDFCBANK&interval=FifteenMinute").toString(), withAuth());
+```
+
+**Never** use bare `fetch("/api/...")` or `fetch("http://localhost:8080/...")` — these break in production or drop the auth token.
+
+### Why this matters
+- `getApiUrl` uses `VITE_API_BASE_URL` in production builds (set in `.env.production` via `ui-deploy.sh`). Without it, the URL resolves to `window.location.origin` which may be the CloudFront/S3 domain, not the API server.
+- `withAuth()` attaches `Authorization: Bearer <jwt>`. All `/api/**` endpoints (except `/api/auth/**`) require this header — missing it causes 403.
+
+## CloudFront Invalidation
+
+Always invalidate **only `/index.html`**, never `/*`:
+```bash
+aws cloudfront create-invalidation --distribution-id E3GNIWHAP6FDTM --paths "/index.html"
+```
+
+## Kite OAuth Flow (Production)
+
+- Frontend navigates to `/api/admin/kite-configs/1/connect` (NOT `/kite-login`)
+- nginx routes `/api/*` to Tomcat; `/kite-login` is not proxied and will serve the React SPA
+- Callback URL in Kite developer console must match the production domain
