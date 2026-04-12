@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => ({
       // "/api": "https://tradeapi.dheemantech.in/kitecon"
       "/api": "http://localhost:8080",
       "/kite-callback": "http://localhost:8080",
+      "/kite-login": { target: "http://localhost:8080", followRedirects: false },
+      "/app": { target: "http://localhost:8080", followRedirects: false },
       "/ws": { target: "http://localhost:8080", ws: true }
     } : undefined
   },
