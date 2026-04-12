@@ -63,8 +63,8 @@ public class PatternComboScannerService {
 
                 if (patterns != null) {
                     for (PatternDto pattern : patterns) {
-                        Long sid = createSignalForPattern(symbol, pattern, result.getWatchingTf());
-                        if (sid != null) {
+                        SignalCreationResult cr = createSignalForPattern(symbol, pattern, result.getWatchingTf());
+                        if (cr.outcome() == SignalOutcome.CREATED) {
                             totalCreated++;
                         }
                     }
@@ -88,7 +88,15 @@ public class PatternComboScannerService {
         };
     }
 
-    Long createSignalForPattern(String symbol, PatternDto pattern, String timeframe) {
+    enum SignalOutcome { CREATED, DUPLICATE, ML_FILTERED }
+
+    record SignalCreationResult(Long signalId, SignalOutcome outcome) {
+        static SignalCreationResult created(Long id) { return new SignalCreationResult(id, SignalOutcome.CREATED); }
+        static SignalCreationResult duplicate()       { return new SignalCreationResult(null, SignalOutcome.DUPLICATE); }
+        static SignalCreationResult mlFiltered()      { return new SignalCreationResult(null, SignalOutcome.ML_FILTERED); }
+    }
+
+    SignalCreationResult createSignalForPattern(String symbol, PatternDto pattern, String timeframe) {
         List<TradeSignal> openSignals = tradeSignalRepository.findBySymbolAndStatusIn(
                 symbol, List.of(TradeStatus.WATCHING_ENTRY, TradeStatus.ENTRY_PENDING, TradeStatus.ACTIVE));
 
@@ -99,7 +107,7 @@ public class PatternComboScannerService {
                     double necklineDiff = Math.abs(existing.getNeckline().doubleValue() - keyLevel) / keyLevel;
                     if (necklineDiff < 0.005) {
                         log.debug("Duplicate pattern detected for {} {}: skipping", symbol, pattern.getPatternType());
-                        return null;
+                        return SignalCreationResult.duplicate();
                     }
                 }
             }
@@ -163,9 +171,9 @@ public class PatternComboScannerService {
                 0.0, 0.0          // bbWidthDaily, bbPctBDaily
         );
         if (prob < filterThreshold) {
-            log.debug("[Scanner] ML filter rejected {} {} prob={:.2f} < threshold={}",
+            log.debug("[Scanner] ML filter rejected {} {} prob={} < threshold={}",
                     symbol, pattern.getPatternType(), prob, filterThreshold);
-            return null;
+            return SignalCreationResult.mlFiltered();
         }
         signal.setMlScore(BigDecimal.valueOf(prob).setScale(4, RoundingMode.HALF_UP));
 
@@ -174,6 +182,6 @@ public class PatternComboScannerService {
         log.info("[Scanner] New signal: {} {} {} keyLevel={}",
                 signal.getId(), symbol, pattern.getPatternType(), pattern.getKeyLevel());
 
-        return signal.getId();
+        return SignalCreationResult.created(signal.getId());
     }
 }

@@ -10,7 +10,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/trade-signals")
@@ -61,6 +63,18 @@ public class TradeSignalController {
             log.warn("Invalid ID format in comma-separated list: {}", ids);
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    @PostMapping("/expire-stale")
+    public ResponseEntity<Map<String, Integer>> expireStale() {
+        List<TradeSignal> stale = tradeSignalRepository.findByStatus(TradeStatus.WATCHING_ENTRY)
+                .stream()
+                .filter(s -> s.getEntryValidUntil() != null && s.getEntryValidUntil().isBefore(Instant.now()))
+                .toList();
+        stale.forEach(s -> s.setStatus(TradeStatus.EXPIRED));
+        tradeSignalRepository.saveAll(stale);
+        log.info("[TradeSignal] Expired {} stale signals", stale.size());
+        return ResponseEntity.ok(Map.of("expired", stale.size()));
     }
 
     @GetMapping("/{id}/orders")

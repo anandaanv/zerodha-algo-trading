@@ -109,14 +109,17 @@ public class PatternScreenerService {
                     status = "PATTERN_FOUND";
 
                     for (PatternDto pattern : patterns) {
-                        Long sid = patternComboScannerService.createSignalForPattern(symbol, pattern, result.getWatchingTf());
-                        if (sid != null) {
-                            signalId = sid;
+                        PatternComboScannerService.SignalCreationResult cr =
+                                patternComboScannerService.createSignalForPattern(symbol, pattern, result.getWatchingTf());
+                        if (cr.outcome() == PatternComboScannerService.SignalOutcome.CREATED) {
+                            signalId = cr.signalId();
                             signalsCreated++;
                             status = "SIGNAL_CREATED";
-                        } else {
+                        } else if (cr.outcome() == PatternComboScannerService.SignalOutcome.DUPLICATE) {
                             duplicatesSkipped++;
-                            if ("PATTERN_FOUND".equals(status)) status = "DUPLICATE";
+                            if (!"SIGNAL_CREATED".equals(status)) status = "DUPLICATE";
+                        } else if (cr.outcome() == PatternComboScannerService.SignalOutcome.ML_FILTERED) {
+                            if (!"SIGNAL_CREATED".equals(status) && !"DUPLICATE".equals(status)) status = "FILTERED";
                         }
                     }
                 }
