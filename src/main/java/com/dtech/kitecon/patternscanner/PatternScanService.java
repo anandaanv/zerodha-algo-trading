@@ -91,6 +91,12 @@ public class PatternScanService {
         watchingPatterns.addAll(patternComboBacktestService.scanHnsWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(patternComboBacktestService.scanFlagWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
 
+        // Keep only patterns whose last pivot is the most recent ZigZag pivot — anything older is historical
+        if (!pivotsW.isEmpty()) {
+            Instant latestPivotTime = pivotsW.get(pivotsW.size() - 1).getTimestamp();
+            watchingPatterns.removeIf(p -> !latestPivotTime.equals(p.getKeyLevelTime()));
+        }
+
         // Build pattern DTOs
         List<PatternDto> patternDtos = watchingPatterns.stream().map(p -> PatternDto.builder()
                 .patternType(p.getPatternType())
