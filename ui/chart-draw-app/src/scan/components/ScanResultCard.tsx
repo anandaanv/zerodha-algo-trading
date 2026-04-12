@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import MarkdownView from '../../components/MarkdownView';
+import { getApiUrl, apiFetch } from "../../config/api";
+import { withAuth } from "../../utils/apiHelper";
 
 interface PatternSummary {
   type: string;
@@ -58,11 +60,7 @@ export default function ScanResultCard({ scan }: Props) {
   const handleMonitor = async () => {
     setMonitoring('loading');
     try {
-      const token = localStorage.getItem('auth_token');
-      const res = await fetch(`/api/elliott-suggestions/from-scan/${scan.id}`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await apiFetch(getApiUrl(`/api/elliott-suggestions/from-scan/${scan.id}`).toString(), withAuth({ method: 'POST' }));
       if (!res.ok) throw new Error(await res.text());
       setMonitoring('done');
     } catch {
