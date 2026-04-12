@@ -92,7 +92,7 @@ public class SegmentConfigController {
 
         List<String> symbols;
         if ("FNO".equalsIgnoreCase(list)) {
-            symbols = instrumentRepository.findDistinctFutureUnderlyingNames();
+            symbols = patternScanService.getFnoSymbols(); // already excludes index futures (NIFTY, BANKNIFTY etc.)
         } else {
             symbols = patternScanService.getNifty50();
         }
