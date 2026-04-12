@@ -21,10 +21,13 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Manages real-time data feed from Zerodha's KiteTicker WebSocket API.
@@ -49,6 +52,7 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
     private final AtomicInteger ticksReceived = new AtomicInteger(0);
     private final AtomicInteger ticksProcessed = new AtomicInteger(0);
+    private final AtomicLong lastTickAt = new AtomicLong(0);
 
     private final ExecutorService tickProcessorPool =
             Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
@@ -107,6 +111,17 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
         }
     }
 
+    /**
+     * Returns true if a tick was received within the last 5 minutes.
+     * Use this to detect trading holidays — on holidays the WebSocket
+     * may be connected but Zerodha sends no ticks.
+     */
+    public boolean isMarketLive() {
+        long last = lastTickAt.get();
+        if (last == 0) return false;
+        return (System.currentTimeMillis() - last) < 5 * 60 * 1000L;
+    }
+
     public void subscribe(List<Instrument> instruments) {
         if (instruments == null || instruments.isEmpty()) return;
         if (!connected.get()) connect();
@@ -157,6 +172,7 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
         if (ticks == null || ticks.isEmpty()) return;
 
         ticksReceived.addAndGet(ticks.size());
+        lastTickAt.set(System.currentTimeMillis());
 
         tickProcessorPool.submit(() -> {
             try {
@@ -228,25 +244,38 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
 
     private void autoSubscribeFromDatabase() {
         try {
-            List<Subscription> active = subscriptionRepository.findAllByStatus("ACTIVE");
-            if (active.isEmpty()) {
-                log.info("No active subscriptions found in DB — skipping auto-subscribe");
-                return;
-            }
+            Map<Long, Instrument> instrumentMap = new LinkedHashMap<>();
 
-            List<Instrument> instruments = new ArrayList<>();
+            // 1. Collect DB ACTIVE subscriptions
+            List<Subscription> active = subscriptionRepository.findAllByStatus("ACTIVE");
             for (Subscription sub : active) {
                 String symbol = sub.getTradingSymbol();
                 if (symbol == null || symbol.startsWith("INDEX-")) continue;
                 instrumentRepository.findAllByTradingsymbol(symbol).stream()
                         .filter(i -> "NSE".equals(i.getExchange()))
                         .findFirst()
-                        .ifPresent(instruments::add);
+                        .ifPresent(inst -> instrumentMap.putIfAbsent(inst.getInstrumentToken(), inst));
             }
+            int dbCount = instrumentMap.size();
 
+            // 2. Also fetch and subscribe FNO underlying EQ instruments
+            List<String> fnoUnderlyings = instrumentRepository.findDistinctFutureUnderlyingNames();
+            for (String name : fnoUnderlyings) {
+                instrumentRepository.findAllByTradingsymbol(name).stream()
+                        .filter(i -> "NSE".equals(i.getExchange()))
+                        .findFirst()
+                        .ifPresent(inst -> instrumentMap.putIfAbsent(inst.getInstrumentToken(), inst));
+            }
+            int fnoCount = instrumentMap.size() - dbCount;
+
+            // 3. Subscribe to deduplicated set
+            List<Instrument> instruments = new ArrayList<>(instrumentMap.values());
             if (!instruments.isEmpty()) {
-                log.info("Auto-subscribing to {} instruments from DB on startup", instruments.size());
+                log.info("Auto-subscribing to {} instruments ({} from DB, {} FNO) on startup",
+                        instruments.size(), dbCount, fnoCount);
                 subscribe(instruments);
+            } else {
+                log.info("No active subscriptions or FNO underlyings found — skipping auto-subscribe");
             }
         } catch (Exception e) {
             log.error("Error auto-subscribing from database on startup", e);
