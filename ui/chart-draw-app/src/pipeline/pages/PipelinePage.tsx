@@ -437,18 +437,33 @@ export default function PipelinePage() {
                                             <tr style={{ background: "transparent" }}>
                                               <th style={cellStyle}>Symbol</th>
                                               <th style={cellStyle}>Status</th>
-                                              <th style={cellStyle}>Pattern</th>
+                                              <th style={cellStyle}>Pattern / Error</th>
                                               <th style={cellStyle}>Signal ID</th>
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {runResults.map((result) => (
+                                            {runResults.map((result) => {
+                                              let patternLabel = "—";
+                                              if (result.status === "ERROR") {
+                                                patternLabel = result.errorMessage || "Unknown error";
+                                              } else if (result.patternsFound && result.patternsFound !== "[]") {
+                                                try {
+                                                  const parsed = JSON.parse(result.patternsFound);
+                                                  patternLabel = parsed.map((p: any) => p.patternType).filter(Boolean).join(", ") || result.patternsFound;
+                                                } catch {
+                                                  patternLabel = result.patternsFound;
+                                                }
+                                              }
+                                              return (
                                               <tr key={result.id} style={rowStyle}>
                                                 <td style={cellStyle}>{result.symbol}</td>
                                                 <td style={cellStyle}>
                                                   <span style={badgeStyle(statusColor(result.status))}>{result.status}</span>
                                                 </td>
-                                                <td style={cellStyle}>{result.patternsFound}</td>
+                                                <td style={{ ...cellStyle, color: result.status === "ERROR" ? "#ef9a9a" : TEXT_PRIMARY, maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                                    title={result.status === "ERROR" ? result.errorMessage || "" : ""}>
+                                                  {patternLabel}
+                                                </td>
                                                 <td style={cellStyle}>
                                                   {result.signalId ? (
                                                     <button
@@ -466,7 +481,8 @@ export default function PipelinePage() {
                                                   )}
                                                 </td>
                                               </tr>
-                                            ))}
+                                              );
+                                            })}
                                           </tbody>
                                         </table>
                                         {Array.from(expandedSignals).map((sigId) => (
