@@ -52,6 +52,8 @@ public class SecurityConfig {
 
                         // Kite OAuth callbacks — no JWT present (redirected from Kite servers)
                         .requestMatchers("/kite-login", "/app", "/app/**", "/update-token", "/kite-callback/config/**").permitAll()
+                        // Kite connect redirect — browser navigation, no JWT
+                        .requestMatchers("/api/admin/kite-configs/*/connect").permitAll()
 
                         // SPA frontend routes — served as index.html, React Router handles them.
                         // ALL non-API GET paths must be permitAll so the browser can load index.html
@@ -83,6 +85,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/chart/**", "/api/screener/**", "/api/overlays/**")
                               .hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
+                        .requestMatchers("/api/admin/kite-configs/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         // Elliott debug dump viewer — ADMIN only
                         .requestMatchers("/api/debug/elliott/**", "/api/debug/**").hasRole("ADMIN")
@@ -100,7 +103,11 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/elliott-screener/**",
                                 "/api/elliott-suggestions/**",
-                                "/api/scan/**"
+                                "/api/scan/**",
+                                "/api/pattern-scan/**",
+                                "/api/scanner/**",
+                                "/api/segment-config/**",
+                                "/api/trade-orders/**"
                         ).hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // All other endpoints require authentication
