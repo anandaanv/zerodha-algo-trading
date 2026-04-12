@@ -39,4 +39,8 @@ public interface InstrumentRepository extends JpaRepository<Instrument, Long> {
 
   @Query("SELECT DISTINCT i.name FROM Instrument i WHERE i.exchange = 'NFO' AND i.instrumentType = 'FUT' ORDER BY i.name")
   List<String> findDistinctFutureUnderlyingNames();
+
+  @Query("SELECT DISTINCT i.name FROM Instrument i WHERE i.exchange = 'NFO' AND i.instrumentType = 'FUT' " +
+         "AND EXISTS (SELECT 1 FROM Instrument e WHERE e.tradingsymbol = i.name AND e.exchange = 'NSE') ORDER BY i.name")
+  List<String> findDistinctFutureUnderlyingNamesWithNseEquity();
 }

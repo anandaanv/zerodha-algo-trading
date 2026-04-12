@@ -46,11 +46,10 @@ public class PatternScanService {
     }
 
     public List<String> getFnoSymbols() {
-        List<String> names = instrumentRepository.findDistinctFutureUnderlyingNames();
-        List<String> indexFutures = List.of("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "NIFTYNXT50");
-        return names.stream()
+        // Only return symbols that have a corresponding NSE equity instrument — skips renamed/delisted/index symbols
+        return instrumentRepository.findDistinctFutureUnderlyingNamesWithNseEquity()
+                .stream()
                 .filter(n -> n != null && !n.isBlank())
-                .filter(n -> !indexFutures.contains(n.toUpperCase()))
                 .sorted()
                 .collect(Collectors.toList());
     }
