@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => ({
     proxy: mode === 'development' ? {
       // "/api": "https://tradeapi.dheemantech.in/kitecon"
       "/api": "http://localhost:8080",
+      "/kite-callback": "http://localhost:8080",
       "/ws": { target: "http://localhost:8080", ws: true }
     } : undefined
   },
