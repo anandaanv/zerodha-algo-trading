@@ -1,5 +1,6 @@
 package com.dtech.kitecon.patternscanner;
 
+import com.dtech.algo.runner.candle.KiteTickerService;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.kitecon.trade.enums.TradeDirection;
@@ -25,6 +26,7 @@ public class PatternComboScannerService {
     private final PatternScanService patternScanService;
     private final TradeSignalRepository tradeSignalRepository;
     private final TradeFilterClient tradeFilterClient;
+    private final KiteTickerService kiteTickerService;
 
     @Value("${trade.monitor.entry.validity.hours:4}")
     private int entryValidityHours;
@@ -40,6 +42,10 @@ public class PatternComboScannerService {
 
     @Scheduled(cron = "0 0/15 9-15 * * MON-FRI", zone = "Asia/Kolkata")
     public void scheduledScan() {
+        if (!kiteTickerService.isMarketLive()) {
+            log.info("[PatternScanner] Skipping scan — no recent ticks (trading holiday or pre-market)");
+            return;
+        }
         int count = scanAndCreateSignals();
         log.info("[PatternScanner] Scheduled scan completed: {} new signals created", count);
     }
