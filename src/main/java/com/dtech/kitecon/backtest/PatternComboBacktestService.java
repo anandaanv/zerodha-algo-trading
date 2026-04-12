@@ -14,6 +14,7 @@ import org.ta4j.core.BarSeries;
 import org.ta4j.core.indicators.MACDIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.averages.EMAIndicator;
+import org.ta4j.core.indicators.adx.ADXIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
 
 import java.io.FileWriter;
@@ -31,6 +32,8 @@ public class PatternComboBacktestService {
     private static final int    MACD_SIGNAL_PERIOD = 9;
     private static final int    RSI_PERIOD         = 14;
     private static final int    ATR_PERIOD         = 14;
+    private static final int    ADX_PERIOD         = 14;
+    private static final int    ADX_EMA_PERIOD     = 9;
     private static final double TRADE_OVERHEAD_PCT = 0.1;
     private static final double ATR_FLAT_FACTOR    = 0.5;
     private static final double ATR_RANGE_FACTOR   = 2.0;
@@ -177,6 +180,8 @@ public class PatternComboBacktestService {
 
         // Compute daily indicators for confirmation TF entry lookups
         DailyIndicators dailyInd = computeDailyIndicators(seriesDaily);
+        DailyIndicators watchingInd = computeDailyIndicators(seriesW);
+        DailyIndicators confirmInd  = computeDailyIndicators(seriesC);
 
         // Compute Bollinger Bands on confirmation TF (20-period, 2σ) for exit filtering
         double[][] bbC = computeBollingerBands(barsC, 20, 2.0);
@@ -436,6 +441,20 @@ public class PatternComboBacktestService {
                         .macdHistAtP2(cp.getMacdHistAtP2())
                         .stochRsiK15m(cp.getStochRsiK())
                         .dailyRsi(cp.getDailyRsi())
+                        .dailyAdx(cp.getDailyAdx())
+                        .dailyAdxEma(cp.getDailyAdxEma())
+                        .adxWatching(watchingInd.adxAtTs(cp.getKeyLevelTime()))
+                        .adxWatchingEma(watchingInd.adxEmaAtTs(cp.getKeyLevelTime()))
+                        .adxConfirm(confirmInd.adxAtTs(cp.getKeyLevelTime()))
+                        .adxConfirmEma(confirmInd.adxEmaAtTs(cp.getKeyLevelTime()))
+                        .macdWatching(watchingInd.macdLineAtTs(cp.getKeyLevelTime()))
+                        .macdSignalWatching(watchingInd.macdSignalAtTs(cp.getKeyLevelTime()))
+                        .bbWidthWatching(watchingInd.bbWidthAtTs(cp.getKeyLevelTime()))
+                        .bbPctBWatching(watchingInd.bbPctBAtTs(cp.getKeyLevelTime()))
+                        .macdDaily(dailyInd.macdLineAtTs(cp.getKeyLevelTime()))
+                        .macdSignalDaily(dailyInd.macdSignalAtTs(cp.getKeyLevelTime()))
+                        .bbWidthDaily(dailyInd.bbWidthAtTs(cp.getKeyLevelTime()))
+                        .bbPctBDaily(dailyInd.bbPctBAtTs(cp.getKeyLevelTime()))
                         .watchingPatternHeight(wp.getPatternHeight())
                         .confirmPatternHeight(cp.getPatternHeight())
                         .targetEventuallyHit(targetEventuallyHit)
@@ -795,6 +814,8 @@ public class PatternComboBacktestService {
                             .macdHistAtP2(macdHistAtP2)
                             .stochRsiK(j < stochRsiK.length ? stochRsiK[j] : 0)
                             .dailyRsi(dailyInd.rsiAtTs(bar.getEndTime()))
+                            .dailyAdx(dailyInd.adxAtTs(bar.getEndTime()))
+                            .dailyAdxEma(dailyInd.adxEmaAtTs(bar.getEndTime()))
                             .macdHistogram(j < macdHistArr.length ? macdHistArr[j] : 0)
                             .reversalPattern(rev.pattern().name())
                             .build());
@@ -930,6 +951,8 @@ public class PatternComboBacktestService {
                             .macdHistAtP2(macdHistAtP2)
                             .stochRsiK(j < stochRsiK.length ? stochRsiK[j] : 0)
                             .dailyRsi(dailyInd.rsiAtTs(bar.getEndTime()))
+                            .dailyAdx(dailyInd.adxAtTs(bar.getEndTime()))
+                            .dailyAdxEma(dailyInd.adxEmaAtTs(bar.getEndTime()))
                             .macdHistogram(j < macdHistArr.length ? macdHistArr[j] : 0)
                             .reversalPattern(rev.pattern().name())
                             .build());
@@ -1043,6 +1066,8 @@ public class PatternComboBacktestService {
                     .macdHistAtP2(histD)
                     .stochRsiK(entryIdx15m < stochRsiKC.length ? stochRsiKC[entryIdx15m] : 0)
                     .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                    .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                    .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                     .macdHistogram(signalHist)
                     .build());
         }
@@ -1480,6 +1505,8 @@ public class PatternComboBacktestService {
                             .macdHistAtP2(0)
                             .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
                             .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                            .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                            .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                             .macdHistogram(0)
                             .reversalPattern(rev.pattern().name())
                             .build());
@@ -1573,6 +1600,8 @@ public class PatternComboBacktestService {
                                 .macdHistAtP2(0)
                                 .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
                                 .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                                .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                                 .macdHistogram(0)
                                 .reversalPattern(rev.pattern().name())
                                 .build());
@@ -1655,6 +1684,8 @@ public class PatternComboBacktestService {
                                 .macdHistAtP2(0)
                                 .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
                                 .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                                .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                                 .macdHistogram(0)
                                 .reversalPattern(rev.pattern().name())
                                 .build());
@@ -1741,6 +1772,8 @@ public class PatternComboBacktestService {
                                 .macdHistAtP1(0).macdHistAtP2(0)
                                 .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
                                 .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                                .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                                 .macdHistogram(0)
                                 .reversalPattern(rev.pattern().name())
                                 .build());
@@ -1815,6 +1848,8 @@ public class PatternComboBacktestService {
                                 .macdHistAtP1(0).macdHistAtP2(0)
                                 .stochRsiK(j < stochRsiKC.length ? stochRsiKC[j] : 0)
                                 .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                                .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                                 .macdHistogram(0)
                                 .reversalPattern(rev.pattern().name())
                                 .build());
@@ -1926,6 +1961,8 @@ public class PatternComboBacktestService {
                             .macdHistAtP2(peakBbw)                                     // peak BBW
                             .stochRsiK(k < stochRsiKC.length ? stochRsiKC[k] : 0)
                             .dailyRsi(dailyInd.rsiAtTs(bk.getEndTime()))
+                            .dailyAdx(dailyInd.adxAtTs(bk.getEndTime()))
+                            .dailyAdxEma(dailyInd.adxEmaAtTs(bk.getEndTime()))
                             .macdHistogram(0)
                             .reversalPattern(rev.pattern().name())
                             .build());
@@ -2005,6 +2042,8 @@ public class PatternComboBacktestService {
                         .macdHistAtP2(0)
                         .stochRsiK(entryIdx15m < stochRsiKC.length ? stochRsiKC[entryIdx15m] : 0)
                         .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                        .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                        .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                         .macdHistogram(0)
                         .reversalPattern(null)
                         .build());
@@ -2123,6 +2162,8 @@ public class PatternComboBacktestService {
                                 .macdHistAtP2(j < macdHistArr.length ? macdHistArr[j] : 0)
                                 .stochRsiK(j < stochRsiK.length ? stochRsiK[j] : 0)
                                 .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                                .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                                 .macdHistogram(j < macdHistArr.length ? macdHistArr[j] : 0)
                                 .reversalPattern(bullRev.pattern().name())
                                 .build());
@@ -2163,6 +2204,8 @@ public class PatternComboBacktestService {
                                 .macdHistAtP2(j < macdHistArr.length ? macdHistArr[j] : 0)
                                 .stochRsiK(j < stochRsiK.length ? stochRsiK[j] : 0)
                                 .dailyRsi(dailyInd.rsiAtTs(entryBar.getEndTime()))
+                                .dailyAdx(dailyInd.adxAtTs(entryBar.getEndTime()))
+                                .dailyAdxEma(dailyInd.adxEmaAtTs(entryBar.getEndTime()))
                                 .macdHistogram(j < macdHistArr.length ? macdHistArr[j] : 0)
                                 .reversalPattern(bearRev.pattern().name())
                                 .build());
@@ -2174,6 +2217,57 @@ public class PatternComboBacktestService {
         return results;
     }
 
+    // ── Public API for live scanner ───────────────────────────────────────────
+
+    public double[] computeAtrPublic(List<Bar> bars, int period) {
+        return computeAtr(bars, period);
+    }
+
+    public double[] computeRsiPublic(BarSeries series, int period) {
+        RSIIndicator rsi = new RSIIndicator(new ClosePriceIndicator(series), period);
+        double[] vals = new double[series.getBarCount()];
+        for (int i = 0; i < series.getBarCount(); i++) vals[i] = safeDouble(rsi.getValue(i));
+        return vals;
+    }
+
+    public double[] computeMacdHistPublic(BarSeries series) {
+        ClosePriceIndicator close = new ClosePriceIndicator(series);
+        MACDIndicator macd = new MACDIndicator(close, MACD_SHORT, MACD_LONG);
+        EMAIndicator signal = new EMAIndicator(macd, MACD_SIGNAL_PERIOD);
+        double[] hist = new double[series.getBarCount()];
+        for (int i = 0; i < series.getBarCount(); i++)
+            hist[i] = safeDouble(macd.getValue(i)) - safeDouble(signal.getValue(i));
+        return hist;
+    }
+
+    public double[] computeStochRsiKPublic(double[] rsiValues) {
+        return computeStochRsiK(rsiValues);
+    }
+
+    public List<DetectedPattern> scanDtbWatchingPublic(List<ZigZagPoint> pivots, List<Bar> bars,
+            Map<Instant, Integer> tsToIdx, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        return scanDtbWatching(pivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK);
+    }
+
+    public List<DetectedPattern> scanTriangleWatchingPublic(List<ZigZagPoint> pivots, List<Bar> bars,
+            Map<Instant, Integer> tsToIdx, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        return scanTriangleWatching(pivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK);
+    }
+
+    public List<DetectedPattern> scanHnsWatchingPublic(List<ZigZagPoint> pivots, List<Bar> barsW,
+            Map<Instant, Integer> tsToIdxW, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        return scanHnsWatching(pivots, barsW, tsToIdxW, atrArr, rsiValues, macdHistArr, stochRsiK);
+    }
+
+    public List<DetectedPattern> scanFlagWatchingPublic(List<ZigZagPoint> pivots, List<Bar> barsW,
+            Map<Instant, Integer> tsToIdxW, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        return scanFlagWatching(pivots, barsW, tsToIdxW, atrArr, rsiValues, macdHistArr, stochRsiK);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // CSV writer
     // ─────────────────────────────────────────────────────────────────────────
@@ -2183,7 +2277,7 @@ public class PatternComboBacktestService {
                 "entry_price,stop_loss,watching_target,confirm_own_target,rr_watching,key_level," +
                 "result,bars_to_result,pnl_pct,exit_price,exit_reason," +
                 "rsi_at_p1,rsi_at_p2,macd_hist_at_p1,macd_hist_at_p2," +
-                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry,bb_peak_bbw,rsi_zone_quality\n";
+                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry,bb_peak_bbw,rsi_zone_quality,daily_adx,daily_adx_ema,adx_watching,adx_watching_ema,adx_confirm,adx_confirm_ema,macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching,macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily\n";
         try (FileWriter fw = new FileWriter(csvPath)) {
             fw.write(header);
             for (ComboRow r : rows) {
@@ -2340,7 +2434,7 @@ public class PatternComboBacktestService {
 
     private DailyIndicators computeDailyIndicators(BarSeries dailySeries) {
         if (dailySeries == null || dailySeries.isEmpty()) {
-            return new DailyIndicators(new TreeMap<>(), new TreeMap<>(), new TreeMap<>());
+            return new DailyIndicators(new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>());
         }
         int m = dailySeries.getBarCount();
         ClosePriceIndicator dClose = new ClosePriceIndicator(dailySeries);
@@ -2352,19 +2446,44 @@ public class PatternComboBacktestService {
         for (int i = 0; i < m; i++) dRsiValues[i] = safeDouble(dRsi.getValue(i));
         double[] dStochK = computeStochRsiK(dRsiValues);
 
-        TreeMap<Instant, Double> macdHistMap = new TreeMap<>();
-        TreeMap<Instant, Double> rsiMap = new TreeMap<>();
-        TreeMap<Instant, Double> stochRsiKMap = new TreeMap<>();
+        ADXIndicator dAdx = new ADXIndicator(dailySeries, ADX_PERIOD);
+        EMAIndicator dAdxEma = new EMAIndicator(dAdx, ADX_EMA_PERIOD);
+
+        List<Bar> dailyBars = toList(dailySeries);
+        double[][] bbD    = computeBollingerBands(dailyBars, 20, 2.0);
+        double[] bbUpperD = bbD[0];
+        double[] bbMidD   = bbD[1];
+        double[] bbLowerD = bbD[2];
+
+        TreeMap<Instant, Double> macdHistMap   = new TreeMap<>();
+        TreeMap<Instant, Double> rsiMap        = new TreeMap<>();
+        TreeMap<Instant, Double> stochRsiKMap  = new TreeMap<>();
+        TreeMap<Instant, Double> adxMap        = new TreeMap<>();
+        TreeMap<Instant, Double> adxEmaMap     = new TreeMap<>();
+        TreeMap<Instant, Double> macdLineMap   = new TreeMap<>();
+        TreeMap<Instant, Double> macdSignalMap = new TreeMap<>();
+        TreeMap<Instant, Double> bbWidthMap    = new TreeMap<>();
+        TreeMap<Instant, Double> bbPctBMap     = new TreeMap<>();
 
         for (int i = 0; i < m; i++) {
             Instant ts = dailySeries.getBar(i).getEndTime();
             double macdVal = safeDouble(dMacd.getValue(i));
             double macdSig = safeDouble(dMacdSignal.getValue(i));
             macdHistMap.put(ts, macdVal - macdSig);
+            macdLineMap.put(ts, macdVal);
+            macdSignalMap.put(ts, macdSig);
             rsiMap.put(ts, dRsiValues[i]);
             stochRsiKMap.put(ts, dStochK[i]);
+            adxMap.put(ts, safeDouble(dAdx.getValue(i)));
+            adxEmaMap.put(ts, safeDouble(dAdxEma.getValue(i)));
+            double upper = bbUpperD[i], mid = bbMidD[i], lower = bbLowerD[i];
+            double bbw  = mid > 0 ? (upper - lower) / mid : 0.0;
+            double rng  = upper - lower;
+            double pctB = rng > 0 ? (dailyBars.get(i).getClosePrice().doubleValue() - lower) / rng : 0.5;
+            bbWidthMap.put(ts, bbw);
+            bbPctBMap.put(ts, pctB);
         }
-        return new DailyIndicators(macdHistMap, rsiMap, stochRsiKMap);
+        return new DailyIndicators(macdHistMap, rsiMap, stochRsiKMap, adxMap, adxEmaMap, macdLineMap, macdSignalMap, bbWidthMap, bbPctBMap);
     }
 
     private int idx(Map<Instant, Integer> tsToIdx, ZigZagPoint p) {
@@ -2419,6 +2538,20 @@ public class PatternComboBacktestService {
         double  macdHistAtP2;
         double  stochRsiK15m;
         double  dailyRsi;
+        double  dailyAdx;
+        double  dailyAdxEma;
+        double  adxWatching;
+        double  adxWatchingEma;
+        double  adxConfirm;
+        double  adxConfirmEma;
+        double  macdWatching;
+        double  macdSignalWatching;
+        double  bbWidthWatching;
+        double  bbPctBWatching;
+        double  macdDaily;
+        double  macdSignalDaily;
+        double  bbWidthDaily;
+        double  bbPctBDaily;
         double  watchingPatternHeight;
         double  confirmPatternHeight;
         boolean targetEventuallyHit;
@@ -2429,20 +2562,27 @@ public class PatternComboBacktestService {
 
         public String toCsvRow() {
             return String.format(Locale.US,
-                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%.4f,%s",
+                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%.4f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
                 entryTime, symbol, watchingPattern, watchingTf, confirmPattern, confirmTf, confirmType,
                 entryPrice, stopLoss, watchingTarget, confirmOwnTarget, rrWatching, keyLevel,
                 result, barsToResult, pnlPct, exitPrice, exitReason,
                 rsiAtP1, rsiAtP2, macdHistAtP1, macdHistAtP2, stochRsiK15m, dailyRsi,
                 watchingPatternHeight, confirmPatternHeight, targetEventuallyHit, postExitMaxRetracePct, eSymmetry,
-                bbPeakBbw, rsiZoneQuality != null ? rsiZoneQuality : "");
+                bbPeakBbw, rsiZoneQuality != null ? rsiZoneQuality : "", dailyAdx, dailyAdxEma, adxWatching, adxWatchingEma, adxConfirm, adxConfirmEma,
+                macdWatching, macdSignalWatching, bbWidthWatching, bbPctBWatching, macdDaily, macdSignalDaily, bbWidthDaily, bbPctBDaily);
         }
     }
 
     private record DailyIndicators(
             TreeMap<Instant, Double> macdHistMap,
             TreeMap<Instant, Double> rsiMap,
-            TreeMap<Instant, Double> stochRsiKMap) {
+            TreeMap<Instant, Double> stochRsiKMap,
+            TreeMap<Instant, Double> adxMap,
+            TreeMap<Instant, Double> adxEmaMap,
+            TreeMap<Instant, Double> macdLineMap,
+            TreeMap<Instant, Double> macdSignalMap,
+            TreeMap<Instant, Double> bbWidthMap,
+            TreeMap<Instant, Double> bbPctBMap) {
 
         double macdHistAtTs(Instant ts) {
             return floorValue(macdHistMap, ts);
@@ -2454,6 +2594,30 @@ public class PatternComboBacktestService {
 
         double stochRsiKAtTs(Instant ts) {
             return floorValue(stochRsiKMap, ts);
+        }
+
+        double adxAtTs(Instant ts) {
+            return floorValue(adxMap, ts);
+        }
+
+        double adxEmaAtTs(Instant ts) {
+            return floorValue(adxEmaMap, ts);
+        }
+
+        double macdLineAtTs(Instant ts) {
+            return floorValue(macdLineMap, ts);
+        }
+
+        double macdSignalAtTs(Instant ts) {
+            return floorValue(macdSignalMap, ts);
+        }
+
+        double bbWidthAtTs(Instant ts) {
+            return floorValue(bbWidthMap, ts);
+        }
+
+        double bbPctBAtTs(Instant ts) {
+            return floorValue(bbPctBMap, ts);
         }
 
         private double floorValue(TreeMap<Instant, Double> map, Instant ts) {

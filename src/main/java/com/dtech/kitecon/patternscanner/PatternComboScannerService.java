@@ -24,9 +24,13 @@ public class PatternComboScannerService {
 
     private final PatternScanService patternScanService;
     private final TradeSignalRepository tradeSignalRepository;
+    private final TradeFilterClient tradeFilterClient;
 
     @Value("${trade.monitor.entry.validity.hours:4}")
     private int entryValidityHours;
+
+    @Value("${trade.filter.threshold:0.82}")
+    private double filterThreshold;
 
     @Value("${trade.scanner.watching.tf:1h}")
     private String watchingTfStr;
@@ -46,7 +50,7 @@ public class PatternComboScannerService {
 
         int totalCreated = 0;
 
-        for (String symbol : patternScanService.getNifty50()) {
+        for (String symbol : patternScanService.getFnoSymbols()) {
             try {
                 PatternScanResultDto result = patternScanService.scan(symbol, watchingTf, confirmTf);
                 List<PatternDto> patterns = result.getPatterns();
@@ -139,6 +143,24 @@ public class PatternComboScannerService {
                 .rrRatio(rrRatio)
                 .notes("Auto-scan: rsiP1=" + pattern.getRsiAtP1() + " rsiP2=" + pattern.getRsiAtP2())
                 .build();
+
+        // ML filter — score the pattern before persisting
+        double prob = tradeFilterClient.score(
+                pattern, pattern.getPatternType(),
+                0.0, 0.0, 0.0,   // dailyRsi, dailyAdx, dailyAdxEma — TODO: wire from PatternScanService
+                0.0, 0.0,         // adxWatching, adxWatchingEma
+                0.0, 0.0,         // adxConfirm, adxConfirmEma
+                0.0, 0.0,         // macdWatching, macdSignalWatching
+                0.0, 0.0,         // bbWidthWatching, bbPctBWatching
+                0.0, 0.0,         // macdDaily, macdSignalDaily
+                0.0, 0.0          // bbWidthDaily, bbPctBDaily
+        );
+        if (prob < filterThreshold) {
+            log.debug("[Scanner] ML filter rejected {} {} prob={:.2f} < threshold={}",
+                    symbol, pattern.getPatternType(), prob, filterThreshold);
+            return false;
+        }
+        signal.setMlScore(BigDecimal.valueOf(prob).setScale(4, RoundingMode.HALF_UP));
 
         signal = tradeSignalRepository.save(signal);
 

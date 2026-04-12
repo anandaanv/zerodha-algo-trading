@@ -20,7 +20,8 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     df["macd_hist"] = macd["MACDh_12_26_9"]
 
     bb = ta.bbands(df["close"], length=20, std=2)
-    df["bb_pct"]    = bb["BBP_20_2.0"]   # 0–1 position within bands
+    bb_pct_col = [c for c in bb.columns if c.startswith("BBP")][0]
+    df["bb_pct"]    = bb[bb_pct_col]     # 0–1 position within bands
 
     df["vol_ratio"] = df["volume"] / df["volume"].rolling(20).mean()
 

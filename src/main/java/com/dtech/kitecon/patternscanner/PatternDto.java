@@ -16,6 +16,7 @@ public class PatternDto {
     double atr;
     double rsiAtP1;
     double rsiAtP2;
+    double rrRatio;
     // anchor times for the pattern shape (for overlay rendering)
     Instant p0Time;           // first top/bottom
     Instant p1Time;           // neckline
