@@ -38,6 +38,8 @@ public class DetectedPattern {
     double  macdHistAtP2;
     double  stochRsiK;
     double  dailyRsi;
+    double  dailyAdx;
+    double  dailyAdxEma;
     double  macdHistogram;
     String  reversalPattern;
 }

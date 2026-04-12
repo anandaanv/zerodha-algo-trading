@@ -49,6 +49,7 @@ public class TradeExitHandler {
     private final TradeSignalRepository signalRepository;
     private final TradeExecutionRepository executionRepository;
     private final TradeMonitorLogRepository logRepository;
+    private final TradeOrchestrationService tradeOrchestrationService;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -137,6 +138,7 @@ public class TradeExitHandler {
             calculateAndSetPnl(signal, execution, ltp);
             executionRepository.save(execution);
             finalise(signal, execution);
+            tradeOrchestrationService.onExitTriggered(signal, reason);
             writeLog(signal, ltp, execution.getNetPnlInr(), execution.getNetPnlPct(),
                     MonitorAction.EXIT_ORDER_PLACED,
                     String.format("[DRY RUN] Exit at %.4f reason=%s netPnL=%.2f",

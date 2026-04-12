@@ -66,6 +66,9 @@ public class TradeSignal {
     @Column(precision = 6, scale = 2)
     private BigDecimal rrRatio;
 
+    @Column(precision = 4, scale = 4)
+    private BigDecimal mlScore;
+
     private Boolean rsiDivergence;
 
     @Column(precision = 6, scale = 2)
