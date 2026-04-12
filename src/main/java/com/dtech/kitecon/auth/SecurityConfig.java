@@ -107,7 +107,8 @@ public class SecurityConfig {
                                 "/api/pattern-scan/**",
                                 "/api/scanner/**",
                                 "/api/segment-config/**",
-                                "/api/trade-orders/**"
+                                "/api/trade-orders/**",
+                                "/api/pattern-screener/**"
                         ).hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // All other endpoints require authentication

@@ -13,4 +13,5 @@ public interface SegmentConfigRepository extends JpaRepository<SegmentConfig, Lo
     List<SegmentConfig> findBySymbolAndEnabledTrue(String symbol);
     List<SegmentConfig> findAllByOrderBySymbolAscSegmentAsc();
     Optional<SegmentConfig> findBySymbolAndSegment(String symbol, TradingSegment segment);
+    List<SegmentConfig> findBySegmentInAndEnabledTrue(List<TradingSegment> segments);
 }

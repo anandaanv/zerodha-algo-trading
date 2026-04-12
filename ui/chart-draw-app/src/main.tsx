@@ -41,8 +41,8 @@ import KiteConfigPage from './admin/kiteConfig/KiteConfigPage';
 // Group Management
 import GroupManagementPage from './admin/groups/GroupManagementPage';
 
-// Pattern Screener
-import PatternScreenerPage from "./patternScanner/pages/PatternScreenerPage";
+// Pattern Screener (scheduled screener management)
+import PatternScreenerPage from "./patternScreener/pages/PatternScreenerPage";
 
 // Settings
 import SettingsPage from './settings/SettingsPage';

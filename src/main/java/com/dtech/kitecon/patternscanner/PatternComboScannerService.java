@@ -63,7 +63,8 @@ public class PatternComboScannerService {
 
                 if (patterns != null) {
                     for (PatternDto pattern : patterns) {
-                        if (createSignalIfNew(symbol, pattern, result.getWatchingTf())) {
+                        Long sid = createSignalForPattern(symbol, pattern, result.getWatchingTf());
+                        if (sid != null) {
                             totalCreated++;
                         }
                     }
@@ -87,7 +88,7 @@ public class PatternComboScannerService {
         };
     }
 
-    private boolean createSignalIfNew(String symbol, PatternDto pattern, String timeframe) {
+    Long createSignalForPattern(String symbol, PatternDto pattern, String timeframe) {
         List<TradeSignal> openSignals = tradeSignalRepository.findBySymbolAndStatusIn(
                 symbol, List.of(TradeStatus.WATCHING_ENTRY, TradeStatus.ENTRY_PENDING, TradeStatus.ACTIVE));
 
@@ -98,7 +99,7 @@ public class PatternComboScannerService {
                     double necklineDiff = Math.abs(existing.getNeckline().doubleValue() - keyLevel) / keyLevel;
                     if (necklineDiff < 0.005) {
                         log.debug("Duplicate pattern detected for {} {}: skipping", symbol, pattern.getPatternType());
-                        return false;
+                        return null;
                     }
                 }
             }
@@ -164,7 +165,7 @@ public class PatternComboScannerService {
         if (prob < filterThreshold) {
             log.debug("[Scanner] ML filter rejected {} {} prob={:.2f} < threshold={}",
                     symbol, pattern.getPatternType(), prob, filterThreshold);
-            return false;
+            return null;
         }
         signal.setMlScore(BigDecimal.valueOf(prob).setScale(4, RoundingMode.HALF_UP));
 
@@ -173,6 +174,6 @@ public class PatternComboScannerService {
         log.info("[Scanner] New signal: {} {} {} keyLevel={}",
                 signal.getId(), symbol, pattern.getPatternType(), pattern.getKeyLevel());
 
-        return true;
+        return signal.getId();
     }
 }
