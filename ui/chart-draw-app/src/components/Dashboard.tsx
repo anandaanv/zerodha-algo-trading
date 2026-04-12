@@ -399,6 +399,102 @@ export default function Dashboard() {
             </p>
           </div>
         )}
+
+        {/* Pattern Screener Card - USER */}
+        {hasRole("USER") && (
+          <div
+            onClick={() => navigate("/pattern-screener")}
+            style={{
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2.5rem",
+              cursor: "pointer",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-8px)";
+              e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+            }}
+          >
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📉</div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "0.5rem", color: "#333", fontWeight: 600 }}>
+              Pattern Screener
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.95rem" }}>
+              Scan Nifty 50 for chart patterns (DTB, Triangle, H&S, Flag)
+            </p>
+          </div>
+        )}
+
+        {/* Trade Orders Card - ADMIN */}
+        {hasRole("ADMIN") && (
+          <div
+            onClick={() => navigate("/trade-orders")}
+            style={{
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2.5rem",
+              cursor: "pointer",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-8px)";
+              e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+            }}
+          >
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>📋</div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "0.5rem", color: "#333", fontWeight: 600 }}>
+              Trade Orders
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.95rem" }}>
+              Monitor paper trades and P&L across all segments
+            </p>
+          </div>
+        )}
+
+        {/* Segment Config Card - ADMIN */}
+        {hasRole("ADMIN") && (
+          <div
+            onClick={() => navigate("/segment-config")}
+            style={{
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2.5rem",
+              cursor: "pointer",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-8px)";
+              e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+            }}
+          >
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⚙️</div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "0.5rem", color: "#333", fontWeight: 600 }}>
+              Segment Config
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.95rem" }}>
+              Configure which segments (EQ/FUT/OPT) to trade per symbol
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Sync Modal */}
