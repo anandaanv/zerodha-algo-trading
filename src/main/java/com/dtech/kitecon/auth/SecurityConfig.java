@@ -65,6 +65,7 @@ public class SecurityConfig {
                                 "/copilot", "/skills", "/kite-success",
                                 "/elliott-screener", "/elliott-screener/**",
                                 "/scan", "/scan-chart/**",
+                                "/pipeline",
                                 "/settings",
                                 "/admin/kite-config",
                                 "/admin/groups",
@@ -108,6 +109,7 @@ public class SecurityConfig {
                                 "/api/scanner/**",
                                 "/api/segment-config/**",
                                 "/api/trade-orders/**",
+                                "/api/trade-signals/**",
                                 "/api/pattern-screener/**"
                         ).hasAnyRole("USER", "MODERATOR", "ADMIN")
 

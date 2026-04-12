@@ -44,6 +44,9 @@ import GroupManagementPage from './admin/groups/GroupManagementPage';
 // Pattern Screener (scheduled screener management)
 import PatternScreenerPage from "./patternScreener/pages/PatternScreenerPage";
 
+// Pipeline
+import PipelinePage from "./pipeline/pages/PipelinePage";
+
 // Settings
 import SettingsPage from './settings/SettingsPage';
 
@@ -213,6 +216,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="USER">
               <PatternScreenerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pipeline"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <PipelinePage />
             </ProtectedRoute>
           }
         />

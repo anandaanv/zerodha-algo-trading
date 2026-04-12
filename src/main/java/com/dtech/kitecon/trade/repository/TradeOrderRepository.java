@@ -12,6 +12,7 @@ import java.util.List;
 @Repository
 public interface TradeOrderRepository extends JpaRepository<TradeOrder, Long> {
     List<TradeOrder> findBySignal(TradeSignal signal);
+    List<TradeOrder> findBySignal_Id(Long signalId);
     List<TradeOrder> findBySignalAndStatus(TradeSignal signal, TradeOrderStatus status);
     List<TradeOrder> findByUnderlyingSymbolAndStatus(String symbol, TradeOrderStatus status);
     List<TradeOrder> findByStatusOrderByCreatedAtDesc(TradeOrderStatus status);
