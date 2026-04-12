@@ -19,6 +19,19 @@ const res = await fetch(getApiUrl("/api/ohlc?symbol=HDFCBANK&interval=FifteenMin
 - `getApiUrl` uses `VITE_API_BASE_URL` in production builds (set in `.env.production` via `ui-deploy.sh`). Without it, the URL resolves to `window.location.origin` which may be the CloudFront/S3 domain, not the API server.
 - `withAuth()` attaches `Authorization: Bearer <jwt>`. All `/api/**` endpoints (except `/api/auth/**`) require this header — missing it causes 403.
 
+## Environment Configuration
+
+The app is deployed as a **static build** (S3 + CloudFront). There is no Vite dev server in production.
+
+| Environment | `VITE_API_BASE_URL` | Set in |
+|-------------|---------------------|--------|
+| Local dev   | `http://localhost:8080` | `.env.development` (committed) |
+| Production  | `https://tradeapi.dheemantech.in` | `.env.production` (written by `ui-deploy.sh`) |
+
+Never use relative `/api/...` URLs — they resolve to the frontend origin (CloudFront/S3), not the backend.
+
+`ui-deploy.sh` writes `VITE_API_BASE_URL=https://tradeapi.dheemantech.in` into `.env.production` before building.
+
 ## CloudFront Invalidation
 
 Always invalidate **only `/index.html`**, never `/*`:
