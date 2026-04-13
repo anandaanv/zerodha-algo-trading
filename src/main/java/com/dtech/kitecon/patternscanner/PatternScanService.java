@@ -3,6 +3,7 @@ package com.dtech.kitecon.patternscanner;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.backtest.DetectedPattern;
 import com.dtech.kitecon.backtest.PatternComboBacktestService;
+import com.dtech.kitecon.service.DataFetchService;
 import com.dtech.kitecon.backtest.PatternComboBacktestService.DailyIndicators;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.data.Instrument;
@@ -29,6 +30,7 @@ public class PatternScanService {
     private final PatternComboBacktestService patternComboBacktestService;
     private final ZigZagService zigZagService;
     private final InstrumentRepository instrumentRepository;
+    private final DataFetchService dataFetchService;
 
     private static final List<String> NIFTY50 = List.of(
         "RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK",
@@ -60,6 +62,17 @@ public class PatternScanService {
         Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
         if (instrument == null) {
             throw new RuntimeException("Instrument not found: " + symbol);
+        }
+
+        // Refresh candle data for this symbol before scanning — incremental fetch from latest to now
+        try { dataFetchService.updateInstrumentToLatest(symbol, watchingTf, new String[]{"NSE"}); } catch (Exception e) {
+            log.warn("[Scan] Data refresh failed for {} {}: {}", symbol, watchingTf, e.getMessage());
+        }
+        try { dataFetchService.updateInstrumentToLatest(symbol, confirmTf, new String[]{"NSE"}); } catch (Exception e) {
+            log.warn("[Scan] Data refresh failed for {} {}: {}", symbol, confirmTf, e.getMessage());
+        }
+        try { dataFetchService.updateInstrumentToLatest(symbol, Interval.Day, new String[]{"NSE"}); } catch (Exception e) {
+            log.warn("[Scan] Data refresh failed for {} {}: {}", symbol, Interval.Day, e.getMessage());
         }
 
         BarSeries seriesW = zigZagService.getBarSeries(symbol, instrument, watchingTf);
@@ -139,6 +152,11 @@ public class PatternScanService {
                 .macdSignalDaily(dailyInd.macdSignalAtTs(p.getKeyLevelTime()))
                 .bbWidthDaily(dailyInd.bbWidthAtTs(p.getKeyLevelTime()))
                 .bbPctBDaily(dailyInd.bbPctBAtTs(p.getKeyLevelTime()))
+                .bbExpanding(watchingInd.bbExpandingAtTs(p.getKeyLevelTime(), 5))
+                .bbAligned(watchingInd.bbAlignedAtTs(p.getKeyLevelTime(), 5, p.isBullish()))
+                .rsiSlope(watchingInd.rsiSlopeAtTs(p.getKeyLevelTime(), 5))
+                .macdHistSlope(watchingInd.macdHistSlopeAtTs(p.getKeyLevelTime(), 5))
+                .adxSlope(watchingInd.adxSlopeAtTs(p.getKeyLevelTime(), 5))
                 .build()).toList();
 
         // Build overlays for watching TF
@@ -223,6 +241,11 @@ public class PatternScanService {
                     .macdSignalDaily(dailyInd.macdSignalAtTs(now))
                     .bbWidthDaily(dailyInd.bbWidthAtTs(now))
                     .bbPctBDaily(dailyInd.bbPctBAtTs(now))
+                    .bbExpanding(watchingInd.bbExpandingAtTs(now, 5))
+                    .bbAligned(watchingInd.bbAlignedAtTs(now, 5, signal.getDirection() == com.dtech.kitecon.trade.enums.TradeDirection.LONG))
+                    .rsiSlope(watchingInd.rsiSlopeAtTs(now, 5))
+                    .macdHistSlope(watchingInd.macdHistSlopeAtTs(now, 5))
+                    .adxSlope(watchingInd.adxSlopeAtTs(now, 5))
                     .build();
         } catch (Exception e) {
             log.warn("[PatternScanService] computeCurrentIndicators failed for {}: {}", signal.getSymbol(), e.getMessage());

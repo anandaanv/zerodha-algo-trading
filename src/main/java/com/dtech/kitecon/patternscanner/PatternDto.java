@@ -43,4 +43,10 @@ public class PatternDto {
     double macdSignalDaily;
     double bbWidthDaily;
     double bbPctBDaily;
+    // Derived slope/expansion features
+    double bbExpanding;      // 1.0 if BB width expanding at entry vs 5 bars ago
+    double bbAligned;        // 1.0 if expanding and pct_b aligns with trade direction
+    double rsiSlope;         // linear regression slope of RSI over last 5 bars (watching TF)
+    double macdHistSlope;    // slope of MACD histogram over last 5 bars (watching TF)
+    double adxSlope;         // slope of ADX over last 5 bars (watching TF)
 }

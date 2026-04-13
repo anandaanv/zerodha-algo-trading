@@ -36,7 +36,9 @@ public class TradeFilterClient {
                         double macdWatching, double macdSignalWatching,
                         double bbWidthWatching, double bbPctBWatching,
                         double macdDaily, double macdSignalDaily,
-                        double bbWidthDaily, double bbPctBDaily) {
+                        double bbWidthDaily, double bbPctBDaily,
+                        double bbExpanding, double bbAligned,
+                        double rsiSlope, double macdHistSlope, double adxSlope) {
         if (!enabled) return 1.0;
 
         try {
@@ -66,6 +68,11 @@ public class TradeFilterClient {
             payload.put("macd_signal_daily",      macdSignalDaily);
             payload.put("bb_width_daily",         bbWidthDaily);
             payload.put("bb_pct_b_daily",         bbPctBDaily);
+            payload.put("bb_expanding",           bbExpanding);
+            payload.put("bb_aligned",             bbAligned);
+            payload.put("rsi_slope",              rsiSlope);
+            payload.put("macd_hist_slope",        macdHistSlope);
+            payload.put("adx_slope",              adxSlope);
 
             @SuppressWarnings("unchecked")
             Map<String, Object> response = restTemplate.postForObject(

@@ -190,6 +190,24 @@ class DoubleTopBottomBacktestTest {
     }
 
     @Test
+    void runAllFno15m5mComboBacktest() throws Exception {
+        List<String> indexFutures = List.of("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "NIFTYNXT50");
+        List<String> fnoSymbols = instrumentRepository.findDistinctFutureUnderlyingNames()
+                .stream()
+                .filter(s -> s != null && !s.isBlank() && !indexFutures.contains(s.toUpperCase()))
+                .sorted()
+                .collect(java.util.stream.Collectors.toList());
+        System.out.println("FNO stock symbols: " + fnoSymbols.size() + " → " + fnoSymbols);
+
+        String csvPath = "/tmp/all_fno_15m5m_combo_backtest.csv";
+        patternComboBacktestService.runMultipleAndWriteCsv(fnoSymbols, csvPath, Interval.FifteenMinute, Interval.FiveMinute);
+        System.out.println("CSV written to: " + csvPath);
+        File f = new File(csvPath);
+        assertTrue(f.exists());
+        assertTrue(f.length() >= 0);
+    }
+
+    @Test
     void runAllFnoComboBacktest() throws Exception {
         List<String> indexFutures = List.of("NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "NIFTYNXT50");
         List<String> fnoSymbols = instrumentRepository.findDistinctFutureUnderlyingNames()

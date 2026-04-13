@@ -63,11 +63,17 @@ def extract_features(row: dict) -> np.ndarray:
         _safe(row.get("macd_daily", "0")),
         _safe(row.get("macd_signal_daily", "0")),
         _safe(row.get("macd_daily", "0")) - _safe(row.get("macd_signal_daily", "0")),
-        # Bollinger Bands on watching (1h) and daily TFs
+        # Bollinger Bands on watching (1h) and daily TFs (raw)
         _safe(row.get("bb_width_watching", "0")),
         _safe(row.get("bb_pct_b_watching", "0.5")),
         _safe(row.get("bb_width_daily", "0")),
         _safe(row.get("bb_pct_b_daily", "0.5")),
+        # Derived slope / expansion features
+        _safe(row.get("bb_expanding", "0")),
+        _safe(row.get("bb_aligned", "0")),
+        _safe(row.get("rsi_slope", "0")),
+        _safe(row.get("macd_hist_slope", "0")),
+        _safe(row.get("adx_slope", "0")),
     ]
     return np.array(feats, dtype=np.float32)
 
@@ -82,6 +88,8 @@ FEATURE_NAMES = PATTERN_TYPES + [
     "macd_daily", "macd_sig_daily", "macd_hist_daily",
     "bb_width_watching", "bb_pct_b_watching",
     "bb_width_daily", "bb_pct_b_daily",
+    "bb_expanding", "bb_aligned",
+    "rsi_slope", "macd_hist_slope", "adx_slope",
 ]
 
 

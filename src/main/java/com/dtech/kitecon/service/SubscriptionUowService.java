@@ -39,7 +39,6 @@ public class SubscriptionUowService {
         Instant now = Instant.now();
         Set<SubscriptionUowStatus> statuses = EnumSet.of(SubscriptionUowStatus.ACTIVE, SubscriptionUowStatus.FAILED);
         List<SubscriptionUow> batch = uowRepository.findByStatusInAndNextRunAtLessThanEqualOrderByNextRunAtAsc(statuses, now);
-        batch.addAll(uowRepository.findAllByNextRunAtIsNull());
         if (batch.isEmpty()) {
             return;
         }
