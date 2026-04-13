@@ -6,6 +6,7 @@ import com.dtech.kitecon.backtest.PatternComboBacktestService;
 import com.dtech.kitecon.backtest.PatternComboBacktestService.DailyIndicators;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import com.dtech.chartpattern.zigzag.ZigZagService;
 import com.dtech.chartpattern.zigzag.ZigZagParams;
@@ -154,6 +155,79 @@ public class PatternScanService {
                 .watchingTfOverlays(watchingOverlays)
                 .confirmTfOverlays(confirmOverlays)
                 .build();
+    }
+
+    /**
+     * Computes live indicator values for a signal's symbol at the time of entry.
+     * Used by TradeEntryHandler to score the ML filter with fresh market data.
+     */
+    public PatternDto computeCurrentIndicators(TradeSignal signal) {
+        try {
+            String tfStr = signal.getTimeframe() != null ? signal.getTimeframe() : "1h";
+            Interval watchingTf = switch (tfStr.toLowerCase()) {
+                case "1d", "day", "d" -> Interval.Day;
+                case "15m", "15min"   -> Interval.FifteenMinute;
+                case "5m",  "5min"    -> Interval.FiveMinute;
+                default               -> Interval.OneHour;
+            };
+            Interval confirmTf = Interval.FifteenMinute;
+
+            Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(
+                    signal.getSymbol(), new String[]{"NSE", "NFO"});
+            if (instrument == null) return null;
+
+            BarSeries seriesW = null;
+            BarSeries seriesDaily = null;
+            BarSeries seriesC = null;
+            try { seriesW = zigZagService.getBarSeries(signal.getSymbol(), instrument, watchingTf); } catch (Exception ignored) {}
+            try { seriesDaily = zigZagService.getBarSeries(signal.getSymbol(), instrument, Interval.Day); } catch (Exception ignored) {}
+            try { seriesC = zigZagService.getBarSeries(signal.getSymbol(), instrument, confirmTf); } catch (Exception ignored) {}
+
+            DailyIndicators watchingInd = patternComboBacktestService.computeDailyIndicators(seriesW);
+            DailyIndicators dailyInd    = patternComboBacktestService.computeDailyIndicators(seriesDaily);
+            DailyIndicators confirmInd  = patternComboBacktestService.computeDailyIndicators(seriesC);
+
+            double currentRsi = 0.0, currentMacdHist = 0.0, currentStochRsiK = 0.0;
+            if (seriesW != null && !seriesW.isEmpty()) {
+                double[] rsiArr      = patternComboBacktestService.computeRsiPublic(seriesW, 14);
+                double[] stochRsiArr = patternComboBacktestService.computeStochRsiKPublic(rsiArr);
+                double[] macdHistArr = patternComboBacktestService.computeMacdHistPublic(seriesW);
+                int last = seriesW.getBarCount() - 1;
+                currentRsi       = rsiArr[last];
+                currentMacdHist  = macdHistArr[last];
+                currentStochRsiK = stochRsiArr[last];
+            }
+
+            Instant now = Instant.now();
+            return PatternDto.builder()
+                    .patternType(signal.getPatternType())
+                    .rrRatio(signal.getRrRatio() != null ? signal.getRrRatio().doubleValue() : 0.0)
+                    .patternHeight(signal.getPatternHeight() != null ? signal.getPatternHeight().doubleValue() : 0.0)
+                    .rsiAtP1(currentRsi)
+                    .rsiAtP2(currentRsi)
+                    .macdHistAtP1(currentMacdHist)
+                    .macdHistAtP2(currentMacdHist)
+                    .stochRsiK(currentStochRsiK)
+                    .adxWatching(watchingInd.adxAtTs(now))
+                    .adxWatchingEma(watchingInd.adxEmaAtTs(now))
+                    .macdWatching(watchingInd.macdLineAtTs(now))
+                    .macdSignalWatching(watchingInd.macdSignalAtTs(now))
+                    .bbWidthWatching(watchingInd.bbWidthAtTs(now))
+                    .bbPctBWatching(watchingInd.bbPctBAtTs(now))
+                    .adxConfirm(confirmInd.adxAtTs(now))
+                    .adxConfirmEma(confirmInd.adxEmaAtTs(now))
+                    .dailyRsi(dailyInd.rsiAtTs(now))
+                    .dailyAdx(dailyInd.adxAtTs(now))
+                    .dailyAdxEma(dailyInd.adxEmaAtTs(now))
+                    .macdDaily(dailyInd.macdLineAtTs(now))
+                    .macdSignalDaily(dailyInd.macdSignalAtTs(now))
+                    .bbWidthDaily(dailyInd.bbWidthAtTs(now))
+                    .bbPctBDaily(dailyInd.bbPctBAtTs(now))
+                    .build();
+        } catch (Exception e) {
+            log.warn("[PatternScanService] computeCurrentIndicators failed for {}: {}", signal.getSymbol(), e.getMessage());
+            return null;
+        }
     }
 
     private Map<String, Object> buildOverlays(List<DetectedPattern> patterns, List<Bar> bars, Map<Instant, Integer> tsToIdx) {

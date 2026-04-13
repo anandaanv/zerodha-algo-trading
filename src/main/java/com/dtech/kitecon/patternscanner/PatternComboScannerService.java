@@ -26,7 +26,6 @@ public class PatternComboScannerService {
 
     private final PatternScanService patternScanService;
     private final TradeSignalRepository tradeSignalRepository;
-    private final TradeFilterClient tradeFilterClient;
     private final KiteTickerService kiteTickerService;
 
     @Value("${trade.monitor.entry.validity.hours:4}")
@@ -170,20 +169,7 @@ public class PatternComboScannerService {
                 .notes("Auto-scan: rsiP1=" + pattern.getRsiAtP1() + " rsiP2=" + pattern.getRsiAtP2())
                 .build();
 
-        // ML filter — score the pattern and store for reference, but do NOT gate here.
-        // Filtering happens at entry time (TradeEntryHandler) when the pattern has fully formed.
-        double prob = tradeFilterClient.score(
-                pattern, pattern.getPatternType(),
-                pattern.getDailyRsi(), pattern.getDailyAdx(), pattern.getDailyAdxEma(),
-                pattern.getAdxWatching(), pattern.getAdxWatchingEma(),
-                pattern.getAdxConfirm(), pattern.getAdxConfirmEma(),
-                pattern.getMacdWatching(), pattern.getMacdSignalWatching(),
-                pattern.getBbWidthWatching(), pattern.getBbPctBWatching(),
-                pattern.getMacdDaily(), pattern.getMacdSignalDaily(),
-                pattern.getBbWidthDaily(), pattern.getBbPctBDaily()
-        );
-        signal.setMlScore(BigDecimal.valueOf(prob).setScale(4, RoundingMode.HALF_UP));
-
+        // ML scoring happens at entry time (TradeEntryHandler) with live indicators — not here.
         signal = tradeSignalRepository.save(signal);
 
         log.info("[Scanner] New signal: {} {} {} keyLevel={}",
