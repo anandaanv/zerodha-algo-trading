@@ -47,5 +47,5 @@
     "adx_slope"
   ],
   "trained_on": "/tmp/all_fno_combo_backtest.csv",
-  "n_rows": 12769
+  "n_rows": 12603
 }

@@ -145,7 +145,8 @@ public class PatternComboBacktestService {
         watchingPatterns.addAll(scanDtbWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(scanTriangleWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(scanHnsWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
-        watchingPatterns.addAll(scanFlagWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
+        // FLAG patterns disabled — low base WR (39-46%), not worth the noise
+        // watchingPatterns.addAll(scanFlagWatching(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         Map<String, Long> wpByType = watchingPatterns.stream()
                 .collect(java.util.stream.Collectors.groupingBy(DetectedPattern::getPatternType, java.util.stream.Collectors.counting()));
         log.info("[Combo] Found {} watching patterns ({}): {}", watchingPatterns.size(), watchingTf.getUiKey(), wpByType);
@@ -2266,7 +2267,7 @@ public class PatternComboBacktestService {
     public List<DetectedPattern> scanFlagWatchingPublic(List<ZigZagPoint> pivots, List<Bar> barsW,
             Map<Instant, Integer> tsToIdxW, double[] atrArr, double[] rsiValues,
             double[] macdHistArr, double[] stochRsiK) {
-        return scanFlagWatching(pivots, barsW, tsToIdxW, atrArr, rsiValues, macdHistArr, stochRsiK);
+        return java.util.Collections.emptyList(); // FLAG disabled — low base WR (39-46%)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
