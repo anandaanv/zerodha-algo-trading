@@ -2432,7 +2432,7 @@ public class PatternComboBacktestService {
         }
     }
 
-    private DailyIndicators computeDailyIndicators(BarSeries dailySeries) {
+    public DailyIndicators computeDailyIndicators(BarSeries dailySeries) {
         if (dailySeries == null || dailySeries.isEmpty()) {
             return new DailyIndicators(new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>(), new TreeMap<>());
         }
@@ -2573,7 +2573,7 @@ public class PatternComboBacktestService {
         }
     }
 
-    private record DailyIndicators(
+    public record DailyIndicators(
             TreeMap<Instant, Double> macdHistMap,
             TreeMap<Instant, Double> rsiMap,
             TreeMap<Instant, Double> stochRsiKMap,
@@ -2584,39 +2584,39 @@ public class PatternComboBacktestService {
             TreeMap<Instant, Double> bbWidthMap,
             TreeMap<Instant, Double> bbPctBMap) {
 
-        double macdHistAtTs(Instant ts) {
+        public double macdHistAtTs(Instant ts) {
             return floorValue(macdHistMap, ts);
         }
 
-        double rsiAtTs(Instant ts) {
+        public double rsiAtTs(Instant ts) {
             return floorValue(rsiMap, ts);
         }
 
-        double stochRsiKAtTs(Instant ts) {
+        public double stochRsiKAtTs(Instant ts) {
             return floorValue(stochRsiKMap, ts);
         }
 
-        double adxAtTs(Instant ts) {
+        public double adxAtTs(Instant ts) {
             return floorValue(adxMap, ts);
         }
 
-        double adxEmaAtTs(Instant ts) {
+        public double adxEmaAtTs(Instant ts) {
             return floorValue(adxEmaMap, ts);
         }
 
-        double macdLineAtTs(Instant ts) {
+        public double macdLineAtTs(Instant ts) {
             return floorValue(macdLineMap, ts);
         }
 
-        double macdSignalAtTs(Instant ts) {
+        public double macdSignalAtTs(Instant ts) {
             return floorValue(macdSignalMap, ts);
         }
 
-        double bbWidthAtTs(Instant ts) {
+        public double bbWidthAtTs(Instant ts) {
             return floorValue(bbWidthMap, ts);
         }
 
-        double bbPctBAtTs(Instant ts) {
+        public double bbPctBAtTs(Instant ts) {
             return floorValue(bbPctBMap, ts);
         }
 

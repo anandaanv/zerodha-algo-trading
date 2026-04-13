@@ -45,9 +45,9 @@ public class TradeFilterClient {
             payload.put("rr_watching",            pattern.getRrRatio());
             payload.put("rsi_at_p1",              pattern.getRsiAtP1());
             payload.put("rsi_at_p2",              pattern.getRsiAtP2());
-            payload.put("macd_hist_at_p1",        0.0);
-            payload.put("macd_hist_at_p2",        0.0);
-            payload.put("stoch_rsi_k_15m",        0.0);
+            payload.put("macd_hist_at_p1",        pattern.getMacdHistAtP1());
+            payload.put("macd_hist_at_p2",        pattern.getMacdHistAtP2());
+            payload.put("stoch_rsi_k_15m",        pattern.getStochRsiK());
             payload.put("daily_rsi",              dailyRsi);
             payload.put("watching_pattern_height",pattern.getPatternHeight());
             payload.put("e_symmetry",             0.0);
