@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { apiFetch } from "../config/api";
-import { withAuth } from "../utils/apiHelper";
+import { useSearchParams } from "react-router-dom";
+import { getApiUrl } from "../config/api";
 
 /**
  * Component to handle Kite callback after successful authentication
@@ -9,7 +8,6 @@ import { withAuth } from "../utils/apiHelper";
  */
 export default function KiteSuccess() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -33,15 +31,8 @@ export default function KiteSuccess() {
           return;
         }
 
-        // Send request_token to backend /app endpoint
-        const response = await apiFetch(`/update-token?request_token=${requestToken}`, withAuth());
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || `Failed to initialize: ${response.status}`);
-        }
-
-        navigate("/dashboard");
+        // Navigate to backend callback — it processes the token, saves to UserKiteConfig, and redirects to /admin/kite-config
+        window.location.href = getApiUrl(`/kite-callback/config/1?request_token=${requestToken}`).toString();
 
       } catch (err) {
         console.error("Kite callback error:", err);
@@ -90,7 +81,7 @@ export default function KiteSuccess() {
         </div>
         <div style={{ fontSize: "14px", color: "#666" }}>{error}</div>
         <button
-          onClick={() => navigate("/kite-login")}
+          onClick={() => window.location.href = "/kite-login"}
           style={{
             padding: "10px 20px",
             borderRadius: "6px",

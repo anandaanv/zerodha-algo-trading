@@ -43,6 +43,14 @@ aws cloudfront create-invalidation --distribution-id E3GNIWHAP6FDTM --paths "/in
 
 Never commit directly to `master`. If the current branch is `master`, stop and ask the user whether to create a new branch before making any changes.
 
+## PR and Issue Policy — No Code Merged Without a PR + GitHub Issue
+
+Every code change merged to `master` must have:
+1. A **GitHub issue** describing what changed and why (bug, feature, or fix)
+2. A **Pull Request** referencing that issue — never merge directly, always go through a PR
+
+Create the issue first, then the PR. Reference the issue in the PR body (e.g. `Closes #33`).
+
 ## New Pages — Add to Dashboard
 
 Any new top-level page that doesn't belong under an existing parent section **must** be linked from the Dashboard (`src/components/Dashboard.tsx`). This ensures all features are discoverable from the home screen.
