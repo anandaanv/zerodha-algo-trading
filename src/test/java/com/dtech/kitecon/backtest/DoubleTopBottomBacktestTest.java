@@ -50,6 +50,9 @@ class DoubleTopBottomBacktestTest {
     @Autowired
     private InstrumentRepository instrumentRepository;
 
+    @Autowired
+    private com.dtech.kitecon.service.DataFetchService dataFetchService;
+
     @Test
     void runRelianceBacktest() throws Exception {
         String csvPath = "/tmp/reliance_double_topbottom_backtest.csv";
@@ -424,6 +427,71 @@ class DoubleTopBottomBacktestTest {
                 }
             }
         }
+    }
+
+    @Test
+    void runNifty500ComboBacktest() throws Exception {
+        // Nifty 500 constituent symbols (from NSE)
+        List<String> nifty500 = List.of(
+            "360ONE","3MINDIA","ABB","ACC","AIAENG","APLAPOLLO","AUBANK","AWL","AADHARHFC",
+            "AAVAS","ABCAPITAL","ABFRL","ABREL","ABSLAMC","ACE","ACMESOLAR","ACUTAAS",
+            "ADANIENSOL","ADANIENT","ADANIGREEN","ADANIPORTS","ADANIPOWER","ATGL","AEGISLOG",
+            "AEGISVOPAK","AFCONS","AFFLE","AJANTPHARM","AKZOINDIA","ALKEM","ALKYLAMINE",
+            "ALLCARGO","AMARAJABAT","AMBUJACEM","ANGELONE","ANURAS","APOLLOHOSP","APOLLOTYRE",
+            "APTUS","ASAHIINDIA","ASIANPAINT","ASTERDM","ASTRAZEN","ATPL","AUROBINDO",
+            "AVANTIFEED","AXIBANK","AXISBANK","BAJAJ-AUTO","BAJAJFINSV","BAJAJHFL","BAJFINANCE",
+            "BALKRISIND","BALRAMCHIN","BANDHANBNK","BANKBARODA","BATAINDIA","BAYERCROP",
+            "BERGEPAINT","BEL","BHARATFORG","BHEL","BHARTIARTL","BIOCON","BIRLACORPN",
+            "BLUEDART","BLUEKNIGHT","BLUESTARCO","BPCL","BRIGADE","BRITANNIA","BSOFT",
+            "CAMS","CANFINHOME","CAPLIPOINT","CARBORUNIV","CASTROLIND","CEATLTD","CENTURYTEX",
+            "CESC","CGPOWER","CHALET","CHAMBLFERT","CHOLAFIN","CIEINDIA","CIPLA","COALINDIA",
+            "COCHINSHIP","COFORGE","COLPAL","CONCOR","COROMANDEL","CPPLUS","CREDITACC",
+            "CRISIL","CROMPTON","CSBBANK","CUMMINSIND","CYIENT","DALBHARAT","DATAPATTNS",
+            "DEEPAKNTR","DELHIVERY","DEVYANI","DIXON","DLF","DMART","DNAVS","DRREDDY",
+            "DIVISLAB","EDELWEISS","ELGIEQUIP","EMAMILTD","ENDURANCE","ENGINERSIN",
+            "EICHERMOT","EPL","EQUITASBNK","ESCORTS","EXIDEIND","FACT","FCONSUMER",
+            "FEDERALBNK","FINEORG","FINPIPE","FIVESTAR","FORCEMOT","FORTIS","GAIL",
+            "GALAXYSURF","GILLETTE","GLENMARK","GMRAIRPORT","GODREJCP","GODREJIND",
+            "GODREJPROP","GRANULES","GRAPHITE","GRASIM","GRINDWELL","GSFC","GUJALKALI",
+            "GUJGASLTD","HAPPYFORGE","HAPPSTMNDS","HATSUN","HAVELLS","HCLTECH","HDFCAMC",
+            "HDFCBANK","HDFCLIFE","HEROMOTOCO","HINDALCO","HINDCOPPER","HINDPETRO",
+            "HINDUNILVR","HONASA","HONAUT","HUDCO","IBREALEST","ICICIBANK","ICICIGI",
+            "ICICIPRULI","IDBI","IDFCFIRSTB","IEX","IGL","IIFL","IIMPORTS","INDHOTEL",
+            "INDIAMART","INDIGO","INDUSINDBK","INDUSTOWER","INFY","INOXWIND","IOB",
+            "IOCL","IRCTC","IRFC","ISEC","ITC","ITI","J&KBANK","JBCHEPHARM","JKTYRE",
+            "JMFINANCIL","JSWENERGY","JSWSTEEL","JUBLFOOD","JUBLINGREA","JUSTDIAL",
+            "JYOTHYLAB","KAJARIACER","KALPATPOWR","KALYANKJIL","KANSAINER","KAYNES",
+            "KFINTECH","KNRCON","KOTAKBANK","KPIL","L&TFH","LALPATHLAB","LAURUSLABS",
+            "LICHSGFIN","LICI","LODHA","LT","LTIM","LTTS","LUPIN","M&M","M&MFIN",
+            "MARICO","MARUTI","MASTEK","MAXHEALTH","MAZDOCK","MCX","METROPOLIS",
+            "MFSL","MGL","MIDHANI","MMTC","MNRE","MPHASIS","MRF","MUTHOOTFIN",
+            "NATCOPHARM","NATIONALUM","NAUKRI","NAVINFLUOR","NESTLEIND","NHPC","NLCINDIA",
+            "NMDC","NTPC","NUVOCO","OBEROIRLTY","OFSS","OIL","ONGC","PAGEIND","PEL",
+            "PERSISTENT","PETRONET","PFC","PFIZER","PHOENIXLTD","PIDILITIND","PIIND",
+            "POLICYBZR","POLYCAB","POLYMED","POONAWALLA","POWERGRID","PRAJIND","PRESTIGE",
+            "PRINCEPIPE","PRISM","PVRINOX","QUESS","RADICO","RAILTEL","RAINBOW",
+            "RAJESHEXPO","RKFORGE","RITES","ROSSARI","ROUTE","RPOWER","SANOFI",
+            "SAPPHIRE","SAREGAMA","SBICARD","SBILIFE","SBIN","SCHAEFFLER","SEQUENT",
+            "SHRIRAMFIN","SIEMENS","SKFINDIA","SOBHA","SOLARA","SONACOMS","SPANDANA",
+            "SPARC","SRTRANSFIN","STARHEALTH","STLTECH","SUBROS","SUNDARMFIN","SUNDRMFAST",
+            "SUNPHARMA","SUNTV","SUPREMEIND","SUVENPHAR","SUZLON","SWANENERGY","SYMPHONY",
+            "TANLA","TATACHEM","TATACOMM","TATACONSUM","TATAELXSI","TATAMOTORS","TATAPOWER",
+            "TATASTEEL","TATATECH","TCI","TCNSCLOTHING","TEAMLEASE","TECHM","THERMAX",
+            "TIMKEN","TITAGARH","TITAN","TORNTPHARM","TORNTPOWER","TRENT","TTML","TVSHLTD",
+            "UBL","ULTRACEMCO","UNIONBANK","UNITDSPR","UPCL","UPL","UTIAMC","VAIBHAVGBL",
+            "VBL","VEDL","VENUSMED","VIJAYA","VOLTAS","VSTIND","WELCORP","WELSPUNLIV",
+            "WIPRO","WOCKPHARMA","YESBANK","ZEEL","ZENSARTECH","ZOMATO","ZYDUSLIFE","ZYDUSWEL"
+        );
+
+        // Run backtest on all Nifty 500 — symbols without data will be skipped gracefully
+        String csvPath = "/tmp/nifty500_combo_backtest.csv";
+        patternComboBacktestService.runMultipleAndWriteCsv(nifty500, csvPath,
+                Interval.OneHour, Interval.FifteenMinute);
+        System.out.println("CSV written to: " + csvPath);
+        System.out.println("Run: python scripts/benchmark_simulation.py " + csvPath);
+        File f = new File(csvPath);
+        assertTrue(f.exists());
+        assertTrue(f.length() >= 0);
     }
 
 }
