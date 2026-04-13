@@ -463,6 +463,11 @@ public class PatternComboBacktestService {
                         .bbPeakBbw("C3".equals(cp.getConfirmationType()) ? cp.getMacdHistAtP2() : 0.0)
                         .rsiZoneQuality("C3".equals(cp.getConfirmationType())
                                 ? (cp.getRsiAtP2() >= 1.0 ? "HIGH" : cp.getRsiAtP2() >= 0.5 ? "OK" : "WEAK") : "")
+                        .bbExpanding(watchingInd.bbExpandingAtTs(cp.getKeyLevelTime(), 5))
+                        .bbAligned(watchingInd.bbAlignedAtTs(cp.getKeyLevelTime(), 5, wp.isBullish()))
+                        .rsiSlope(watchingInd.rsiSlopeAtTs(cp.getKeyLevelTime(), 5))
+                        .macdHistSlope(watchingInd.macdHistSlopeAtTs(cp.getKeyLevelTime(), 5))
+                        .adxSlope(watchingInd.adxSlopeAtTs(cp.getKeyLevelTime(), 5))
                         .build());
             }
         }
@@ -628,7 +633,7 @@ public class PatternComboBacktestService {
         String triangleType;
         boolean bullish;
 
-        if      (upperFalling && lowerRising)                   { triangleType = "TRIANGLE_SYMMETRIC";   bullish = true;  }
+        if      (upperFalling && lowerRising)                   { return; /* TRIANGLE_SYMMETRIC disabled — low win rate */ }
         else if (lowerRising  && (upperFlat || upperFalling))   { triangleType = "TRIANGLE_ASCENDING";   bullish = false; } // reversal → bearish
         else if (upperFalling && (lowerFlat || lowerFalling))   { triangleType = "TRIANGLE_DESCENDING";  bullish = true;  } // reversal → bullish
         else if (upperRising  && lowerFalling)                  { return; /* expanding — skip */          }
@@ -893,11 +898,7 @@ public class PatternComboBacktestService {
         boolean isDescending = upperFalling && (lowerFlat || lowerFalling) && !isSymmetric;
 
         if (isSymmetric) {
-            // Continuation: prior trend must be clear to determine direction
-            if (priorPivot == null) return;
-            boolean priorUp   = priorPivot.isLow()  && priorPivot.getValue() < l1;
-            boolean priorDown = priorPivot.isHigh() && priorPivot.getValue() > h1;
-            if (!priorUp && !priorDown) return;
+            return; // TRIANGLE_SYMMETRIC disabled — low win rate
         } else if (!isAscending && !isDescending) {
             return; // expanding or unclassified
         }
@@ -2277,7 +2278,7 @@ public class PatternComboBacktestService {
                 "entry_price,stop_loss,watching_target,confirm_own_target,rr_watching,key_level," +
                 "result,bars_to_result,pnl_pct,exit_price,exit_reason," +
                 "rsi_at_p1,rsi_at_p2,macd_hist_at_p1,macd_hist_at_p2," +
-                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry,bb_peak_bbw,rsi_zone_quality,daily_adx,daily_adx_ema,adx_watching,adx_watching_ema,adx_confirm,adx_confirm_ema,macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching,macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily\n";
+                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry,bb_peak_bbw,rsi_zone_quality,daily_adx,daily_adx_ema,adx_watching,adx_watching_ema,adx_confirm,adx_confirm_ema,macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching,macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily,bb_expanding,bb_aligned,rsi_slope,macd_hist_slope,adx_slope\n";
         try (FileWriter fw = new FileWriter(csvPath)) {
             fw.write(header);
             for (ComboRow r : rows) {
@@ -2559,17 +2560,23 @@ public class PatternComboBacktestService {
         double  eSymmetry;   // E - A price diff (H&S shoulder symmetry tracking; 0 for non-H&S)
         double  bbPeakBbw;       // peak BBW in lookback window at C3 signal time (0 for non-C3)
         String  rsiZoneQuality;  // "HIGH"/"OK" for C3 signals; "" for others
+        double  bbExpanding;     // 1.0 if BB width is expanding at entry vs 5 bars ago
+        double  bbAligned;       // 1.0 if expanding AND pct_b aligns with trade direction
+        double  rsiSlope;        // linear regression slope of RSI over last 5 bars
+        double  macdHistSlope;   // slope of MACD histogram over last 5 bars
+        double  adxSlope;        // slope of ADX over last 5 bars
 
         public String toCsvRow() {
             return String.format(Locale.US,
-                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%.4f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
+                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%.4f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
                 entryTime, symbol, watchingPattern, watchingTf, confirmPattern, confirmTf, confirmType,
                 entryPrice, stopLoss, watchingTarget, confirmOwnTarget, rrWatching, keyLevel,
                 result, barsToResult, pnlPct, exitPrice, exitReason,
                 rsiAtP1, rsiAtP2, macdHistAtP1, macdHistAtP2, stochRsiK15m, dailyRsi,
                 watchingPatternHeight, confirmPatternHeight, targetEventuallyHit, postExitMaxRetracePct, eSymmetry,
                 bbPeakBbw, rsiZoneQuality != null ? rsiZoneQuality : "", dailyAdx, dailyAdxEma, adxWatching, adxWatchingEma, adxConfirm, adxConfirmEma,
-                macdWatching, macdSignalWatching, bbWidthWatching, bbPctBWatching, macdDaily, macdSignalDaily, bbWidthDaily, bbPctBDaily);
+                macdWatching, macdSignalWatching, bbWidthWatching, bbPctBWatching, macdDaily, macdSignalDaily, bbWidthDaily, bbPctBDaily,
+                bbExpanding, bbAligned, rsiSlope, macdHistSlope, adxSlope);
         }
     }
 
@@ -2624,6 +2631,59 @@ public class PatternComboBacktestService {
             if (map.isEmpty()) return 0.0;
             Map.Entry<Instant, Double> entry = map.floorEntry(ts);
             return entry != null ? entry.getValue() : 0.0;
+        }
+
+        /** Returns the last {@code n} values from {@code map} at or before {@code ts}, oldest first.
+         *  If fewer than {@code n} entries exist, pads the front with the earliest available value. */
+        private double[] lastN(TreeMap<Instant, Double> map, Instant ts, int n) {
+            double[] arr = new double[n];
+            java.util.NavigableMap<Instant, Double> head = map.headMap(ts, true);
+            java.util.List<Double> vals = new java.util.ArrayList<>(head.values());
+            int size = vals.size();
+            double fill = size > 0 ? vals.get(0) : 0.0;
+            for (int i = 0; i < n; i++) {
+                int srcIdx = size - n + i;
+                arr[i] = srcIdx >= 0 ? vals.get(srcIdx) : fill;
+            }
+            return arr;
+        }
+
+        private static double computeSlope(double[] y) {
+            int n = y.length;
+            if (n < 2) return 0.0;
+            double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+            for (int i = 0; i < n; i++) {
+                sumX += i; sumY += y[i]; sumXY += i * y[i]; sumX2 += (double) i * i;
+            }
+            double denom = n * sumX2 - sumX * sumX;
+            return denom != 0 ? (n * sumXY - sumX * sumY) / denom : 0.0;
+        }
+
+        public double rsiSlopeAtTs(Instant ts, int lookback) {
+            return computeSlope(lastN(rsiMap, ts, lookback));
+        }
+
+        public double macdHistSlopeAtTs(Instant ts, int lookback) {
+            return computeSlope(lastN(macdHistMap, ts, lookback));
+        }
+
+        public double adxSlopeAtTs(Instant ts, int lookback) {
+            return computeSlope(lastN(adxMap, ts, lookback));
+        }
+
+        /** Returns 1.0 if BB width is higher now than {@code lookback} bars ago (bands expanding). */
+        public double bbExpandingAtTs(Instant ts, int lookback) {
+            double[] vals = lastN(bbWidthMap, ts, lookback + 1);
+            return vals[lookback] > vals[0] ? 1.0 : 0.0;
+        }
+
+        /** Returns 1.0 if BB is expanding AND pct_b is on the correct side for the trade direction.
+         *  Bullish: pct_b > 0.5 (price in upper half of bands).
+         *  Bearish: pct_b < 0.5 (price in lower half). */
+        public double bbAlignedAtTs(Instant ts, int lookback, boolean bullish) {
+            if (bbExpandingAtTs(ts, lookback) < 1.0) return 0.0;
+            double pctB = bbPctBAtTs(ts);
+            return (bullish ? pctB > 0.5 : pctB < 0.5) ? 1.0 : 0.0;
         }
     }
 }

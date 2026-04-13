@@ -159,7 +159,9 @@ public class TradeEntryHandler {
                     indicators.getMacdWatching(), indicators.getMacdSignalWatching(),
                     indicators.getBbWidthWatching(), indicators.getBbPctBWatching(),
                     indicators.getMacdDaily(), indicators.getMacdSignalDaily(),
-                    indicators.getBbWidthDaily(), indicators.getBbPctBDaily()
+                    indicators.getBbWidthDaily(), indicators.getBbPctBDaily(),
+                    indicators.getBbExpanding(), indicators.getBbAligned(),
+                    indicators.getRsiSlope(), indicators.getMacdHistSlope(), indicators.getAdxSlope()
             );
             log.info("[EntryHandler] ML score for signal {} {}: {}", signal.getId(), signal.getSymbol(), score);
             return score;

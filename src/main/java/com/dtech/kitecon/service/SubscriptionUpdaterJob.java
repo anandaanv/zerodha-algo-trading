@@ -1,103 +1,88 @@
 package com.dtech.kitecon.service;
 
-import com.dtech.kitecon.data.Subscription;
-import com.dtech.kitecon.repository.SubscriptionRepository;
+import com.dtech.algo.series.Interval;
+import com.dtech.kitecon.repository.InstrumentRepository;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.List;
 
 /**
- * Daily job to update subscriptions to the latest data.
- * - Finds subscriptions with lastUpdatedAt older than 1 hour (configurable)
- * - Resolves underlying + nearest 2 futures + 5 options (current series)
- * - Uses HistoricalMarketFetcher to fetch today's historical candles (rate-limited)
- * - Rewrites candle records and updates subscription.lastUpdatedAt
+ * EOD job — runs at market close (3:30 PM IST, Mon–Fri).
+ * Syncs all FNO stock symbols across all relevant timeframes directly via DataFetchService.
+ * Independent of subscription config — always covers the full FNO universe.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
 public class SubscriptionUpdaterJob {
 
-    private final SubscriptionRepository subscriptionRepository;
-    private final SubscriptionUowGenerator subscriptionUowGenerator;
+    private static final List<Interval> EOD_TIMEFRAMES = List.of(
+            Interval.Day,
+            Interval.OneHour,
+            Interval.FifteenMinute,
+            Interval.FiveMinute,
+            Interval.ThirtyMinute,
+            Interval.FourHours,
+            Interval.Week
+    );
+
+    private static final List<String> INDEX_FUTURES = List.of(
+            "NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY", "SENSEX", "BANKEX", "NIFTYNXT50"
+    );
+
     private final DataFetchService dataFetchService;
-    private final SubscriptionUowHandler subscriptionUowHandler;
+    private final InstrumentRepository instrumentRepository;
 
-    @Value("${data.update.perRunCap:10000}")
-    private int perRunCap;
-
-    @Value("${data.update.status:ACTIVE}")
-    private String activeStatus;
-
-    @Value("${data.update.intervals:OneHour}")
-    private String intervalsProperty;
-
-    // Enable/disable the scheduled updater via API (true by default)
+    // Enable/disable via API if needed
     @Setter
     @Getter
     private volatile boolean enabled = true;
 
-    // Repository for expanding INDEX-<name> subscriptions into constituent symbols
-    private final com.dtech.kitecon.repository.IndexSymbolRepository indexSymbolRepository;
-
     /**
-     * Run hourly by default. Cron can be overridden using data.update.hourlyCron property.
+     * Run at market close (3:30 PM IST) on weekdays.
+     * Cron can be overridden via data.update.eodCron property.
      */
-    @Scheduled(cron = "${data.update.hourlyCron:0 */15 * * * ?}")
+    @Scheduled(cron = "${data.update.eodCron:0 30 15 * * MON-FRI}", zone = "Asia/Kolkata")
     public void runUpdateJob() {
+        if (!enabled) {
+            log.info("[EOD] Job disabled — skipping.");
+            return;
+        }
+
+        // Refresh instrument master first
         try {
             dataFetchService.downloadAllInstruments();
-            if (!enabled) {
-                log.info("SubscriptionUpdaterJob is disabled; skipping execution.");
-                return;
-            }
-            Instant cutoff = Instant.now().minusSeconds(3600);
-            List<Subscription> subscriptions = subscriptionRepository.findAllByLatestTimestampBeforeAndStatus(cutoff, activeStatus);
-            subscriptions.addAll(
-                    subscriptionRepository.findAllByLatestTimestampIsNullAndStatus(activeStatus));
-            if (subscriptions.isEmpty()) {
-                log.info("SubscriptionUpdaterJob: no stale subscriptions to process.");
-                return;
-            }
+        } catch (Throwable e) {
+            log.warn("[EOD] Instrument download failed: {}", e.getMessage());
+        }
 
-            log.info("SubscriptionUpdaterJob: processing {} subscriptions", subscriptions.size());
+        List<String> symbols = instrumentRepository.findDistinctFutureUnderlyingNamesWithNseEquity()
+                .stream()
+                .filter(s -> s != null && !s.isBlank() && !INDEX_FUTURES.contains(s.toUpperCase()))
+                .sorted()
+                .toList();
 
-            for (Subscription s : subscriptions) {
+        log.info("[EOD] Starting sync for {} FNO symbols × {} timeframes", symbols.size(), EOD_TIMEFRAMES.size());
+
+        int success = 0, errors = 0;
+        for (String symbol : symbols) {
+            for (Interval tf : EOD_TIMEFRAMES) {
                 try {
-                    String symbol = s.getTradingSymbol();
-                    if (symbol != null && symbol.startsWith("INDEX-")) {
-                        String indexName = symbol.substring("INDEX-".length()).trim();
-                        List<String> members = indexSymbolRepository.findAllSymbolsByIndexName(indexName);
-                        if (members == null || members.isEmpty()) {
-                            log.warn("No members found for index {}; marking subscription {} as updated with no action", indexName, symbol);
-                            s.setLastUpdatedAt(java.time.LocalDateTime.now());
-                            subscriptionRepository.save(s);
-                            continue;
-                        }
-                        for (String member : members) {
-                            subscriptionUowGenerator.processSubscriptionForSymbol(s, member, false);
-                        }
-                        // Update parent once after scheduling all members
-                        s.setLastUpdatedAt(java.time.LocalDateTime.now());
-                        subscriptionRepository.save(s);
-                    } else {
-                        // Plain index names (e.g., NIFTY50) are treated as single symbols
-                        subscriptionUowGenerator.processSubscription(s);
-                    }
-                } catch (Throwable t) {
-                    log.error("Failed to process subscription {}: {}", s.getTradingSymbol(), t.getMessage(), t);
+                    dataFetchService.updateInstrumentToLatest(symbol, tf, new String[]{"NSE"});
+                    success++;
+                } catch (Exception e) {
+                    errors++;
+                    log.warn("[EOD] Failed {}/{}: {}", symbol, tf, e.getMessage());
                 }
             }
-        } catch (Throwable t) {
-            log.error("SubscriptionUpdaterJob encountered an unexpected error: {}", t.getMessage(), t);
         }
+
+        log.info("[EOD] Sync complete — success={} errors={}", success, errors);
     }
 
 }

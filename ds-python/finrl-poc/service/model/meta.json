@@ -1,5 +1,5 @@
 {
-  "threshold": 0.82,
+  "threshold": 0.7,
   "features": [
     "DOUBLE_BOTTOM",
     "DOUBLE_TOP",
@@ -39,8 +39,13 @@
     "bb_width_watching",
     "bb_pct_b_watching",
     "bb_width_daily",
-    "bb_pct_b_daily"
+    "bb_pct_b_daily",
+    "bb_expanding",
+    "bb_aligned",
+    "rsi_slope",
+    "macd_hist_slope",
+    "adx_slope"
   ],
   "trained_on": "/tmp/all_fno_combo_backtest.csv",
-  "n_rows": 12749
+  "n_rows": 12769
 }
