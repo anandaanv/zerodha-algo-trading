@@ -2,6 +2,7 @@ package com.dtech.kitecon.controller;
 
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.service.DataFetchService;
+import com.dtech.kitecon.service.SubscriptionUpdaterJob;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import java.io.IOException;
 import java.util.Arrays;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class DataFetchController {
 
   private final DataFetchService dataFetchService;
+  private final SubscriptionUpdaterJob subscriptionUpdaterJob;
 
   @GetMapping("/profile")
   public String getProfile() throws IOException, KiteException {
@@ -45,5 +48,11 @@ public class DataFetchController {
   @GetMapping("/fetch/instruments/all")
   public void fetchAllInstruments() throws IOException, KiteException {
     dataFetchService.downloadAllInstruments();
+  }
+
+  @PostMapping("/api/admin/eod-sync")
+  public String triggerEodSync() {
+    subscriptionUpdaterJob.runUpdateJob();
+    return "EOD sync triggered";
   }
 }
