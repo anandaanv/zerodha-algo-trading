@@ -56,8 +56,15 @@ public class UserKiteConfigController {
      */
     @GetMapping("/api/admin/kite-configs/{id}/connect")
     public RedirectView connect(@PathVariable Long id) {
-        String loginUrl = service.getLoginUrl(id);
-        return new RedirectView(loginUrl);
+        log.info("[KiteLogin] connect called for config id={}", id);
+        try {
+            String loginUrl = service.getLoginUrl(id);
+            log.info("[KiteLogin] redirecting to Kite URL: {}", loginUrl);
+            return new RedirectView(loginUrl);
+        } catch (Exception e) {
+            log.error("[KiteLogin] failed to build login URL for id={}: {}", id, e.getMessage(), e);
+            throw e;
+        }
     }
 
     // ── OAuth callback (no JWT — redirected from Kite servers) ──

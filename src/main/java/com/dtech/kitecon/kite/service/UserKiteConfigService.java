@@ -58,9 +58,19 @@ public class UserKiteConfigService {
     }
 
     public String getLoginUrl(Long id) {
+        log.info("[KiteLogin] looking up UserKiteConfig id={}", id);
         UserKiteConfig config = repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Config not found: " + id));
-        return "https://kite.trade/connect/login?api_key=" + config.getApiKey() + "&v=3";
+                .orElseThrow(() -> {
+                    log.error("[KiteLogin] UserKiteConfig not found for id={}", id);
+                    return new IllegalArgumentException("Config not found: " + id);
+                });
+        log.info("[KiteLogin] found config id={} label='{}' apiKey={} kiteUserId={}",
+                id, config.getLabel(),
+                config.getApiKey() != null ? config.getApiKey().substring(0, Math.min(4, config.getApiKey().length())) + "***" : "NULL",
+                config.getKiteUserId());
+        String url = "https://kite.trade/connect/login?api_key=" + config.getApiKey() + "&v=3";
+        log.info("[KiteLogin] built login URL: {}", url);
+        return url;
     }
 
     @Transactional
