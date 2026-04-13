@@ -379,22 +379,38 @@ public class PatternComboBacktestService {
                     if (bullish) peakPrice = Math.max(peakPrice, b.getHighPrice().doubleValue());
                     else         peakPrice = Math.min(peakPrice, b.getLowPrice().doubleValue());
 
-                    // 38% Fibonacci retrace exit (after minBarsBeforeReversal bars)
-                    // Only trigger once price has moved at least 1 ATR in our direction (filters noise).
-                    // If price then retraces more than 38.2% of that move → real reversal, exit.
-                    // Less than 38% = just a pause, hold.
+                    // Retrace exit — hard exit at 38% or 23% retrace
                     if (k >= entryBarIdx + minBarsBeforeReversal) {
                         double atrAtEntry = entryBarIdx < atrArrC.length ? atrArrC[entryBarIdx] : 0;
                         double moveSize = bullish ? (peakPrice - comboEntry) : (comboEntry - peakPrice);
                         if (atrAtEntry > 0 && moveSize >= atrAtEntry) {
-                            // Exit when retrace exceeds 23% of move + 1 ATR buffer
+
+                            // ── Stage 1: Hard exit at 38% retrace
+                            double retrace38 = bullish
+                                ? peakPrice - 0.382 * moveSize
+                                : peakPrice + 0.382 * moveSize;
+                            boolean retrace38hit = bullish
+                                ? b.getLowPrice().doubleValue() < retrace38
+                                : b.getHighPrice().doubleValue() > retrace38;
+                            if (retrace38hit) {
+                                exitReason = "RETRACE_38";
+                                exitPrice = (k + 1 < barsC.size()) ? barsC.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
+                                pnlPct = bullish
+                                    ? (exitPrice - comboEntry) / comboEntry * 100.0 - TRADE_OVERHEAD_PCT
+                                    : (comboEntry - exitPrice) / comboEntry * 100.0 - TRADE_OVERHEAD_PCT;
+                                result = pnlPct > 0 ? "WIN" : "LOSS";
+                                barsToResult = k - entryBarIdx;
+                                break;
+                            }
+
+                            // ── Stage 2: Hard exit at 23% retrace
                             double retrace23 = bullish
-                                ? peakPrice - (0.236 * moveSize + atrAtEntry)   // bull: 23.6% + ATR back from peak
-                                : peakPrice + (0.236 * moveSize + atrAtEntry);  // bear: 23.6% + ATR back up from trough
-                            boolean retracedTooMuch = bullish
+                                ? peakPrice - (0.236 * moveSize + atrAtEntry)
+                                : peakPrice + (0.236 * moveSize + atrAtEntry);
+                            boolean retrace23hit = bullish
                                 ? b.getLowPrice().doubleValue() < retrace23
                                 : b.getHighPrice().doubleValue() > retrace23;
-                            if (retracedTooMuch) {
+                            if (retrace23hit) {
                                 exitReason = "RETRACE_23";
                                 exitPrice = (k + 1 < barsC.size()) ? barsC.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
                                 pnlPct = bullish
@@ -419,7 +435,7 @@ public class PatternComboBacktestService {
                     }
                 }
 
-                // Track deepest retrace from peak after exit (for RETRACE_23 exits: how deep did price go?)
+                // Track deepest retrace from peak after exit (for RETRACE_23 and RETRACE_38 exits: how deep did price go?)
                 double postExitMaxRetracePct = 0.0;
                 if ("RETRACE_23".equals(exitReason) || "RETRACE_38".equals(exitReason)) {
                     double deepest = peakPrice;
@@ -488,6 +504,8 @@ public class PatternComboBacktestService {
                         .rsiSlope(watchingInd.rsiSlopeAtTs(cp.getKeyLevelTime(), 5))
                         .macdHistSlope(watchingInd.macdHistSlopeAtTs(cp.getKeyLevelTime(), 5))
                         .adxSlope(watchingInd.adxSlopeAtTs(cp.getKeyLevelTime(), 5))
+                        .rsiWp0(wp.getRsiAtP0())
+                        .rsiDivWp(wp.getRsiAtP2() - wp.getRsiAtP0())
                         .mfePct(mfePct)
                         .maePct(maePct)
                         .mfeBars(mfeBars)
@@ -555,6 +573,9 @@ public class PatternComboBacktestService {
         boolean hasDivergence = rsiAtP2 > rsiAtPrior;
         if (!hasDivergence) return;
 
+        Integer idx0 = tsToIdx.get(p0.getTimestamp());
+        double rsiAtP0val = (idx0 != null && idx0 < rsiValues.length) ? rsiValues[idx0] : 0.0;
+
         double patternHeight = Math.abs(price1 - Math.min(price0, price2));
         double target = bullish ? price1 + patternHeight : price1 - patternHeight;
 
@@ -572,6 +593,7 @@ public class PatternComboBacktestService {
                 .ownTarget(target)
                 .patternHeight(patternHeight)
                 .atr(idx2 < atrArr.length ? atrArr[idx2] : 0)
+                .rsiAtP0(rsiAtP0val)
                 .rsiAtP1(rsiAtPrior)
                 .rsiAtP2(rsiAtP2)
                 .macdHistAtP1(macdHistAtPrior)
@@ -2301,7 +2323,7 @@ public class PatternComboBacktestService {
                 "entry_price,stop_loss,watching_target,confirm_own_target,rr_watching,key_level," +
                 "result,bars_to_result,pnl_pct,exit_price,exit_reason," +
                 "rsi_at_p1,rsi_at_p2,macd_hist_at_p1,macd_hist_at_p2," +
-                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry,bb_peak_bbw,rsi_zone_quality,daily_adx,daily_adx_ema,adx_watching,adx_watching_ema,adx_confirm,adx_confirm_ema,macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching,macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily,bb_expanding,bb_aligned,rsi_slope,macd_hist_slope,adx_slope,mfe_pct,mae_pct,mfe_bars\n";
+                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry,bb_peak_bbw,rsi_zone_quality,daily_adx,daily_adx_ema,adx_watching,adx_watching_ema,adx_confirm,adx_confirm_ema,macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching,macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily,bb_expanding,bb_aligned,rsi_slope,macd_hist_slope,adx_slope,mfe_pct,mae_pct,mfe_bars,rsi_wp0,rsi_div_wp\n";
         try (FileWriter fw = new FileWriter(csvPath)) {
             fw.write(header);
             for (ComboRow r : rows) {
@@ -2588,13 +2610,15 @@ public class PatternComboBacktestService {
         double  rsiSlope;        // linear regression slope of RSI over last 5 bars
         double  macdHistSlope;   // slope of MACD histogram over last 5 bars
         double  adxSlope;        // slope of ADX over last 5 bars
+        double  rsiWp0;          // RSI at watching pattern's first pivot (p0)
+        double  rsiDivWp;        // RSI divergence: rsiAtP2 - rsiAtP0 on watching TF
         double  mfePct;          // max favorable excursion % from entry to exit bar
         double  maePct;          // max adverse excursion % from entry to exit bar
         int     mfeBars;         // bars to reach MFE
 
         public String toCsvRow() {
             return String.format(Locale.US,
-                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%.4f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.2f,%.2f,%d",
+                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%.4f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.2f,%.2f,%d,%.2f,%.2f",
                 entryTime, symbol, watchingPattern, watchingTf, confirmPattern, confirmTf, confirmType,
                 entryPrice, stopLoss, watchingTarget, confirmOwnTarget, rrWatching, keyLevel,
                 result, barsToResult, pnlPct, exitPrice, exitReason,
@@ -2603,7 +2627,8 @@ public class PatternComboBacktestService {
                 bbPeakBbw, rsiZoneQuality != null ? rsiZoneQuality : "", dailyAdx, dailyAdxEma, adxWatching, adxWatchingEma, adxConfirm, adxConfirmEma,
                 macdWatching, macdSignalWatching, bbWidthWatching, bbPctBWatching, macdDaily, macdSignalDaily, bbWidthDaily, bbPctBDaily,
                 bbExpanding, bbAligned, rsiSlope, macdHistSlope, adxSlope,
-                mfePct, maePct, mfeBars);
+                mfePct, maePct, mfeBars,
+                rsiWp0, rsiDivWp);
         }
     }
 
