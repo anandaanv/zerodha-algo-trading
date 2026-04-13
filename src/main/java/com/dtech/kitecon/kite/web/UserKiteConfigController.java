@@ -83,6 +83,21 @@ public class UserKiteConfigController {
         return new RedirectView("/admin/kite-config");
     }
 
+    @PostMapping("/api/admin/kite-configs/{id}/process-token")
+    public ResponseEntity<?> processToken(
+            @PathVariable Long id,
+            @RequestParam("request_token") String requestToken) {
+        try {
+            service.processCallback(id, requestToken);
+            tickerService.init();
+            log.info("Kite config {} authenticated via process-token", id);
+            return ResponseEntity.ok(Map.of("status", "ok", "connected", true));
+        } catch (Exception e) {
+            log.error("process-token failed for config {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("status", "error", "message", e.getMessage()));
+        }
+    }
+
     // ── Request DTOs ──
 
     @lombok.Data
