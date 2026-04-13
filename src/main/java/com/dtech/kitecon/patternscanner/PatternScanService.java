@@ -3,6 +3,7 @@ package com.dtech.kitecon.patternscanner;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.backtest.DetectedPattern;
 import com.dtech.kitecon.backtest.PatternComboBacktestService;
+import com.dtech.kitecon.backtest.PatternComboBacktestService.DailyIndicators;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.chartpattern.zigzag.ZigZagPoint;
@@ -96,6 +97,16 @@ public class PatternScanService {
             watchingPatterns.removeIf(p -> !latestPivotTime.equals(p.getKeyLevelTime()));
         }
 
+        // Load daily and confirm series for indicator computation
+        BarSeries seriesDaily = null;
+        try { seriesDaily = zigZagService.getBarSeries(symbol, instrument, Interval.Day); } catch (Exception ignored) {}
+        BarSeries seriesC = null;
+        try { seriesC = zigZagService.getBarSeries(symbol, instrument, confirmTf); } catch (Exception ignored) {}
+
+        DailyIndicators dailyInd    = patternComboBacktestService.computeDailyIndicators(seriesDaily);
+        DailyIndicators watchingInd = patternComboBacktestService.computeDailyIndicators(seriesW);
+        DailyIndicators confirmInd  = patternComboBacktestService.computeDailyIndicators(seriesC);
+
         // Build pattern DTOs
         List<PatternDto> patternDtos = watchingPatterns.stream().map(p -> PatternDto.builder()
                 .patternType(p.getPatternType())
@@ -109,6 +120,24 @@ public class PatternScanService {
                 .rsiAtP2(p.getRsiAtP2())
                 .p0Time(p.getPivotBTime())
                 .p1Time(p.getPivotDTime())
+                .macdHistAtP1(p.getMacdHistAtP1())
+                .macdHistAtP2(p.getMacdHistAtP2())
+                .stochRsiK(p.getStochRsiK())
+                .adxWatching(watchingInd.adxAtTs(p.getKeyLevelTime()))
+                .adxWatchingEma(watchingInd.adxEmaAtTs(p.getKeyLevelTime()))
+                .macdWatching(watchingInd.macdLineAtTs(p.getKeyLevelTime()))
+                .macdSignalWatching(watchingInd.macdSignalAtTs(p.getKeyLevelTime()))
+                .bbWidthWatching(watchingInd.bbWidthAtTs(p.getKeyLevelTime()))
+                .bbPctBWatching(watchingInd.bbPctBAtTs(p.getKeyLevelTime()))
+                .adxConfirm(confirmInd.adxAtTs(p.getKeyLevelTime()))
+                .adxConfirmEma(confirmInd.adxEmaAtTs(p.getKeyLevelTime()))
+                .dailyRsi(dailyInd.rsiAtTs(p.getKeyLevelTime()))
+                .dailyAdx(dailyInd.adxAtTs(p.getKeyLevelTime()))
+                .dailyAdxEma(dailyInd.adxEmaAtTs(p.getKeyLevelTime()))
+                .macdDaily(dailyInd.macdLineAtTs(p.getKeyLevelTime()))
+                .macdSignalDaily(dailyInd.macdSignalAtTs(p.getKeyLevelTime()))
+                .bbWidthDaily(dailyInd.bbWidthAtTs(p.getKeyLevelTime()))
+                .bbPctBDaily(dailyInd.bbPctBAtTs(p.getKeyLevelTime()))
                 .build()).toList();
 
         // Build overlays for watching TF
