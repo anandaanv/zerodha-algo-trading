@@ -1,5 +1,17 @@
 # Project Guidelines
 
+## Build System — Gradle
+
+This project uses **Gradle** as its build system. Always use `./gradlew` for building, testing, and compiling:
+
+```bash
+./gradlew compileJava      # compile only
+./gradlew build            # full build + tests
+./gradlew bootRun          # run the app locally
+```
+
+Never use Maven (`mvn`) — there is no `pom.xml`.
+
 ## Frontend API Calls — ALWAYS use getApiUrl + withAuth
 
 Every backend API call from the React frontend **must**:
