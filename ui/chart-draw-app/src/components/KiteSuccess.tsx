@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { getApiUrl } from "../config/api";
+import { withAuth } from "../utils/apiHelper";
 
 /**
  * Component to handle Kite callback after successful authentication
@@ -8,6 +9,7 @@ import { getApiUrl } from "../config/api";
  */
 export default function KiteSuccess() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -31,8 +33,13 @@ export default function KiteSuccess() {
           return;
         }
 
-        // Navigate to backend callback — it processes the token, saves to UserKiteConfig, and redirects to /admin/kite-config
-        window.location.href = getApiUrl(`/kite-callback/config/1?request_token=${requestToken}`).toString();
+        // Process the token with authentication, then navigate to dashboard
+        const res = await fetch(
+          getApiUrl(`/api/admin/kite-configs/1/process-token?request_token=${requestToken}`).toString(),
+          { ...withAuth(), method: "POST" }
+        );
+        if (!res.ok) throw new Error(`Server error: ${res.status}`);
+        navigate("/dashboard", { replace: true });
 
       } catch (err) {
         console.error("Kite callback error:", err);
