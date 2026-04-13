@@ -43,13 +43,20 @@ aws cloudfront create-invalidation --distribution-id E3GNIWHAP6FDTM --paths "/in
 
 Never commit directly to `master`. If the current branch is `master`, stop and ask the user whether to create a new branch before making any changes.
 
-## PR and Issue Policy — No Code Merged Without a PR + GitHub Issue
+## Commit Workflow — Branch → Issue → PR → Merge
 
-Every code change merged to `master` must have:
-1. A **GitHub issue** describing what changed and why (bug, feature, or fix)
-2. A **Pull Request** referencing that issue — never merge directly, always go through a PR
+Before committing any code change, follow this workflow:
 
-Create the issue first, then the PR. Reference the issue in the PR body (e.g. `Closes #33`).
+1. **Ask the user**: is this a bugfix or a feature?
+   - Bugfix → branch name: `bugfix/<short-description>` (e.g. `bugfix/connection-pool-exhaustion`)
+   - Feature → branch name: `feature/<short-description>` (e.g. `feature/pattern-screener-ui`)
+2. **Create a new branch** from `master` with the appropriate name
+3. **Create a GitHub issue** describing what changed and why
+4. **Commit** the changes referencing the issue
+5. **Push** the branch and **create a PR** that closes the issue (e.g. `Closes #34`)
+6. **Merge** the PR into master
+
+Never skip any step. Never commit directly to `master`.
 
 ## New Pages — Add to Dashboard
 
