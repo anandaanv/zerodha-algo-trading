@@ -1,5 +1,4 @@
 {
-  "threshold": 0.7,
   "features": [
     "DOUBLE_BOTTOM",
     "DOUBLE_TOP",
@@ -49,5 +48,17 @@
     "rsi_div_wp"
   ],
   "trained_on": "/tmp/all_fno_combo_backtest.csv",
-  "n_rows": 12603
+  "n_rows": 12598,
+  "mfe_pct": {
+    "rmse": 1.179823329804807,
+    "mae": 0.7576770751408483
+  },
+  "mae_pct": {
+    "rmse": 0.3910706699088277,
+    "mae": 0.24651453783032956
+  },
+  "mfe_bars": {
+    "rmse": 5.39449157057194,
+    "mae": 3.452074945540655
+  }
 }

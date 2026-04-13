@@ -74,6 +74,8 @@ def extract_features(row: dict) -> np.ndarray:
         _safe(row.get("rsi_slope", "0")),
         _safe(row.get("macd_hist_slope", "0")),
         _safe(row.get("adx_slope", "0")),
+        _safe(row.get("rsi_wp0", "0")),
+        _safe(row.get("rsi_div_wp", "0")),
     ]
     return np.array(feats, dtype=np.float32)
 
@@ -90,6 +92,7 @@ FEATURE_NAMES = PATTERN_TYPES + [
     "bb_width_daily", "bb_pct_b_daily",
     "bb_expanding", "bb_aligned",
     "rsi_slope", "macd_hist_slope", "adx_slope",
+    "rsi_wp0", "rsi_div_wp",
 ]
 
 
@@ -145,24 +148,51 @@ def train_and_evaluate(rows: list, threshold: float, out_csv: str):
         bar = "█" * int(imp * 200)
         print(f"    {name:<22} {imp:.4f}  {bar}")
 
-    # ── Filter: keep trades where P(WIN) >= threshold across full dataset
-    mask = proba_all >= threshold
-    filtered = [r for r, keep in zip(rows, mask) if keep]
+    # ── Filter on ALL data (in-sample, for reference)
+    mask_all = proba_all >= threshold
+    filtered_all = [r for r, keep in zip(rows, mask_all) if keep]
+
+    # ── Filter on TEST data only (out-of-sample, honest benchmark)
+    rows_test = [rows[i] for i in test_idx]
+    proba_test_scores = proba_all[test_idx]
+    mask_test = proba_test_scores >= threshold
+    filtered_test = [r for r, keep in zip(rows_test, mask_test) if keep]
+    y_test_filtered = y_test[mask_test]
 
     print(f"\n  Threshold : {threshold:.0%}")
-    print(f"  All trades: {len(rows):>6,}  win={sum(y)/len(y)*100:.1f}%")
-    print(f"  Filtered  : {len(filtered):>6,}  win={sum(y[mask])/max(sum(mask),1)*100:.1f}%  "
-          f"kept={sum(mask)/len(rows)*100:.1f}%")
+    print(f"  ALL data  : {len(rows):>6,}  win={sum(y)/len(y)*100:.1f}%")
+    print(f"  Filtered (all, IN-SAMPLE):  {len(filtered_all):>6,}  win={sum(y[mask_all])/max(sum(mask_all),1)*100:.1f}%  kept={sum(mask_all)/len(rows)*100:.1f}%")
+    print(f"  Test set  : {len(rows_test):>6,}  win={sum(y_test)/len(y_test)*100:.1f}%")
+    print(f"  Filtered (test, OUT-OF-SAMPLE): {len(filtered_test):>6,}  win={sum(y_test_filtered)/max(len(y_test_filtered),1)*100:.1f}%  kept={sum(mask_test)/len(rows_test)*100:.1f}%")
 
-    # ── Write filtered CSV
-    if filtered:
+    # ── Write filtered CSVs
+    if filtered_all:
         with open(out_csv, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=filtered[0].keys())
+            writer = csv.DictWriter(f, fieldnames=filtered_all[0].keys())
             writer.writeheader()
-            writer.writerows(filtered)
-        print(f"  Filtered CSV → {out_csv}")
+            writer.writerows(filtered_all)
+        print(f"  Filtered CSV (all) → {out_csv}")
 
-    return filtered, model
+    # Test-only filtered CSV
+    base_out = out_csv.replace(".csv", "")
+    test_out_csv = f"{base_out}_test_only.csv"
+    if filtered_test:
+        with open(test_out_csv, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=filtered_test[0].keys())
+            writer.writeheader()
+            writer.writerows(filtered_test)
+        print(f"  Filtered CSV (test only) → {test_out_csv}")
+
+    # Also write the raw test set (unfiltered) for baseline comparison
+    test_raw_csv = out_csv.replace(".csv", "_test_raw.csv")
+    if rows_test:
+        with open(test_raw_csv, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=rows_test[0].keys())
+            writer.writeheader()
+            writer.writerows(rows_test)
+        print(f"  Test raw CSV → {test_raw_csv}")
+
+    return filtered_all, model, test_out_csv, test_raw_csv
 
 
 def run_sim(csv_path: str, label: str):
@@ -199,9 +229,19 @@ if __name__ == "__main__":
     base   = os.path.splitext(args.csv_path)[0]
     out_csv = f"{base}_filtered_{int(args.threshold*100)}.csv"
 
-    filtered, model = train_and_evaluate(rows, args.threshold, out_csv)
+    filtered_all, model, test_out_csv, test_raw_csv = train_and_evaluate(rows, args.threshold, out_csv)
 
-    # Run benchmark on both and compare
-    run_sim(args.csv_path, "BASELINE — all trades (40% alloc)")
-    if filtered:
-        run_sim(out_csv, f"FILTERED — P(WIN)>={args.threshold:.0%} (40% alloc)")
+    print("\n\n" + "="*60)
+    print("  BENCHMARK SIMULATIONS")
+    print("="*60)
+
+    # In-sample (inflated, for reference only)
+    run_sim(args.csv_path, "BASELINE — all trades, ALL data (in-sample reference)")
+    if filtered_all:
+        run_sim(out_csv, f"FILTERED — P(WIN)>={args.threshold:.0%}, ALL data (in-sample reference)")
+
+    # Out-of-sample (honest)
+    print("\n--- OUT-OF-SAMPLE (honest 30% held-out test set) ---")
+    run_sim(test_raw_csv, "BASELINE — test set only (out-of-sample)")
+    if os.path.exists(test_out_csv):
+        run_sim(test_out_csv, f"FILTERED — P(WIN)>={args.threshold:.0%}, test set only (out-of-sample)")
