@@ -174,13 +174,13 @@ public class PatternComboScannerService {
         // Filtering happens at entry time (TradeEntryHandler) when the pattern has fully formed.
         double prob = tradeFilterClient.score(
                 pattern, pattern.getPatternType(),
-                0.0, 0.0, 0.0,   // dailyRsi, dailyAdx, dailyAdxEma — TODO: wire from PatternScanService
-                0.0, 0.0,         // adxWatching, adxWatchingEma
-                0.0, 0.0,         // adxConfirm, adxConfirmEma
-                0.0, 0.0,         // macdWatching, macdSignalWatching
-                0.0, 0.0,         // bbWidthWatching, bbPctBWatching
-                0.0, 0.0,         // macdDaily, macdSignalDaily
-                0.0, 0.0          // bbWidthDaily, bbPctBDaily
+                pattern.getDailyRsi(), pattern.getDailyAdx(), pattern.getDailyAdxEma(),
+                pattern.getAdxWatching(), pattern.getAdxWatchingEma(),
+                pattern.getAdxConfirm(), pattern.getAdxConfirmEma(),
+                pattern.getMacdWatching(), pattern.getMacdSignalWatching(),
+                pattern.getBbWidthWatching(), pattern.getBbPctBWatching(),
+                pattern.getMacdDaily(), pattern.getMacdSignalDaily(),
+                pattern.getBbWidthDaily(), pattern.getBbPctBDaily()
         );
         signal.setMlScore(BigDecimal.valueOf(prob).setScale(4, RoundingMode.HALF_UP));
 
