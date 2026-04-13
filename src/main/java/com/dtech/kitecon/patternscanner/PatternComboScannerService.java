@@ -17,6 +17,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 @Slf4j
@@ -40,14 +41,24 @@ public class PatternComboScannerService {
     @Value("${trade.scanner.confirm.tf:15m}")
     private String confirmTfStr;
 
+    private final AtomicBoolean scanRunning = new AtomicBoolean(false);
+
     @Scheduled(cron = "0 0/15 9-15 * * MON-FRI", zone = "Asia/Kolkata")
     public void scheduledScan() {
         if (!kiteTickerService.isMarketLive()) {
             log.info("[PatternScanner] Skipping scan — no recent ticks (trading holiday or pre-market)");
             return;
         }
-        int count = scanAndCreateSignals();
-        log.info("[PatternScanner] Scheduled scan completed: {} new signals created", count);
+        if (!scanRunning.compareAndSet(false, true)) {
+            log.warn("[PatternScanner] Previous scan still running — skipping this tick");
+            return;
+        }
+        try {
+            int count = scanAndCreateSignals();
+            log.info("[PatternScanner] Scheduled scan completed: {} new signals created", count);
+        } finally {
+            scanRunning.set(false);
+        }
     }
 
     public int scanAndCreateSignals() {

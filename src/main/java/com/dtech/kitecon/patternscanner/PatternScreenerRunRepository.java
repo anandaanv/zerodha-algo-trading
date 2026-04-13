@@ -8,4 +8,5 @@ import java.util.List;
 @Repository
 public interface PatternScreenerRunRepository extends JpaRepository<PatternScreenerRun, Long> {
     List<PatternScreenerRun> findTop10ByScreenerIdOrderByStartedAtDesc(Long screenerId);
+    boolean existsByScreenerIdAndStatus(Long screenerId, String status);
 }
