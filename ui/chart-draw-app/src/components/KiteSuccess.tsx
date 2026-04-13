@@ -42,7 +42,7 @@ export default function KiteSuccess() {
     };
 
     handleCallback();
-  }, [searchParams, navigate]);
+  }, [searchParams]);
 
   if (loading) {
     return (
