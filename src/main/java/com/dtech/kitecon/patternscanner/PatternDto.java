@@ -21,4 +21,26 @@ public class PatternDto {
     Instant p0Time;           // first top/bottom
     Instant p1Time;           // neckline
     // p2Time = keyLevelTime (second top/bottom)
+
+    // Watching TF indicators (at keyLevelTime)
+    double macdHistAtP1;
+    double macdHistAtP2;
+    double stochRsiK;
+    double adxWatching;
+    double adxWatchingEma;
+    double macdWatching;
+    double macdSignalWatching;
+    double bbWidthWatching;
+    double bbPctBWatching;
+    // Confirm TF indicators (at keyLevelTime)
+    double adxConfirm;
+    double adxConfirmEma;
+    // Daily TF indicators (at keyLevelTime)
+    double dailyRsi;
+    double dailyAdx;
+    double dailyAdxEma;
+    double macdDaily;
+    double macdSignalDaily;
+    double bbWidthDaily;
+    double bbPctBDaily;
 }
