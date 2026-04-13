@@ -167,6 +167,22 @@ def print_report(rows, alloc_pct, initial=INITIAL_CAPITAL):
         avg  = v['pnl'] / v['n']
         print(f"  {k:<24} {v['n']:>5} {wr_p:>5.0f}% {avg:>+7.2f}% {v['pnl']:>+9.1f}%")
 
+    # Exit reason breakdown
+    by_exit = defaultdict(lambda: {'n': 0, 'wins': 0, 'pnl': 0.0})
+    for r in rows:
+        k = r.get('exit_reason', 'UNKNOWN')
+        by_exit[k]['n']   += 1
+        by_exit[k]['pnl'] += float(r['pnl_pct'])
+        if r.get('result') == 'WIN':
+            by_exit[k]['wins'] += 1
+    print("\n  Exit reason breakdown:")
+    print(f"  {'Exit Reason':<24} {'n':>5} {'WR':>6} {'AvgPnL':>8} {'TotalPnL':>10}")
+    print("  " + "-" * 56)
+    for k, v in sorted(by_exit.items(), key=lambda x: -x[1]['n']):
+        wr_p = v['wins'] / v['n'] * 100 if v['n'] else 0
+        avg  = v['pnl'] / v['n'] if v['n'] else 0
+        print(f"  {k:<24} {v['n']:>5} {wr_p:>5.0f}% {avg:>+7.2f}% {v['pnl']:>+9.1f}%")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Standard backtest benchmark simulation')

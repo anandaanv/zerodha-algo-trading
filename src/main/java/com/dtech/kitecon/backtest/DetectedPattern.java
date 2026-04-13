@@ -32,6 +32,7 @@ public class DetectedPattern {
     double  atr;               // ATR at keyLevel/entry bar
 
     // Indicator snapshots for CSV
+    double  rsiAtP0;   // RSI at first pivot (p0: first low/high of the pattern)
     double  rsiAtP1;
     double  rsiAtP2;
     double  macdHistAtP1;
