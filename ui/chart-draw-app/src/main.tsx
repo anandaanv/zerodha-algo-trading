@@ -15,6 +15,7 @@ import PromptBuilderPage from "./tradingview/PromptBuilderPage";
 
 import KiteLogin from "./components/KiteLogin";
 import KiteSuccess from "./components/KiteSuccess";
+import KiteCallback from "./components/KiteCallback";
 
 // Get Google OAuth Client ID from environment variable
 // Set this in .env file: VITE_GOOGLE_OAUTH_CLIENT_ID=your_client_id_here
@@ -69,6 +70,7 @@ root.render(
         <Route path="/login" element={<Login />} />
         <Route path="/kite-login" element={<KiteLogin />} />
         <Route path="/kite-success" element={<KiteSuccess />} />
+        <Route path="/kite-callback/config/:configId" element={<KiteCallback />} />
 
         {/* Protected routes */}
         <Route

@@ -159,7 +159,8 @@ public class PatternComboScannerService {
                 .notes("Auto-scan: rsiP1=" + pattern.getRsiAtP1() + " rsiP2=" + pattern.getRsiAtP2())
                 .build();
 
-        // ML filter — score the pattern before persisting
+        // ML filter — score the pattern and store for reference, but do NOT gate here.
+        // Filtering happens at entry time (TradeEntryHandler) when the pattern has fully formed.
         double prob = tradeFilterClient.score(
                 pattern, pattern.getPatternType(),
                 0.0, 0.0, 0.0,   // dailyRsi, dailyAdx, dailyAdxEma — TODO: wire from PatternScanService
@@ -170,11 +171,6 @@ public class PatternComboScannerService {
                 0.0, 0.0,         // macdDaily, macdSignalDaily
                 0.0, 0.0          // bbWidthDaily, bbPctBDaily
         );
-        if (prob < filterThreshold) {
-            log.debug("[Scanner] ML filter rejected {} {} prob={} < threshold={}",
-                    symbol, pattern.getPatternType(), prob, filterThreshold);
-            return SignalCreationResult.mlFiltered();
-        }
         signal.setMlScore(BigDecimal.valueOf(prob).setScale(4, RoundingMode.HALF_UP));
 
         signal = tradeSignalRepository.save(signal);
