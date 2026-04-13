@@ -102,18 +102,18 @@ def load_rows(csv_path: str):
 
 def train_and_evaluate(rows: list, threshold: float, out_csv: str):
     from xgboost import XGBClassifier
-    from sklearn.model_selection import TimeSeriesSplit
+    from sklearn.model_selection import train_test_split as _tts
     from sklearn.metrics import classification_report
 
-    # Sort chronologically
-    rows = sorted(rows, key=lambda r: r["datetime"])
     X = np.array([extract_features(r) for r in rows])
     y = np.array([1 if r["result"] == "WIN" else 0 for r in rows])
 
-    # Time-series split: train on first 70%, test on last 30%
-    split = int(len(rows) * 0.70)
-    X_train, X_test = X[:split], X[split:]
-    y_train, y_test = y[:split], y[split:]
+    # Stratified random split: 70% train / 30% test, balanced WIN/LOSS in both splits
+    # Using shuffle ensures coverage across all symbols and time periods
+    indices = np.arange(len(rows))
+    train_idx, test_idx = _tts(indices, test_size=0.30, random_state=42, stratify=y)
+    X_train, X_test = X[train_idx], X[test_idx]
+    y_train, y_test = y[train_idx], y[test_idx]
 
     model = XGBClassifier(
         n_estimators=300,
@@ -132,7 +132,7 @@ def train_and_evaluate(rows: list, threshold: float, out_csv: str):
     proba_all = model.predict_proba(X)[:, 1]
 
     # ── Classification report on held-out 30%
-    proba_test = proba_all[split:]
+    proba_test = proba_all[test_idx]
     pred_test  = (proba_test >= threshold).astype(int)
     print("\n=== Classifier performance on held-out 30% ===")
     print(classification_report(y_test, pred_test, target_names=["LOSS", "WIN"]))
