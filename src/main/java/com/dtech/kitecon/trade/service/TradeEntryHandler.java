@@ -1,5 +1,8 @@
 package com.dtech.kitecon.trade.service;
 
+import com.dtech.kitecon.patternscanner.PatternDto;
+import com.dtech.kitecon.patternscanner.PatternScanService;
+import com.dtech.kitecon.patternscanner.TradeFilterClient;
 import com.dtech.kitecon.trade.entity.TradeExecution;
 import com.dtech.kitecon.trade.entity.TradeMonitorLog;
 import com.dtech.kitecon.trade.entity.TradeSignal;
@@ -50,6 +53,8 @@ public class TradeEntryHandler {
     private final TradeExecutionRepository executionRepository;
     private final TradeMonitorLogRepository logRepository;
     private final TradeOrchestrationService tradeOrchestrationService;
+    private final PatternScanService patternScanService;
+    private final TradeFilterClient tradeFilterClient;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -71,14 +76,18 @@ public class TradeEntryHandler {
 
         boolean entryTriggered = isEntryTriggered(signal, ltp);
 
-        if (entryTriggered && !passesMlFilter(signal)) {
-            signal.setStatus(TradeStatus.EXPIRED);
-            signalRepository.save(signal);
-            writeLog(signal, ltp, null, MonitorAction.SIGNAL_EXPIRED,
-                    "ML filter rejected at entry: score=" + signal.getMlScore() + " threshold=" + mlFilterThreshold, dryRun);
-            log.info("[EntryHandler] Signal {} {} ML-filtered at entry — score={} threshold={}",
-                    signal.getId(), signal.getSymbol(), signal.getMlScore(), mlFilterThreshold);
-            return;
+        if (entryTriggered) {
+            double score = scoreMlAtEntry(signal);
+            signal.setMlScore(BigDecimal.valueOf(score).setScale(4, java.math.RoundingMode.HALF_UP));
+            if (score < mlFilterThreshold) {
+                signal.setStatus(TradeStatus.EXPIRED);
+                signalRepository.save(signal);
+                writeLog(signal, ltp, null, MonitorAction.SIGNAL_EXPIRED,
+                        "ML filter rejected at entry: score=" + score + " threshold=" + mlFilterThreshold, dryRun);
+                log.info("[EntryHandler] Signal {} {} ML-filtered at entry — score={} threshold={}",
+                        signal.getId(), signal.getSymbol(), score, mlFilterThreshold);
+                return;
+            }
         }
 
         if (!entryTriggered) {
@@ -135,9 +144,29 @@ public class TradeEntryHandler {
         log.info("[EntryHandler] checkFill for signal {} — live order status check not yet implemented", signal.getId());
     }
 
-    private boolean passesMlFilter(TradeSignal signal) {
-        if (signal.getMlScore() == null) return true; // no score — let it through
-        return signal.getMlScore().doubleValue() >= mlFilterThreshold;
+    private double scoreMlAtEntry(TradeSignal signal) {
+        try {
+            PatternDto indicators = patternScanService.computeCurrentIndicators(signal);
+            if (indicators == null) {
+                log.warn("[EntryHandler] Could not compute indicators for {} — failing open", signal.getSymbol());
+                return 1.0;
+            }
+            double score = tradeFilterClient.score(
+                    indicators, signal.getPatternType(),
+                    indicators.getDailyRsi(), indicators.getDailyAdx(), indicators.getDailyAdxEma(),
+                    indicators.getAdxWatching(), indicators.getAdxWatchingEma(),
+                    indicators.getAdxConfirm(), indicators.getAdxConfirmEma(),
+                    indicators.getMacdWatching(), indicators.getMacdSignalWatching(),
+                    indicators.getBbWidthWatching(), indicators.getBbPctBWatching(),
+                    indicators.getMacdDaily(), indicators.getMacdSignalDaily(),
+                    indicators.getBbWidthDaily(), indicators.getBbPctBDaily()
+            );
+            log.info("[EntryHandler] ML score for signal {} {}: {}", signal.getId(), signal.getSymbol(), score);
+            return score;
+        } catch (Exception e) {
+            log.warn("[EntryHandler] ML scoring failed for signal {} — failing open: {}", signal.getId(), e.getMessage());
+            return 1.0;
+        }
     }
 
     private boolean isEntryTriggered(TradeSignal signal, BigDecimal ltp) {
