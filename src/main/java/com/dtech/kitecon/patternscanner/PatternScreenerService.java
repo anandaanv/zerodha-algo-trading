@@ -63,7 +63,7 @@ public class PatternScreenerService {
         screenerRepository.deleteById(id);
     }
 
-    @Async
+    @Async("scanExecutor")
     public void triggerAsync(Long screenerId) {
         PatternScreener screener = screenerRepository.findById(screenerId).orElse(null);
         if (screener == null) return;
@@ -71,6 +71,11 @@ public class PatternScreenerService {
     }
 
     public PatternScreenerRun runScreener(PatternScreener screener) {
+        if (runRepository.existsByScreenerIdAndStatus(screener.getId(), "RUNNING")) {
+            log.warn("[PatternScreener] Screener {} '{}' is already running — skipping overlap", screener.getId(), screener.getName());
+            return runRepository.findTop10ByScreenerIdOrderByStartedAtDesc(screener.getId())
+                    .stream().findFirst().orElse(null);
+        }
         List<TradingSegment> segs = Arrays.stream(screener.getSegments().split(","))
                 .map(String::trim).map(String::toUpperCase)
                 .map(TradingSegment::valueOf)
