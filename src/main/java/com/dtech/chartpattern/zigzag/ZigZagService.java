@@ -408,11 +408,11 @@ public class ZigZagService {
         return switch (interval) {
             case Week         -> now.minus(10 * 365, ChronoUnit.DAYS);
             case Day          -> now.minus(3 * 365, ChronoUnit.DAYS);
-            case OneHour      -> now.minus(365,      ChronoUnit.DAYS);
+            case OneHour      -> now.minus(600,      ChronoUnit.DAYS);
             case FourHours    -> now.minus(2 * 365,  ChronoUnit.DAYS);
             case ThirtyMinute -> now.minus(180,      ChronoUnit.DAYS);
             case FifteenMinute -> now.minus(365,     ChronoUnit.DAYS);
-            case FiveMinute   -> now.minus(30,       ChronoUnit.DAYS);
+            case FiveMinute   -> now.minus(300,      ChronoUnit.DAYS);
             case ThreeMinute  -> now.minus(21,       ChronoUnit.DAYS);
             case OneMinute    -> now.minus(7,        ChronoUnit.DAYS);
         };
