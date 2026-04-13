@@ -36,6 +36,9 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class TradeEntryHandler {
 
+    @Value("${trade.filter.threshold:0.82}")
+    private double mlFilterThreshold;
+
     @Value("${trade.monitor.notional:1000000}")
     private long notionalPerLot;
 
@@ -67,6 +70,16 @@ public class TradeEntryHandler {
         }
 
         boolean entryTriggered = isEntryTriggered(signal, ltp);
+
+        if (entryTriggered && !passesMlFilter(signal)) {
+            signal.setStatus(TradeStatus.EXPIRED);
+            signalRepository.save(signal);
+            writeLog(signal, ltp, null, MonitorAction.SIGNAL_EXPIRED,
+                    "ML filter rejected at entry: score=" + signal.getMlScore() + " threshold=" + mlFilterThreshold, dryRun);
+            log.info("[EntryHandler] Signal {} {} ML-filtered at entry — score={} threshold={}",
+                    signal.getId(), signal.getSymbol(), signal.getMlScore(), mlFilterThreshold);
+            return;
+        }
 
         if (!entryTriggered) {
             String msg = String.format("Watching entry: LTP=%.4f entry=%.4f SL=%.4f T=%.4f",
@@ -120,6 +133,11 @@ public class TradeEntryHandler {
         //     writeLog(signal, fillPrice, null, MonitorAction.ENTRY_ORDER_PLACED, "Entry filled at " + fillPrice, dryRun);
         // }
         log.info("[EntryHandler] checkFill for signal {} — live order status check not yet implemented", signal.getId());
+    }
+
+    private boolean passesMlFilter(TradeSignal signal) {
+        if (signal.getMlScore() == null) return true; // no score — let it through
+        return signal.getMlScore().doubleValue() >= mlFilterThreshold;
     }
 
     private boolean isEntryTriggered(TradeSignal signal, BigDecimal ltp) {
