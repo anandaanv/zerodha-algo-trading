@@ -315,10 +315,29 @@ public class PatternComboBacktestService {
                 double exitPrice = 0.0;
                 String exitReason = "OPEN";
                 double peakPrice = comboEntry; // tracks best price seen since entry
+                double mfePct = 0.0;   // max favorable excursion %
+                double maePct = 0.0;   // max adverse excursion %
+                int mfeBars = 0;       // bars to reach MFE
 
                 // Exit simulation — use price-direction bullish (set above, consistent with SL guard)
                 for (int k = entryBarIdx + 1; k < Math.min(barsC.size(), entryBarIdx + maxHoldBars); k++) {
                     Bar b = barsC.get(k);
+
+                    // Track MFE (max favorable excursion from entry)
+                    double favorablePct = bullish
+                        ? (b.getHighPrice().doubleValue() - comboEntry) / comboEntry * 100.0
+                        : (comboEntry - b.getLowPrice().doubleValue()) / comboEntry * 100.0;
+                    if (favorablePct > mfePct) {
+                        mfePct = favorablePct;
+                        mfeBars = k - entryBarIdx;
+                    }
+                    // Track MAE (max adverse excursion against trade direction)
+                    double adversePct = bullish
+                        ? Math.max(0.0, (comboEntry - b.getLowPrice().doubleValue()) / comboEntry * 100.0)
+                        : Math.max(0.0, (b.getHighPrice().doubleValue() - comboEntry) / comboEntry * 100.0);
+                    if (adversePct > maePct) {
+                        maePct = adversePct;
+                    }
 
                     // SL check
                     if (bullish && b.getLowPrice().doubleValue() <= comboSL) {
@@ -469,6 +488,9 @@ public class PatternComboBacktestService {
                         .rsiSlope(watchingInd.rsiSlopeAtTs(cp.getKeyLevelTime(), 5))
                         .macdHistSlope(watchingInd.macdHistSlopeAtTs(cp.getKeyLevelTime(), 5))
                         .adxSlope(watchingInd.adxSlopeAtTs(cp.getKeyLevelTime(), 5))
+                        .mfePct(mfePct)
+                        .maePct(maePct)
+                        .mfeBars(mfeBars)
                         .build());
             }
         }
@@ -2279,7 +2301,7 @@ public class PatternComboBacktestService {
                 "entry_price,stop_loss,watching_target,confirm_own_target,rr_watching,key_level," +
                 "result,bars_to_result,pnl_pct,exit_price,exit_reason," +
                 "rsi_at_p1,rsi_at_p2,macd_hist_at_p1,macd_hist_at_p2," +
-                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry,bb_peak_bbw,rsi_zone_quality,daily_adx,daily_adx_ema,adx_watching,adx_watching_ema,adx_confirm,adx_confirm_ema,macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching,macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily,bb_expanding,bb_aligned,rsi_slope,macd_hist_slope,adx_slope\n";
+                "stoch_rsi_k_15m,daily_rsi,watching_pattern_height,confirm_pattern_height,target_eventually_hit,post_exit_max_retrace_pct,e_symmetry,bb_peak_bbw,rsi_zone_quality,daily_adx,daily_adx_ema,adx_watching,adx_watching_ema,adx_confirm,adx_confirm_ema,macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching,macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily,bb_expanding,bb_aligned,rsi_slope,macd_hist_slope,adx_slope,mfe_pct,mae_pct,mfe_bars\n";
         try (FileWriter fw = new FileWriter(csvPath)) {
             fw.write(header);
             for (ComboRow r : rows) {
@@ -2566,10 +2588,13 @@ public class PatternComboBacktestService {
         double  rsiSlope;        // linear regression slope of RSI over last 5 bars
         double  macdHistSlope;   // slope of MACD histogram over last 5 bars
         double  adxSlope;        // slope of ADX over last 5 bars
+        double  mfePct;          // max favorable excursion % from entry to exit bar
+        double  maePct;          // max adverse excursion % from entry to exit bar
+        int     mfeBars;         // bars to reach MFE
 
         public String toCsvRow() {
             return String.format(Locale.US,
-                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%.4f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f",
+                "%s,%s,%s,%s,%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%d,%.2f,%.2f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%.4f,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.2f,%.2f,%d",
                 entryTime, symbol, watchingPattern, watchingTf, confirmPattern, confirmTf, confirmType,
                 entryPrice, stopLoss, watchingTarget, confirmOwnTarget, rrWatching, keyLevel,
                 result, barsToResult, pnlPct, exitPrice, exitReason,
@@ -2577,7 +2602,8 @@ public class PatternComboBacktestService {
                 watchingPatternHeight, confirmPatternHeight, targetEventuallyHit, postExitMaxRetracePct, eSymmetry,
                 bbPeakBbw, rsiZoneQuality != null ? rsiZoneQuality : "", dailyAdx, dailyAdxEma, adxWatching, adxWatchingEma, adxConfirm, adxConfirmEma,
                 macdWatching, macdSignalWatching, bbWidthWatching, bbPctBWatching, macdDaily, macdSignalDaily, bbWidthDaily, bbPctBDaily,
-                bbExpanding, bbAligned, rsiSlope, macdHistSlope, adxSlope);
+                bbExpanding, bbAligned, rsiSlope, macdHistSlope, adxSlope,
+                mfePct, maePct, mfeBars);
         }
     }
 
