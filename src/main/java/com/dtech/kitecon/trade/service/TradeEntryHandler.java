@@ -149,7 +149,7 @@ public class TradeEntryHandler {
             PatternDto indicators = patternScanService.computeCurrentIndicators(signal);
             if (indicators == null) {
                 log.warn("[EntryHandler] Could not compute indicators for {} — failing open", signal.getSymbol());
-                return 1.0;
+                return 0.9999;
             }
             double score = tradeFilterClient.score(
                     indicators, signal.getPatternType(),
@@ -167,7 +167,7 @@ public class TradeEntryHandler {
             return score;
         } catch (Exception e) {
             log.warn("[EntryHandler] ML scoring failed for signal {} — failing open: {}", signal.getId(), e.getMessage());
-            return 1.0;
+            return 0.9999;
         }
     }
 
