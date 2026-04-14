@@ -104,11 +104,21 @@ public class PatternScanService {
         watchingPatterns.addAll(patternComboBacktestService.scanTriangleWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(patternComboBacktestService.scanHnsWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(patternComboBacktestService.scanFlagWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
+        watchingPatterns.addAll(patternComboBacktestService.scanTrendlineBreakoutWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
 
         // Keep only patterns whose last pivot is the most recent ZigZag pivot — anything older is historical
+        // Exception: TRENDLINE_BREAKOUT uses breakout bar time, so check if it's within the last N bars
         if (!pivotsW.isEmpty()) {
             Instant latestPivotTime = pivotsW.get(pivotsW.size() - 1).getTimestamp();
-            watchingPatterns.removeIf(p -> !latestPivotTime.equals(p.getKeyLevelTime()));
+            int lastBarIdx = barsW.size() - 1;
+            Instant recentCutoff = lastBarIdx >= 5 ? barsW.get(lastBarIdx - 5).getEndTime() : barsW.get(0).getEndTime();
+            watchingPatterns.removeIf(p -> {
+                if ("TRENDLINE_BREAKOUT".equals(p.getPatternType())) {
+                    // For TLB, keep if breakout happened in the last 5 bars
+                    return p.getKeyLevelTime().isBefore(recentCutoff);
+                }
+                return !latestPivotTime.equals(p.getKeyLevelTime());
+            });
         }
 
         // Load daily and confirm series for indicator computation
@@ -318,7 +328,7 @@ public class PatternScanService {
                     points.add(point(p.getKeyLevelTime(), type.equals("DOUBLE_BOTTOM") ? b2.getLowPrice().doubleValue() : b2.getHighPrice().doubleValue()));
                 }
             }
-        } else if (type.startsWith("TRIANGLE") || type.startsWith("HNS") || type.startsWith("FLAG")) {
+        } else if (type.startsWith("TRIANGLE") || type.startsWith("HNS") || type.startsWith("FLAG") || type.equals("TRENDLINE_BREAKOUT")) {
             // Use pivotBTime and pivotDTime as anchor points, keyLevelTime as apex/breakout
             if (p.getPivotBTime() != null) {
                 Integer idx = tsToIdx.get(p.getPivotBTime());
