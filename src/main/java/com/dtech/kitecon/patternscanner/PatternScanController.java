@@ -15,10 +15,16 @@ import java.util.List;
 public class PatternScanController {
 
     private final PatternScanService patternScanService;
+    private final com.dtech.kitecon.backtest.PatternComboBacktestService patternComboBacktestService;
 
     @GetMapping("/nifty50")
     public ResponseEntity<List<String>> getNifty50() {
         return ResponseEntity.ok(patternScanService.getNifty50());
+    }
+
+    @GetMapping("/fno-symbols")
+    public ResponseEntity<java.util.List<String>> getFnoSymbols() {
+        return ResponseEntity.ok(patternScanService.getFnoSymbols());
     }
 
     @GetMapping("/{symbol}")
@@ -33,6 +39,51 @@ public class PatternScanController {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("Pattern scan failed for {}: {}", symbol, e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/backtest/tlb/{symbol}")
+    public ResponseEntity<?> backtestTlb(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "1h") String tf) {
+        try {
+            Interval interval = parseInterval(tf);
+            String csvPath = "/tmp/tlb_backtest_" + symbol + "_" + tf + ".csv";
+            String result = patternComboBacktestService.backtestTrendlineBreakout(symbol, interval, csvPath);
+            return ResponseEntity.ok(java.util.Map.of("summary", result, "csvPath", csvPath));
+        } catch (Exception e) {
+            log.error("TLB backtest failed for {}: {}", symbol, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/backtest/tlb-nifty50")
+    public ResponseEntity<?> backtestTlbNifty50(
+            @RequestParam(defaultValue = "1h") String tf) {
+        try {
+            Interval interval = parseInterval(tf);
+            String csvPath = "/tmp/tlb_backtest_nifty50_" + tf + ".csv";
+            String result = patternComboBacktestService.backtestTrendlineBreakoutMultiple(
+                    patternScanService.getNifty50(), interval, csvPath);
+            return ResponseEntity.ok(java.util.Map.of("summary", result, "csvPath", csvPath));
+        } catch (Exception e) {
+            log.error("TLB backtest failed: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/backtest/tlb-fno")
+    public ResponseEntity<?> backtestTlbFno(
+            @RequestParam(defaultValue = "1h") String tf) {
+        try {
+            Interval interval = parseInterval(tf);
+            String csvPath = "/tmp/tlb_backtest_fno_" + tf + ".csv";
+            String result = patternComboBacktestService.backtestTrendlineBreakoutMultiple(
+                    patternScanService.getFnoSymbols(), interval, csvPath);
+            return ResponseEntity.ok(java.util.Map.of("summary", result, "csvPath", csvPath));
+        } catch (Exception e) {
+            log.error("TLB FnO backtest failed: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
