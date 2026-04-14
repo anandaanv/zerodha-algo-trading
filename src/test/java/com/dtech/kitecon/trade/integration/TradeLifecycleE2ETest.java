@@ -12,6 +12,7 @@ import com.dtech.kitecon.trade.repository.TradeOrderRepository;
 import com.dtech.kitecon.trade.repository.TradeSignalRepository;
 import com.dtech.kitecon.trade.service.BrokerOrderService;
 import com.dtech.kitecon.trade.service.MarketQuoteService;
+import com.dtech.kitecon.trade.service.RlExitClient;
 import com.dtech.kitecon.trade.service.TradeEntryHandler;
 import com.dtech.kitecon.trade.service.TradeExitHandler;
 import org.junit.jupiter.api.*;
@@ -47,7 +48,8 @@ import static org.mockito.Mockito.when;
 @ActiveProfiles("integration")
 @TestPropertySource(properties = {
         "spring.jpa.hibernate.ddl-auto=none",
-        "trade.filter.threshold=0.0"
+        "trade.filter.threshold=0.0",
+        "rl.exit.enabled=true"
 })
 @Sql(scripts = "/sql/trading-test-setup.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS)
 class TradeLifecycleE2ETest {
@@ -63,6 +65,7 @@ class TradeLifecycleE2ETest {
     @MockBean private BrokerOrderService brokerOrderService;
     @MockBean private com.dtech.kitecon.patternscanner.TradeFilterClient tradeFilterClient;
     @MockBean private com.dtech.kitecon.patternscanner.PatternScanService patternScanService;
+    @MockBean private RlExitClient rlExitClient;
 
     private static final Long TOKEN_REL = 99999901L;
     private static final Long TOKEN_TCS = 99999902L;
@@ -344,6 +347,58 @@ class TradeLifecycleE2ETest {
         List<TradeOrder> closed = tradeOrderRepository.findBySignalAndStatus(signal, TradeOrderStatus.CLOSED);
         assertFalse(closed.isEmpty());
         assertTrue(closed.get(0).getRealisedPnl().compareTo(BigDecimal.ZERO) > 0);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // Trade 6: LONG DTB — RL agent exits before target → COMPLETED
+    // ──────────────────────────────────────────────────────────────────
+    @Test
+    @DisplayName("Trade 6: LONG DTB — RL agent recommends exit before target = WIN")
+    void trade6_longDtb_rlExit() {
+        // Entry at 500, SL at 470, Target at 560
+        when(brokerOrderService.fetchLtp("TEST_REL", TOKEN_REL)).thenReturn(BigDecimal.valueOf(505));
+        when(marketQuoteService.getQuote(anyString(), any())).thenReturn(quote("TEST_REL", TOKEN_REL, 505));
+
+        TradeSignal signal = createSignal("TEST_REL", TOKEN_REL, TradeDirection.LONG,
+                "DOUBLE_BOTTOM", 500, 470, 560);
+
+        // Step 1: Entry
+        tradeEntryHandler.handle(signal, true);
+        signal = tradeSignalRepository.findById(signal.getId()).orElseThrow();
+        assertEquals(TradeStatus.ACTIVE, signal.getStatus(), "Should be ACTIVE after entry");
+
+        // Step 2: Price moves to 530 — above entry but below target (560), above SL (470)
+        // RL agent should be consulted. Mock it to return EXIT.
+        when(brokerOrderService.fetchLtp("TEST_REL", TOKEN_REL)).thenReturn(BigDecimal.valueOf(530));
+        when(marketQuoteService.getQuote(anyString(), any())).thenReturn(quote("TEST_REL", TOKEN_REL, 530));
+
+        // Mock the RL exit client to return EXIT
+        org.mockito.Mockito.lenient().doReturn("EXIT").when(rlExitClient).predict(
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), anyString(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyInt(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble(),
+                org.mockito.ArgumentMatchers.anyDouble(), org.mockito.ArgumentMatchers.anyDouble());
+
+        tradeExitHandler.handle(signal, true);
+        signal = tradeSignalRepository.findById(signal.getId()).orElseThrow();
+        assertEquals(TradeStatus.COMPLETED, signal.getStatus(), "Should be COMPLETED — RL agent said EXIT");
+
+        // Verify profitable exit (entered ~501 ask, exited at 530)
+        List<TradeOrder> closed = tradeOrderRepository.findBySignalAndStatus(signal, TradeOrderStatus.CLOSED);
+        assertFalse(closed.isEmpty());
+        assertTrue(closed.get(0).getRealisedPnl().compareTo(BigDecimal.ZERO) > 0, "Should be profitable — RL exit at 530 > entry ~501");
     }
 
     // ──────────────────────────────────────────────────────────────────
