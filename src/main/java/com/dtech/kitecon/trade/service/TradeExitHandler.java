@@ -50,6 +50,7 @@ public class TradeExitHandler {
     private final TradeExecutionRepository executionRepository;
     private final TradeMonitorLogRepository logRepository;
     private final TradeOrchestrationService tradeOrchestrationService;
+    private final RlExitClient rlExitClient;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -67,11 +68,33 @@ public class TradeExitHandler {
 
         ExitReason exitReason = resolveExitReason(signal, ltp);
 
-        // TODO: candlestick reversal check on latest 5m candle
-        // if (exitReason == null) {
-        //     String pattern = candleService.detectLatestReversalPattern(signal.getSymbol(), signal.getDirection());
-        //     if (pattern != null) exitReason = ExitReason.REVERSAL_CANDLE;
-        // }
+        // RL exit optimizer check — only if no hard SL/target exit
+        if (exitReason == null) {
+            try {
+                BigDecimal entry = execution.getEntryPriceActual();
+                if (entry != null && entry.compareTo(BigDecimal.ZERO) > 0) {
+                    boolean isLong = signal.getDirection() == TradeDirection.LONG;
+                    String rlAction = rlExitClient.predict(
+                            entry.doubleValue(),
+                            signal.getStopLoss().doubleValue(),
+                            signal.getTarget().doubleValue(),
+                            isLong ? "LONG" : "SHORT",
+                            ltp.doubleValue(), ltp.doubleValue(), ltp.doubleValue(),
+                            ltp.doubleValue(), 0, 0,
+                            0, 0,
+                            signal.getStochRsiK() != null ? signal.getStochRsiK().doubleValue() : 50,
+                            0, 0, 0.5, 0.05, 0.5, 50,
+                            signal.getRrRatio() != null ? signal.getRrRatio().doubleValue() : 2.0,
+                            0, 0, 0, 0, 0, 0, 0.5, 0.05, 0, 0, 0, 1.0);
+                    if ("EXIT".equals(rlAction)) {
+                        exitReason = ExitReason.REVERSAL_CANDLE; // reuse existing enum for RL exit
+                        log.info("[ExitHandler] RL agent recommends EXIT for signal {} {}", signal.getId(), signal.getSymbol());
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("[ExitHandler] RL exit check failed for signal {}: {}", signal.getId(), e.getMessage());
+            }
+        }
 
         if (exitReason != null) {
             triggerExit(signal, execution, ltp, exitReason, dryRun);
