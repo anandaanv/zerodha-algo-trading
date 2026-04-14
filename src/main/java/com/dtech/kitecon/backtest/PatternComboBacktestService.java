@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.ta4j.core.Bar;
 import org.ta4j.core.BarSeries;
+import org.ta4j.core.BaseBarSeriesBuilder;
 import org.ta4j.core.indicators.MACDIndicator;
 import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.averages.EMAIndicator;
@@ -2312,6 +2313,394 @@ public class PatternComboBacktestService {
             Map<Instant, Integer> tsToIdxW, double[] atrArr, double[] rsiValues,
             double[] macdHistArr, double[] stochRsiK) {
         return java.util.Collections.emptyList(); // FLAG disabled — low base WR (39-46%)
+    }
+
+    // ── Trendline Breakout (EMA-zone pivot pair + AB=CD) ──────────────────
+    public List<DetectedPattern> scanTrendlineBreakoutWatchingPublic(List<ZigZagPoint> pivots, List<Bar> bars,
+            Map<Instant, Integer> tsToIdx, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        return scanTrendlineBreakoutWatching(pivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK);
+    }
+
+    private List<DetectedPattern> scanTrendlineBreakoutWatching(List<ZigZagPoint> pivots, List<Bar> bars,
+            Map<Instant, Integer> tsToIdx, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        List<DetectedPattern> results = new ArrayList<>();
+
+        BarSeries series = null;
+        // Build a BarSeries from bars list — we need it for EMA computation
+        // Use the first pivot's series reference if available, or build from bars
+        // Actually we can use the DefaultBarSeries from ta4j
+        if (bars.isEmpty()) return results;
+
+        org.ta4j.core.BarSeries barSeries = new org.ta4j.core.BaseBarSeriesBuilder().build();
+        for (Bar bar : bars) {
+            barSeries.addBar(bar);
+        }
+
+        com.dtech.ta.patterns.TrendlineBreakoutDetector detector =
+                new com.dtech.ta.patterns.TrendlineBreakoutDetector(barSeries, atrArr);
+
+        List<com.dtech.ta.patterns.TrendlineBreakoutPattern> patterns =
+                detector.detect(pivots, bars, tsToIdx);
+
+        for (com.dtech.ta.patterns.TrendlineBreakoutPattern p : patterns) {
+            Integer p2Idx = tsToIdx.get(p.getPivot2().getTimestamp());
+            int breakoutIdx = p.getBreakoutBarIndex();
+            if (p2Idx == null) continue;
+
+            // Use breakout bar's timestamp as keyLevelTime so the recency filter picks it up
+            Instant breakoutTime = breakoutIdx < bars.size() ? bars.get(breakoutIdx).getEndTime() : p.getPivot2().getTimestamp();
+
+            double rsiAtP1 = 0, rsiAtP2 = 0, macdHistAtP1 = 0, macdHistAtP2 = 0, stochK = 0;
+            Integer p1Idx = tsToIdx.get(p.getPivot1().getTimestamp());
+            if (p1Idx != null && p1Idx < rsiValues.length) rsiAtP1 = rsiValues[p1Idx];
+            if (p2Idx < rsiValues.length) rsiAtP2 = rsiValues[p2Idx];
+            if (p1Idx != null && p1Idx < macdHistArr.length) macdHistAtP1 = macdHistArr[p1Idx];
+            if (p2Idx < macdHistArr.length) macdHistAtP2 = macdHistArr[p2Idx];
+            if (breakoutIdx < stochRsiK.length) stochK = stochRsiK[breakoutIdx];
+
+            // Use the breakout candle median SL as the primary stopLoss field
+            // The trendline SL is available via ownTarget computation context
+            results.add(DetectedPattern.builder()
+                    .patternType("TRENDLINE_BREAKOUT")
+                    .confirmationType(null)
+                    .bullish(p.isBullish())
+                    .keyLevel(p.getBreakoutLevel())
+                    .keyLevelTime(breakoutTime)
+                    .pivotBTime(p.getPivot1().getTimestamp())
+                    .pivotDTime(p.getPivot2().getTimestamp())
+                    .entryPrice(p.getBreakoutLevel())
+                    .stopLoss(p.getStopLossBreakoutCandle())
+                    .ownTarget(p.getTarget())
+                    .patternHeight(p.getAbDistance())
+                    .atr(p2Idx < atrArr.length ? atrArr[p2Idx] : 0)
+                    .rsiAtP0(0)
+                    .rsiAtP1(rsiAtP1)
+                    .rsiAtP2(rsiAtP2)
+                    .macdHistAtP1(macdHistAtP1)
+                    .macdHistAtP2(macdHistAtP2)
+                    .stochRsiK(stochK)
+                    .dailyRsi(0)
+                    .macdHistogram(macdHistAtP2)
+                    .reversalPattern(null)
+                    .build());
+        }
+        return results;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Trendline Breakout standalone backtest
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static final String TLB_CSV_HEADER =
+        "datetime,symbol,direction,entry_price,sl_trendline,sl_candle_median,target,rr," +
+        "result,pnl_pct,exit_price,exit_reason,bars_held," +
+        "trail_result,trail_pnl_pct,trail_exit_price,trail_exit_reason,trail_bars_held," +
+        "ab_distance,atr," +
+        "rsi_at_p1,rsi_at_p2,macd_hist_at_p1,macd_hist_at_p2,stoch_rsi_k," +
+        "daily_rsi,daily_adx,daily_adx_ema,adx_watching,adx_watching_ema," +
+        "macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching," +
+        "macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily," +
+        "bb_expanding,bb_aligned,rsi_slope,macd_hist_slope,adx_slope," +
+        "pattern_height,target_eventually_hit,mfe_pct,mae_pct,mfe_bars\n";
+
+    public String backtestTrendlineBreakout(String symbol, Interval tf, String csvPath) throws IOException {
+        List<String> csvLines = new ArrayList<>();
+        double[] stats = backtestTlbForSymbol(symbol, tf, csvLines);
+        if (stats == null) return "No data for " + symbol;
+
+        if (csvPath != null) {
+            try (FileWriter fw = new FileWriter(csvPath)) {
+                fw.write(TLB_CSV_HEADER);
+                for (String line : csvLines) fw.write(line);
+            }
+            log.info("[TLB Backtest] CSV written to {}", csvPath);
+        }
+
+        int wins = (int) stats[0], losses = (int) stats[1], openCount = (int) stats[2];
+        double totalPnl = stats[3];
+        int total = wins + losses + openCount;
+        double winRate = (wins + losses) > 0 ? (double) wins / (wins + losses) * 100.0 : 0;
+        String summary = String.format(
+            "[TLB Backtest] %s %s: %d trades | %d wins, %d losses, %d open | WR=%.1f%% | Total PnL=%.2f%%",
+            symbol, tf.getUiKey(), total, wins, losses, openCount, winRate, totalPnl);
+        log.info(summary);
+        return summary;
+    }
+
+    public String backtestTrendlineBreakoutMultiple(List<String> symbols, Interval tf, String csvPath) throws IOException {
+        List<String> allLines = new ArrayList<>();
+        int totalWins = 0, totalLosses = 0, totalOpen = 0;
+        double totalPnl = 0.0;
+        int failed = 0;
+
+        for (String symbol : symbols) {
+            try {
+                List<String> csvLines = new ArrayList<>();
+                double[] stats = backtestTlbForSymbol(symbol, tf, csvLines);
+                if (stats == null) { failed++; continue; }
+                allLines.addAll(csvLines);
+                totalWins += (int) stats[0];
+                totalLosses += (int) stats[1];
+                totalOpen += (int) stats[2];
+                totalPnl += stats[3];
+            } catch (Exception e) {
+                log.warn("[TLB Backtest] Skipping {}: {}", symbol, e.getMessage());
+                failed++;
+            }
+        }
+
+        if (csvPath != null) {
+            try (FileWriter fw = new FileWriter(csvPath)) {
+                fw.write(TLB_CSV_HEADER);
+                for (String line : allLines) fw.write(line);
+            }
+            log.info("[TLB Backtest] CSV written to {}", csvPath);
+        }
+
+        int total = totalWins + totalLosses + totalOpen;
+        double winRate = (totalWins + totalLosses) > 0 ? (double) totalWins / (totalWins + totalLosses) * 100.0 : 0;
+        String summary = String.format(
+            "[TLB Backtest] %d symbols (%d failed) | %d trades | %d wins, %d losses, %d open | WR=%.1f%% | Total PnL=%.2f%%",
+            symbols.size(), failed, total, totalWins, totalLosses, totalOpen, winRate, totalPnl);
+        log.info(summary);
+        return summary;
+    }
+
+    /**
+     * Core TLB backtest for a single symbol. Returns double[4] = {wins, losses, open, totalPnl}.
+     * Appends CSV lines to csvLines.
+     */
+    private double[] backtestTlbForSymbol(String symbol, Interval tf, List<String> csvLines) {
+        Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+        if (instrument == null) return null;
+
+        BarSeries series = zigZagService.getBarSeries(symbol, instrument, tf);
+        if (series == null || series.isEmpty()) return null;
+
+        List<Bar> bars = toList(series);
+        Map<Instant, Integer> tsToIdx = buildTsToIdx(bars);
+        double[] atrArr = computeAtr(bars, ATR_PERIOD);
+        double[] rsiArr = computeRsiPublic(series, RSI_PERIOD);
+        double[] macdHistArr = computeMacdHistPublic(series);
+        double[] stochRsiKArr = computeStochRsiK(rsiArr);
+
+        // Compute indicators on this TF
+        DailyIndicators tfInd = computeDailyIndicators(series);
+
+        // Load daily series for daily-level indicators
+        BarSeries seriesDaily = null;
+        try { seriesDaily = zigZagService.getBarSeries(symbol, instrument, Interval.Day); } catch (Exception ignored) {}
+        DailyIndicators dailyInd = computeDailyIndicators(seriesDaily);
+
+        ZigZagParams base = zigZagService.resolveParams(symbol, tf);
+        ZigZagParams params = ZigZagParams.ofDefaults(base.getAtrLength(), base.getAtrMult(),
+                base.getPctMin(), base.getHysteresis(), base.getMinBarsBetweenPivots(),
+                base.isDynamicPctEnabled(), base.getVolMult(), base.getRvolWindow(),
+                ZigZagParams.Mode.BACKTEST);
+        List<ZigZagPoint> pivots = zigZagService.detect(series, params);
+
+        BarSeries detectorSeries = new BaseBarSeriesBuilder().build();
+        for (Bar bar : bars) detectorSeries.addBar(bar);
+
+        com.dtech.ta.patterns.TrendlineBreakoutDetector detector =
+                new com.dtech.ta.patterns.TrendlineBreakoutDetector(detectorSeries, atrArr);
+        List<com.dtech.ta.patterns.TrendlineBreakoutPattern> patterns =
+                detector.detect(pivots, bars, tsToIdx);
+
+        int maxHoldBars = (int)(400L * 900 / tf.getOffset());
+        int wins = 0, losses = 0, openCount = 0;
+        double totalPnl = 0.0;
+
+        for (com.dtech.ta.patterns.TrendlineBreakoutPattern p : patterns) {
+            int entryIdx = p.getBreakoutBarIndex();
+            if (entryIdx >= bars.size()) continue;
+
+            boolean bullish = p.isBullish();
+            double entry = p.getBreakoutLevel();  // breakout candle's high (bull) or low (bear)
+            double slTrendline = p.getStopLossTrendline();  // trendline value at confirmation bar
+            double slCandleMedian = p.getStopLossBreakoutCandle();
+            double sl = slTrendline;  // use trendline as SL
+            double target = p.getTarget();
+            double rr = Math.abs(entry - sl) > 0 ? Math.abs(target - entry) / Math.abs(entry - sl) : 0;
+
+            // Indicator values at pattern points
+            Integer p1Idx = tsToIdx.get(p.getPivot1().getTimestamp());
+            Integer p2Idx = tsToIdx.get(p.getPivot2().getTimestamp());
+            double rsiAtP1 = (p1Idx != null && p1Idx < rsiArr.length) ? rsiArr[p1Idx] : 0;
+            double rsiAtP2 = (p2Idx != null && p2Idx < rsiArr.length) ? rsiArr[p2Idx] : 0;
+            double macdHistAtP1 = (p1Idx != null && p1Idx < macdHistArr.length) ? macdHistArr[p1Idx] : 0;
+            double macdHistAtP2 = (p2Idx != null && p2Idx < macdHistArr.length) ? macdHistArr[p2Idx] : 0;
+            double stochK = entryIdx < stochRsiKArr.length ? stochRsiKArr[entryIdx] : 0;
+
+            Instant entryTime = bars.get(entryIdx).getEndTime();
+
+            // TF-level indicators at entry
+            double adxW = tfInd.adxAtTs(entryTime);
+            double adxWEma = tfInd.adxEmaAtTs(entryTime);
+            double macdW = tfInd.macdLineAtTs(entryTime);
+            double macdSigW = tfInd.macdSignalAtTs(entryTime);
+            double bbWidthW = tfInd.bbWidthAtTs(entryTime);
+            double bbPctBW = tfInd.bbPctBAtTs(entryTime);
+            double bbExp = tfInd.bbExpandingAtTs(entryTime, 5);
+            double bbAl = tfInd.bbAlignedAtTs(entryTime, 5, bullish);
+            double rsiSlp = tfInd.rsiSlopeAtTs(entryTime, 5);
+            double macdHistSlp = tfInd.macdHistSlopeAtTs(entryTime, 5);
+            double adxSlp = tfInd.adxSlopeAtTs(entryTime, 5);
+
+            // Daily indicators
+            double dRsi = dailyInd.rsiAtTs(entryTime);
+            double dAdx = dailyInd.adxAtTs(entryTime);
+            double dAdxEma = dailyInd.adxEmaAtTs(entryTime);
+            double dMacd = dailyInd.macdLineAtTs(entryTime);
+            double dMacdSig = dailyInd.macdSignalAtTs(entryTime);
+            double dBbWidth = dailyInd.bbWidthAtTs(entryTime);
+            double dBbPctB = dailyInd.bbPctBAtTs(entryTime);
+
+            // ── LINEAR SL simulation (fixed SL + fixed target) ──
+            String result = "OPEN";
+            double pnlPct = 0.0;
+            double exitPrice = 0.0;
+            String exitReason = "OPEN";
+            int barsHeld = 0;
+            double mfePct = 0.0, maePct = 0.0;
+            int mfeBars = 0;
+
+            for (int k = entryIdx + 1; k < Math.min(bars.size(), entryIdx + maxHoldBars); k++) {
+                Bar b = bars.get(k);
+
+                double favorable = bullish
+                    ? (b.getHighPrice().doubleValue() - entry) / entry * 100.0
+                    : (entry - b.getLowPrice().doubleValue()) / entry * 100.0;
+                if (favorable > mfePct) { mfePct = favorable; mfeBars = k - entryIdx; }
+                double adverse = bullish
+                    ? Math.max(0, (entry - b.getLowPrice().doubleValue()) / entry * 100.0)
+                    : Math.max(0, (b.getHighPrice().doubleValue() - entry) / entry * 100.0);
+                if (adverse > maePct) maePct = adverse;
+
+                if (bullish && b.getLowPrice().doubleValue() <= sl) {
+                    result = "STOP_HIT"; exitReason = "STOP_HIT";
+                    exitPrice = (k + 1 < bars.size()) ? bars.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
+                    pnlPct = (exitPrice - entry) / entry * 100.0 - TRADE_OVERHEAD_PCT;
+                    barsHeld = k - entryIdx; break;
+                }
+                if (!bullish && b.getHighPrice().doubleValue() >= sl) {
+                    result = "STOP_HIT"; exitReason = "STOP_HIT";
+                    exitPrice = (k + 1 < bars.size()) ? bars.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
+                    pnlPct = (entry - exitPrice) / entry * 100.0 - TRADE_OVERHEAD_PCT;
+                    barsHeld = k - entryIdx; break;
+                }
+                if (bullish && b.getHighPrice().doubleValue() >= target) {
+                    result = "WIN"; exitReason = "TARGET_HIT"; exitPrice = target;
+                    pnlPct = (target - entry) / entry * 100.0 - TRADE_OVERHEAD_PCT;
+                    barsHeld = k - entryIdx; break;
+                }
+                if (!bullish && b.getLowPrice().doubleValue() <= target) {
+                    result = "WIN"; exitReason = "TARGET_HIT"; exitPrice = target;
+                    pnlPct = (entry - target) / entry * 100.0 - TRADE_OVERHEAD_PCT;
+                    barsHeld = k - entryIdx; break;
+                }
+            }
+
+            // ── TRAILING SL simulation ──
+            // Phase 1: initial SL = trendline SL (same as linear)
+            // Phase 2: after price moves >= 1 ATR in favor → move SL to breakeven
+            // Phase 3: trail at 38% retrace from peak price. No fixed target — ride the trend.
+            String tResult = "OPEN";
+            double tPnlPct = 0.0;
+            double tExitPrice = 0.0;
+            String tExitReason = "OPEN";
+            int tBarsHeld = 0;
+            double peakPrice = entry;
+            double trailSl = sl;  // start with same trendline SL
+            double atrAtEntry = entryIdx < atrArr.length ? atrArr[entryIdx] : 0;
+            boolean movedToBreakeven = false;
+
+            for (int k = entryIdx + 1; k < Math.min(bars.size(), entryIdx + maxHoldBars); k++) {
+                Bar b = bars.get(k);
+
+                // Update peak price
+                if (bullish) peakPrice = Math.max(peakPrice, b.getHighPrice().doubleValue());
+                else         peakPrice = Math.min(peakPrice, b.getLowPrice().doubleValue());
+
+                double moveFromEntry = bullish ? (peakPrice - entry) : (entry - peakPrice);
+
+                // Phase 2: move SL to breakeven after 1 ATR move
+                if (!movedToBreakeven && atrAtEntry > 0 && moveFromEntry >= atrAtEntry) {
+                    trailSl = entry;
+                    movedToBreakeven = true;
+                }
+
+                // Phase 3: trail at 38% retrace from peak (only after breakeven)
+                if (movedToBreakeven) {
+                    double moveSize = bullish ? (peakPrice - entry) : (entry - peakPrice);
+                    double trail38 = bullish
+                        ? peakPrice - 0.236 * moveSize
+                        : peakPrice + 0.236 * moveSize;
+                    // Trail SL only moves in favor, never back
+                    if (bullish) trailSl = Math.max(trailSl, trail38);
+                    else         trailSl = Math.min(trailSl, trail38);
+                }
+
+                // Check trailing SL hit
+                if (bullish && b.getLowPrice().doubleValue() <= trailSl) {
+                    tExitPrice = (k + 1 < bars.size()) ? bars.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
+                    tPnlPct = (tExitPrice - entry) / entry * 100.0 - TRADE_OVERHEAD_PCT;
+                    tResult = tPnlPct > 0 ? "WIN" : "STOP_HIT";
+                    tExitReason = movedToBreakeven ? "TRAIL_SL" : "INITIAL_SL";
+                    tBarsHeld = k - entryIdx; break;
+                }
+                if (!bullish && b.getHighPrice().doubleValue() >= trailSl) {
+                    tExitPrice = (k + 1 < bars.size()) ? bars.get(k + 1).getOpenPrice().doubleValue() : b.getClosePrice().doubleValue();
+                    tPnlPct = (entry - tExitPrice) / entry * 100.0 - TRADE_OVERHEAD_PCT;
+                    tResult = tPnlPct > 0 ? "WIN" : "STOP_HIT";
+                    tExitReason = movedToBreakeven ? "TRAIL_SL" : "INITIAL_SL";
+                    tBarsHeld = k - entryIdx; break;
+                }
+            }
+
+            // Check if target eventually hit
+            boolean targetEventuallyHit = "WIN".equals(result) && "TARGET_HIT".equals(exitReason);
+            if (!targetEventuallyHit) {
+                int scanFrom = (barsHeld > 0) ? entryIdx + barsHeld : entryIdx + 1;
+                for (int m = scanFrom; m < Math.min(bars.size(), entryIdx + maxHoldBars); m++) {
+                    Bar mb = bars.get(m);
+                    if (bullish && mb.getHighPrice().doubleValue() >= target) { targetEventuallyHit = true; break; }
+                    if (!bullish && mb.getLowPrice().doubleValue() <= target) { targetEventuallyHit = true; break; }
+                }
+            }
+
+            if ("WIN".equals(result)) wins++;
+            else if ("STOP_HIT".equals(result)) losses++;
+            else openCount++;
+            totalPnl += pnlPct;
+
+            csvLines.add(String.format(Locale.US,
+                "%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f,%.2f,%s,%d," +
+                "%s,%.2f,%.2f,%s,%d," +
+                "%.2f,%.2f," +
+                "%.2f,%.2f,%.4f,%.4f,%.4f," +
+                "%.2f,%.2f,%.2f,%.2f,%.2f," +
+                "%.4f,%.4f,%.4f,%.4f," +
+                "%.4f,%.4f,%.4f,%.4f," +
+                "%.1f,%.1f,%.4f,%.4f,%.4f," +
+                "%.2f,%s,%.2f,%.2f,%d\n",
+                entryTime, symbol, bullish ? "LONG" : "SHORT",
+                entry, slTrendline, slCandleMedian, target, rr,
+                result, pnlPct, exitPrice, exitReason, barsHeld,
+                tResult, tPnlPct, tExitPrice, tExitReason, tBarsHeld,
+                p.getAbDistance(), entryIdx < atrArr.length ? atrArr[entryIdx] : 0,
+                rsiAtP1, rsiAtP2, macdHistAtP1, macdHistAtP2, stochK,
+                dRsi, dAdx, dAdxEma, adxW, adxWEma,
+                macdW, macdSigW, bbWidthW, bbPctBW,
+                dMacd, dMacdSig, dBbWidth, dBbPctB,
+                bbExp, bbAl, rsiSlp, macdHistSlp, adxSlp,
+                p.getAbDistance(), targetEventuallyHit,
+                mfePct, maePct, mfeBars));
+        }
+
+        return new double[] { wins, losses, openCount, totalPnl };
     }
 
     // ─────────────────────────────────────────────────────────────────────────
