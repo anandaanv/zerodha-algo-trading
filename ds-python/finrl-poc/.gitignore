@@ -1,6 +1,7 @@
 .venv/
 .env
-models/*.zip
+# Keep trained models in repo for deployment
+# models/*.zip
 __pycache__/
 *.pyc
 .DS_Store
