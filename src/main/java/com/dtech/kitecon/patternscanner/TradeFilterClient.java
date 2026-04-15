@@ -39,7 +39,7 @@ public class TradeFilterClient {
                         double bbWidthDaily, double bbPctBDaily,
                         double bbExpanding, double bbAligned,
                         double rsiSlope, double macdHistSlope, double adxSlope) {
-        if (!enabled) return 1.0;
+        if (!enabled) return 0.9999;
 
         try {
             Map<String, Object> payload = new HashMap<>();
@@ -86,6 +86,6 @@ public class TradeFilterClient {
         } catch (Exception e) {
             log.warn("[TradeFilter] Scoring failed — failing open: {}", e.getMessage());
         }
-        return 1.0;
+        return 0.9999;
     }
 }
