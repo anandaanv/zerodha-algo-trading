@@ -37,8 +37,8 @@
     "macd_hist_slope",
     "adx_slope"
   ],
-  "trained_on": "/tmp/tlb_1h_only.csv",
-  "n_rows": 2514,
+  "trained_on": "/tmp/tlb_virgin_closed.csv",
+  "n_rows": 660,
   "strategy": "TRENDLINE_BREAKOUT",
   "exit_mode": "trail"
 }
