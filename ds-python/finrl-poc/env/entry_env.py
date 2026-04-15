@@ -200,7 +200,7 @@ class EntryTimingEnv(gym.Env):
                 pnl = (last_close - entry_price) / entry_price - self.OVERHEAD_PCT
             else:
                 pnl = (entry_price - last_close) / entry_price - self.OVERHEAD_PCT
-            theta = bars_held * self.theta_decay / 100.0
+            theta = bars_held * self._theta_per_bar
             return (pnl - theta) * 100.0
         return 0.0
 
