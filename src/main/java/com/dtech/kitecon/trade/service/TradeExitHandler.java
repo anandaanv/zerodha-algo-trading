@@ -68,8 +68,9 @@ public class TradeExitHandler {
 
         ExitReason exitReason = resolveExitReason(signal, ltp);
 
-        // RL exit optimizer check — only if no hard SL/target exit
-        if (exitReason == null) {
+        // RL exit optimizer check — only for equity trades, not options (theta model not deployed)
+        boolean isEquity = "EQ".equalsIgnoreCase(signal.getInstrumentType());
+        if (exitReason == null && isEquity) {
             try {
                 BigDecimal entry = execution.getEntryPriceActual();
                 if (entry != null && entry.compareTo(BigDecimal.ZERO) > 0) {
