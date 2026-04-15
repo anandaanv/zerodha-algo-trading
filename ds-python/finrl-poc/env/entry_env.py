@@ -39,25 +39,25 @@ class EntryTimingEnv(gym.Env):
 
     N_FEATURES = 31
     OVERHEAD_PCT = 0.001
-    THETA_PER_BAR = 0.015  # penalty for waiting
+    THETA_FACTOR = 0.05  # theta = ATR% * this factor
 
     def __init__(self, trades: list[dict], candle_cache: dict,
                  entry_window_bars: int = 20, max_hold_bars: int = 100,
-                 theta_decay: float = 0.015):
+                 theta_factor: float = 0.05):
         """
         Args:
             trades: list of trade dicts with entry_time, entry_price, sl, target, etc.
             candle_cache: dict[symbol] -> DataFrame of candles
             entry_window_bars: how many bars the agent has to decide to enter
             max_hold_bars: max bars to hold after entry (for PnL simulation)
-            theta_decay: penalty per bar for waiting/holding
+            theta_factor: theta = (SL_dist/price) * factor per bar
         """
         super().__init__()
         self.trades = trades
         self.candle_cache = candle_cache
         self.entry_window_bars = entry_window_bars
         self.max_hold_bars = max_hold_bars
-        self.theta_decay = theta_decay
+        self.theta_factor = theta_factor
 
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
@@ -84,6 +84,11 @@ class EntryTimingEnv(gym.Env):
         self._is_long = trade["direction"] == "LONG"
         self._sl = trade["stop_loss"]
         self._target = trade["target"]
+
+        # ATR-linked theta
+        sl_dist = abs(self._entry_price_planned - self._sl)
+        atr_pct = sl_dist / self._entry_price_planned if self._entry_price_planned > 0 else 0.01
+        self._theta_per_bar = atr_pct * self.theta_factor
 
         symbol = trade["symbol"]
         entry_time = pd.Timestamp(trade["entry_time"]).tz_localize(None)
@@ -151,8 +156,8 @@ class EntryTimingEnv(gym.Env):
                 "bars_waited": bars_in_window
             }
 
-        # WAIT — theta penalty
-        return self._get_obs(), -self.theta_decay, terminated, truncated, {}
+        # WAIT — ATR-linked theta penalty
+        return self._get_obs(), -self._theta_per_bar * 100.0, terminated, truncated, {}
 
     def _simulate_trade(self, entry_price, entry_bar_idx):
         """Simulate trade forward from entry, return PnL minus theta."""
@@ -170,22 +175,22 @@ class EntryTimingEnv(gym.Env):
             if is_long and low <= sl:
                 exit_price = sl
                 pnl = (exit_price - entry_price) / entry_price - self.OVERHEAD_PCT
-                theta = bars_held * self.theta_decay / 100.0
+                theta = bars_held * self._theta_per_bar
                 return (pnl - theta) * 100.0
             if not is_long and high >= sl:
                 exit_price = sl
                 pnl = (entry_price - exit_price) / entry_price - self.OVERHEAD_PCT
-                theta = bars_held * self.theta_decay / 100.0
+                theta = bars_held * self._theta_per_bar
                 return (pnl - theta) * 100.0
 
             # Target check
             if is_long and high >= target:
                 pnl = (target - entry_price) / entry_price - self.OVERHEAD_PCT
-                theta = bars_held * self.theta_decay / 100.0
+                theta = bars_held * self._theta_per_bar
                 return (pnl - theta) * 100.0
             if not is_long and low <= target:
                 pnl = (entry_price - target) / entry_price - self.OVERHEAD_PCT
-                theta = bars_held * self.theta_decay / 100.0
+                theta = bars_held * self._theta_per_bar
                 return (pnl - theta) * 100.0
 
         # Max hold — exit at last close

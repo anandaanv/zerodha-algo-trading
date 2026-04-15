@@ -30,11 +30,12 @@ class ExitOptimizerEnv(gym.Env):
 
     N_FEATURES = 31  # 9 entry context + 6 trade vitals + 12 live indicators + 4 candle
     OVERHEAD_PCT = 0.001  # 0.1% transaction cost
-    THETA_DECAY_PER_BAR = 0.015  # ~1.5% per bar penalty for holding (simulates options theta)
+    THETA_FACTOR = 0.05   # theta_per_bar = (ATR / entry_price) * THETA_FACTOR
+                          # e.g., ATR=20, price=1000 → 2% * 0.05 = 0.1% per bar
 
     def __init__(self, trades: list[dict], candle_cache: dict,
                  max_hold_bars: int = 200, ema_period: int = 200,
-                 theta_decay: float = 0.015):
+                 theta_factor: float = 0.05):
         """
         Args:
             trades: list of dicts with keys: symbol, entry_time, entry_price,
@@ -50,7 +51,7 @@ class ExitOptimizerEnv(gym.Env):
         self.candle_cache = candle_cache
         self.max_hold_bars = max_hold_bars
         self.ema_period = ema_period
-        self.theta_decay = theta_decay  # % penalty per bar held (options time decay)
+        self.theta_factor = theta_factor  # theta = ATR/price * this factor
 
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
@@ -69,6 +70,7 @@ class ExitOptimizerEnv(gym.Env):
         self._mfe = 0.0
         self._mae = 0.0
         self._peak = 0.0
+        self._theta_per_bar = 0.001  # default, overridden per trade in reset()
         self._entry_context = np.zeros(9, dtype=np.float32)
 
         # Precomputed indicators per symbol
@@ -85,6 +87,12 @@ class ExitOptimizerEnv(gym.Env):
         self._is_long = trade["direction"] == "LONG"
         self._sl = trade["stop_loss"]
         self._target = trade["target"]
+
+        # Compute ATR-linked theta: theta_per_bar = (SL distance / entry_price) * theta_factor
+        # Using SL distance as ATR proxy since ATR ≈ |entry - SL| / 2
+        sl_dist = abs(self._entry_price - self._sl)
+        atr_pct = sl_dist / self._entry_price if self._entry_price > 0 else 0.01
+        self._theta_per_bar = atr_pct * self.theta_factor  # e.g., 2% * 0.05 = 0.1% per bar
 
         symbol = trade["symbol"]
         entry_time = pd.Timestamp(trade["entry_time"]).tz_localize(None)
@@ -187,9 +195,9 @@ class ExitOptimizerEnv(gym.Env):
             terminated = True
             return self._get_obs(), reward, terminated, truncated, {"exit_reason": "AGENT_EXIT"}
 
-        # HOLD — negative reward for time decay (options theta)
+        # HOLD — negative reward for time decay (options theta, ATR-linked)
         obs = self._get_obs()
-        theta_penalty = -self.theta_decay  # penalty per bar for holding
+        theta_penalty = -self._theta_per_bar * 100.0  # convert to pct points
         return obs, theta_penalty, terminated, truncated, {}
 
     def _calc_pnl(self, exit_price):
@@ -197,8 +205,8 @@ class ExitOptimizerEnv(gym.Env):
             pnl = (exit_price - self._entry_price) / self._entry_price - self.OVERHEAD_PCT
         else:
             pnl = (self._entry_price - exit_price) / self._entry_price - self.OVERHEAD_PCT
-        # Subtract accumulated theta for bars held
-        theta_cost = self._bar_idx * self.theta_decay / 100.0
+        # Subtract accumulated theta for bars held (ATR-linked)
+        theta_cost = self._bar_idx * self._theta_per_bar
         return (pnl - theta_cost) * 100.0  # return as percentage
 
     def _get_obs(self):
