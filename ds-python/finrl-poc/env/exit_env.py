@@ -30,9 +30,11 @@ class ExitOptimizerEnv(gym.Env):
 
     N_FEATURES = 31  # 9 entry context + 6 trade vitals + 12 live indicators + 4 candle
     OVERHEAD_PCT = 0.001  # 0.1% transaction cost
+    THETA_DECAY_PER_BAR = 0.015  # ~1.5% per bar penalty for holding (simulates options theta)
 
     def __init__(self, trades: list[dict], candle_cache: dict,
-                 max_hold_bars: int = 200, ema_period: int = 200):
+                 max_hold_bars: int = 200, ema_period: int = 200,
+                 theta_decay: float = 0.015):
         """
         Args:
             trades: list of dicts with keys: symbol, entry_time, entry_price,
@@ -48,6 +50,7 @@ class ExitOptimizerEnv(gym.Env):
         self.candle_cache = candle_cache
         self.max_hold_bars = max_hold_bars
         self.ema_period = ema_period
+        self.theta_decay = theta_decay  # % penalty per bar held (options time decay)
 
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf,
@@ -184,16 +187,19 @@ class ExitOptimizerEnv(gym.Env):
             terminated = True
             return self._get_obs(), reward, terminated, truncated, {"exit_reason": "AGENT_EXIT"}
 
-        # HOLD — no reward
+        # HOLD — negative reward for time decay (options theta)
         obs = self._get_obs()
-        return obs, 0.0, terminated, truncated, {}
+        theta_penalty = -self.theta_decay  # penalty per bar for holding
+        return obs, theta_penalty, terminated, truncated, {}
 
     def _calc_pnl(self, exit_price):
         if self._is_long:
             pnl = (exit_price - self._entry_price) / self._entry_price - self.OVERHEAD_PCT
         else:
             pnl = (self._entry_price - exit_price) / self._entry_price - self.OVERHEAD_PCT
-        return pnl * 100.0  # return as percentage
+        # Subtract accumulated theta for bars held
+        theta_cost = self._bar_idx * self.theta_decay / 100.0
+        return (pnl - theta_cost) * 100.0  # return as percentage
 
     def _get_obs(self):
         if self._bar_idx >= len(self._bars):
