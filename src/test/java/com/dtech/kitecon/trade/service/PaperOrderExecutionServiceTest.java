@@ -80,7 +80,7 @@ class PaperOrderExecutionServiceTest {
 
         when(tradeOrderRepository.save(any())).thenReturn(savedOrder);
 
-        TradeOrder result = paperOrderExecutionService.enter(signal, config, resolved, quote);
+        TradeOrder result = paperOrderExecutionService.enter(signal, config, resolved, quote, quote);
 
         assertNotNull(result);
         assertEquals(TradeDirection.LONG, result.getDirection());
@@ -140,7 +140,7 @@ class PaperOrderExecutionServiceTest {
 
         when(tradeOrderRepository.save(any())).thenReturn(savedOrder);
 
-        TradeOrder result = paperOrderExecutionService.enter(signal, config, resolved, quote);
+        TradeOrder result = paperOrderExecutionService.enter(signal, config, resolved, quote, quote);
 
         assertNotNull(result);
         assertEquals(TradeDirection.SHORT, result.getDirection());
@@ -179,7 +179,7 @@ class PaperOrderExecutionServiceTest {
 
         when(tradeOrderRepository.save(any())).thenReturn(exitedOrder);
 
-        TradeOrder result = paperOrderExecutionService.exit(order, quote, ExitReason.TARGET_HIT);
+        TradeOrder result = paperOrderExecutionService.exit(order, quote, quote.getLtp(), ExitReason.TARGET_HIT);
 
         assertNotNull(result);
         assertEquals(TradeOrderStatus.CLOSED, result.getStatus());
@@ -220,7 +220,7 @@ class PaperOrderExecutionServiceTest {
 
         when(tradeOrderRepository.save(any())).thenReturn(exitedOrder);
 
-        TradeOrder result = paperOrderExecutionService.exit(order, quote, ExitReason.STOP_HIT);
+        TradeOrder result = paperOrderExecutionService.exit(order, quote, quote.getLtp(), ExitReason.STOP_HIT);
 
         assertNotNull(result);
         assertEquals(TradeOrderStatus.CLOSED, result.getStatus());
@@ -259,7 +259,7 @@ class PaperOrderExecutionServiceTest {
 
         when(tradeOrderRepository.save(any())).thenReturn(exitedOrder);
 
-        TradeOrder result = paperOrderExecutionService.exit(order, quote, ExitReason.TARGET_HIT);
+        TradeOrder result = paperOrderExecutionService.exit(order, quote, quote.getLtp(), ExitReason.TARGET_HIT);
 
         assertNotNull(result);
         assertEquals(TradeOrderStatus.CLOSED, result.getStatus());

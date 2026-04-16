@@ -41,7 +41,8 @@ public class TradeOrchestrationService {
                         signal.getSymbol(), signal.getInstrumentToken());
 
                 if (underlyingQuote == null) {
-                    log.warn("No quote available for underlying symbol {}", signal.getSymbol());
+                    log.warn("No underlying quote for {}, skipping entry for segment {}",
+                            signal.getSymbol(), config.getSegment());
                     continue;
                 }
 
@@ -53,10 +54,13 @@ public class TradeOrchestrationService {
                         resolved.getTradingSymbol(), resolved.getInstrumentToken());
 
                 if (instrumentQuote == null) {
-                    instrumentQuote = underlyingQuote;
+                    log.warn("No instrument quote for {} (token={}), skipping entry. " +
+                            "Will retry on next entry-handler poll.",
+                            resolved.getTradingSymbol(), resolved.getInstrumentToken());
+                    continue;
                 }
 
-                paperOrderExecutionService.enter(signal, config, resolved, instrumentQuote);
+                paperOrderExecutionService.enter(signal, config, resolved, instrumentQuote, underlyingQuote);
 
             } catch (Exception e) {
                 log.error("Error creating paper order for signal {} segment {}: {}",
@@ -73,17 +77,29 @@ public class TradeOrchestrationService {
                 QuoteResult quote = marketQuoteService.getQuote(order.getSymbol(), order.getInstrumentToken());
 
                 if (quote == null) {
-                    log.warn("No quote available for symbol {}, using entry price as fallback", order.getSymbol());
-                    quote = QuoteResult.builder()
-                            .symbol(order.getSymbol())
-                            .instrumentToken(order.getInstrumentToken())
-                            .ltp(order.getEntryPrice())
-                            .askPrice(order.getEntryPrice())
-                            .bidPrice(order.getEntryPrice())
-                            .build();
+                    // No silent fallback: leave order OPEN so the next exit-handler poll retries.
+                    // Using entry price as a fake exit price (the previous behaviour) produced
+                    // bogus zero-P&L closes and was indistinguishable from a genuine flat trade.
+                    log.warn("No quote for order {} symbol {} (token={}). " +
+                            "Leaving OPEN for next poll retry.",
+                            order.getId(), order.getSymbol(), order.getInstrumentToken());
+                    continue;
                 }
 
-                paperOrderExecutionService.exit(order, quote, reason);
+                // Best-effort capture of underlying spot for audit.
+                BigDecimal underlyingLtp = null;
+                try {
+                    QuoteResult underlyingQuote = marketQuoteService.getQuote(
+                            order.getUnderlyingSymbol(), null);
+                    if (underlyingQuote != null) {
+                        underlyingLtp = underlyingQuote.getLtp();
+                    }
+                } catch (Exception ue) {
+                    log.debug("Underlying quote fetch failed for {}: {}",
+                            order.getUnderlyingSymbol(), ue.getMessage());
+                }
+
+                paperOrderExecutionService.exit(order, quote, underlyingLtp, reason);
 
             } catch (Exception e) {
                 log.error("Error exiting paper order {}: {}", order.getId(), e.getMessage(), e);

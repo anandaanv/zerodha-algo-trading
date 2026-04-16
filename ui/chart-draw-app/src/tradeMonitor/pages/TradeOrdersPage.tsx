@@ -295,13 +295,16 @@ const TradeOrdersPage: React.FC = () => {
       <table style={tableStyle}>
         <thead>
           <tr>
-            <th style={thStyle}>Time</th>
+            <th style={thStyle}>Entry Time</th>
+            <th style={thStyle}>Exit Time</th>
             <th style={thStyle}>Symbol</th>
             <th style={thStyle}>Segment</th>
-            <th style={thStyle}>Direction</th>
+            <th style={thStyle}>Dir</th>
             <th style={thStyle}>Qty</th>
             <th style={thStyle}>Entry</th>
             <th style={thStyle}>Exit</th>
+            <th style={thStyle}>Stop</th>
+            <th style={thStyle}>Target</th>
             <th style={thStyle}>P&L</th>
             <th style={thStyle}>Status</th>
             <th style={thStyle}>Exit Reason</th>
@@ -312,7 +315,7 @@ const TradeOrdersPage: React.FC = () => {
           {orders.length === 0 ? (
             <tr>
               <td
-                colSpan={11}
+                colSpan={14}
                 style={{
                   ...tdStyle,
                   textAlign: "center",
@@ -328,6 +331,11 @@ const TradeOrdersPage: React.FC = () => {
                 <td style={tdStyle}>
                   {new Date(order.entryTime).toLocaleString()}
                 </td>
+                <td style={tdStyle}>
+                  {order.exitTime
+                    ? new Date(order.exitTime).toLocaleString()
+                    : "-"}
+                </td>
                 <td style={tdStyle}>{order.symbol}</td>
                 <td style={tdStyle}>{order.segment}</td>
                 <td style={tdStyle}>
@@ -336,12 +344,34 @@ const TradeOrdersPage: React.FC = () => {
                   </span>
                 </td>
                 <td style={tdStyle}>{order.quantity}</td>
-                <td style={tdStyle}>{order.entryPrice.toFixed(4)}</td>
                 <td style={tdStyle}>
-                  {order.exitPrice ? order.exitPrice.toFixed(4) : "-"}
+                  {order.entryPrice != null ? order.entryPrice.toFixed(4) : "-"}
+                  {order.segment === "OPT" &&
+                    order.underlyingEntryPrice != null && (
+                      <div style={{ fontSize: 10, color: "#888" }}>
+                        {order.underlyingSymbol} @{" "}
+                        {order.underlyingEntryPrice.toFixed(2)}
+                      </div>
+                    )}
+                </td>
+                <td style={tdStyle}>
+                  {order.exitPrice != null ? order.exitPrice.toFixed(4) : "-"}
+                  {order.segment === "OPT" &&
+                    order.underlyingExitPrice != null && (
+                      <div style={{ fontSize: 10, color: "#888" }}>
+                        {order.underlyingSymbol} @{" "}
+                        {order.underlyingExitPrice.toFixed(2)}
+                      </div>
+                    )}
+                </td>
+                <td style={tdStyle}>
+                  {order.stopLoss != null ? order.stopLoss.toFixed(2) : "-"}
+                </td>
+                <td style={tdStyle}>
+                  {order.target != null ? order.target.toFixed(2) : "-"}
                 </td>
                 <td style={pnlStyle(order.realisedPnl)}>
-                  {order.realisedPnl !== undefined ? (
+                  {order.realisedPnl != null ? (
                     <>
                       {order.realisedPnl > 0 ? "+" : ""}
                       {order.realisedPnl.toFixed(2)}

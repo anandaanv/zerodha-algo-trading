@@ -102,7 +102,7 @@ class TradeOrchestrationServiceTest {
 
         tradeOrchestrationService.onEntryTriggered(signal);
 
-        verify(paperOrderExecutionService, times(2)).enter(any(), any(), any(), any());
+        verify(paperOrderExecutionService, times(2)).enter(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -117,7 +117,7 @@ class TradeOrchestrationServiceTest {
 
         tradeOrchestrationService.onEntryTriggered(signal);
 
-        verify(paperOrderExecutionService, never()).enter(any(), any(), any(), any());
+        verify(paperOrderExecutionService, never()).enter(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -151,7 +151,7 @@ class TradeOrchestrationServiceTest {
 
         tradeOrchestrationService.onExitTriggered(signal, ExitReason.TARGET_HIT);
 
-        verify(paperOrderExecutionService, times(1)).exit(eq(order), any(), eq(ExitReason.TARGET_HIT));
+        verify(paperOrderExecutionService, times(1)).exit(eq(order), any(), any(), eq(ExitReason.TARGET_HIT));
     }
 
     @Test
@@ -178,6 +178,6 @@ class TradeOrchestrationServiceTest {
 
         tradeOrchestrationService.onExitTriggered(signal, ExitReason.STOP_HIT);
 
-        verify(paperOrderExecutionService, times(1)).exit(eq(order), any(), eq(ExitReason.STOP_HIT));
+        verify(paperOrderExecutionService, never()).exit(any(), any(), any(), any());
     }
 }

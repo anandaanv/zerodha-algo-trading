@@ -8,6 +8,7 @@ import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.kitecon.trade.enums.ExitReason;
 import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeOrderStatus;
+import com.dtech.kitecon.trade.enums.TradingSegment;
 import com.dtech.kitecon.trade.repository.TradeOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,26 +27,37 @@ public class PaperOrderExecutionService {
     private final CapitalAllocationService capitalAllocationService;
 
     public TradeOrder enter(TradeSignal signal, SegmentConfig config,
-                           ResolvedInstrument resolved, QuoteResult quote) {
-        BigDecimal entryPrice;
-        if (signal.getDirection() == TradeDirection.LONG) {
-            entryPrice = quote.getAskPrice();
-        } else {
-            entryPrice = quote.getBidPrice();
-        }
+                           ResolvedInstrument resolved,
+                           QuoteResult instrumentQuote,
+                           QuoteResult underlyingQuote) {
+        // For OPT, we always BUY the option (LONG position on the option itself),
+        // regardless of whether the underlying signal is bullish (→ CE) or bearish (→ PE).
+        // For EQ/FUT, the order direction mirrors the signal direction.
+        TradeDirection orderDirection = (config.getSegment() == TradingSegment.OPT)
+                ? TradeDirection.LONG
+                : signal.getDirection();
+
+        BigDecimal entryPrice = (orderDirection == TradeDirection.LONG)
+                ? instrumentQuote.getAskPrice()
+                : instrumentQuote.getBidPrice();
 
         int qty = capitalAllocationService.computeQuantity(
                 config.getCapitalPct(), entryPrice, resolved.getLotSize());
+
+        BigDecimal underlyingEntry = underlyingQuote != null ? underlyingQuote.getLtp() : null;
 
         TradeOrder order = TradeOrder.builder()
                 .signal(signal)
                 .symbol(resolved.getTradingSymbol())
                 .underlyingSymbol(signal.getSymbol())
                 .segment(config.getSegment())
-                .direction(signal.getDirection())
+                .direction(orderDirection)
                 .quantity(qty)
                 .lotSize(resolved.getLotSize())
                 .entryPrice(entryPrice)
+                .underlyingEntryPrice(underlyingEntry)
+                .stopLoss(signal.getStopLoss())
+                .target(signal.getTarget())
                 .entryTime(Instant.now())
                 .status(TradeOrderStatus.OPEN)
                 .instrumentType(resolved.getInstrumentType())
@@ -57,20 +69,19 @@ public class PaperOrderExecutionService {
 
         order = tradeOrderRepository.save(order);
 
-        log.info("[PaperOrder] ENTER signal={} {} segment={} qty={} price={} instrument={}",
+        log.info("[PaperOrder] ENTER signal={} {} segment={} qty={} price={} underlyingLtp={} sl={} target={} instrument={}",
                 signal.getId(), signal.getSymbol(), config.getSegment(), qty, entryPrice,
+                underlyingEntry, signal.getStopLoss(), signal.getTarget(),
                 resolved.getInstrumentType());
 
         return order;
     }
 
-    public TradeOrder exit(TradeOrder order, QuoteResult quote, ExitReason reason) {
-        BigDecimal exitPrice;
-        if (order.getDirection() == TradeDirection.LONG) {
-            exitPrice = quote.getBidPrice();
-        } else {
-            exitPrice = quote.getAskPrice();
-        }
+    public TradeOrder exit(TradeOrder order, QuoteResult instrumentQuote,
+                          BigDecimal underlyingLtp, ExitReason reason) {
+        BigDecimal exitPrice = (order.getDirection() == TradeDirection.LONG)
+                ? instrumentQuote.getBidPrice()
+                : instrumentQuote.getAskPrice();
 
         BigDecimal pnl;
         if (order.getDirection() == TradeDirection.LONG) {
@@ -84,6 +95,7 @@ public class PaperOrderExecutionService {
         }
 
         order.setExitPrice(exitPrice);
+        order.setUnderlyingExitPrice(underlyingLtp);
         order.setExitTime(Instant.now());
         order.setExitReason(reason);
         order.setRealisedPnl(pnl);
@@ -91,8 +103,8 @@ public class PaperOrderExecutionService {
 
         order = tradeOrderRepository.save(order);
 
-        log.info("[PaperOrder] EXIT order={} {} reason={} exitPrice={} pnl={}",
-                order.getId(), order.getSymbol(), reason, exitPrice, pnl);
+        log.info("[PaperOrder] EXIT order={} {} reason={} exitPrice={} underlyingLtp={} pnl={}",
+                order.getId(), order.getSymbol(), reason, exitPrice, underlyingLtp, pnl);
 
         return order;
     }
