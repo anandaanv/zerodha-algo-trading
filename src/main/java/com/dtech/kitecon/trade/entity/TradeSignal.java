@@ -78,7 +78,7 @@ public class TradeSignal {
     @Column(precision = 8, scale = 4)
     private BigDecimal stochRsiK;
 
-    @Column(length = 10)
+    @Column(length = 30)
     private String timeframe;
 
     @Column(name = "signal_time")
