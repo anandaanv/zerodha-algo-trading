@@ -1,0 +1,17 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: CANBK
+Timeframe: 1h
+Period: 2025-09-12T03:45:00Z to 2026-04-13T06:45:00Z
+Total pivots: 135
+
+Labels:
+  wave3_start: 0
+  wave5_start: 0
+  no_impulse:  135
+
+WAVE 3 STARTS
+-------------
+
+WAVE 5 STARTS
+--------------

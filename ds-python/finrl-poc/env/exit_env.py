@@ -119,6 +119,7 @@ class ExitOptimizerEnv(gym.Env):
         self._mfe = 0.0
         self._mae = 0.0
         self._peak = self._entry_price
+        self._prev_close = self._entry_price  # for mark-to-market delta
 
         # Entry context — frozen features from the backtest CSV (same every bar)
         def _s(key, default=0.0):
@@ -195,19 +196,26 @@ class ExitOptimizerEnv(gym.Env):
             terminated = True
             return self._get_obs(), reward, terminated, truncated, {"exit_reason": "AGENT_EXIT"}
 
-        # HOLD — negative reward for time decay (options theta, ATR-linked)
+        # HOLD — mark-to-market reward: incremental unrealized PnL delta minus theta.
+        # Using delta (not cumulative) avoids both double-penalty and the "exit-immediately-
+        # for-small-positive" trap.  Theta discourages holding losing/flat positions.
+        if self._is_long:
+            bar_delta = (close - self._prev_close) / self._entry_price
+        else:
+            bar_delta = (self._prev_close - close) / self._entry_price
+        self._prev_close = close
+        hold_reward = (bar_delta - self._theta_per_bar) * 100.0
         obs = self._get_obs()
-        theta_penalty = -self._theta_per_bar * 100.0  # convert to pct points
-        return obs, theta_penalty, terminated, truncated, {}
+        return obs, hold_reward, terminated, truncated, {}
 
     def _calc_pnl(self, exit_price):
+        # On exit, realized PnL from last close to exit_price (incremental),
+        # minus transaction overhead.  Theta already paid bar-by-bar during HOLD.
         if self._is_long:
-            pnl = (exit_price - self._entry_price) / self._entry_price - self.OVERHEAD_PCT
+            pnl = (exit_price - self._prev_close) / self._entry_price - self.OVERHEAD_PCT
         else:
-            pnl = (self._entry_price - exit_price) / self._entry_price - self.OVERHEAD_PCT
-        # Subtract accumulated theta for bars held (ATR-linked)
-        theta_cost = self._bar_idx * self._theta_per_bar
-        return (pnl - theta_cost) * 100.0  # return as percentage
+            pnl = (self._prev_close - exit_price) / self._entry_price - self.OVERHEAD_PCT
+        return pnl * 100.0  # return as percentage
 
     def _get_obs(self):
         if self._bar_idx >= len(self._bars):

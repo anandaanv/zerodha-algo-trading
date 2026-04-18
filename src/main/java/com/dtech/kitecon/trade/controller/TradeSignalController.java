@@ -1,10 +1,12 @@
 package com.dtech.kitecon.trade.controller;
 
+import com.dtech.kitecon.trade.entity.TradeActionLog;
 import com.dtech.kitecon.trade.entity.TradeOrder;
 import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.kitecon.trade.enums.TradeStatus;
 import com.dtech.kitecon.trade.repository.TradeOrderRepository;
 import com.dtech.kitecon.trade.repository.TradeSignalRepository;
+import com.dtech.kitecon.trade.service.TradeActionLogger;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,7 @@ public class TradeSignalController {
 
     private final TradeSignalRepository tradeSignalRepository;
     private final TradeOrderRepository tradeOrderRepository;
+    private final TradeActionLogger tradeActionLogger;
 
     @GetMapping({"", "/"})
     public ResponseEntity<List<TradeSignal>> getSignals(@RequestParam(required = false) String status) {
@@ -85,5 +88,10 @@ public class TradeSignalController {
         }
         List<TradeOrder> orders = tradeOrderRepository.findBySignal_Id(id);
         return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping("/trade-actions/{signalId}")
+    public List<TradeActionLog> getTradeActions(@PathVariable Long signalId) {
+        return tradeActionLogger.getHistory(signalId);
     }
 }

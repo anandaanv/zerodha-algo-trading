@@ -1,5 +1,6 @@
 package com.dtech.kitecon.trade.entity;
 
+import com.dtech.kitecon.trade.enums.StrategyType;
 import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeStatus;
 import jakarta.persistence.*;
@@ -99,10 +100,21 @@ public class TradeSignal {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private StrategyType strategyType;  // defaults to DTB for backward compat
+
+    @Column(precision = 14, scale = 4)
+    private BigDecimal w1Size;  // Wave 1 absolute size (for impulse slab computation)
+
+    @Column
+    private Integer currentSlabIndex;  // Current locked slab level (-1 = no slab reached)
+
     @PrePersist
     void prePersist() {
         createdAt = updatedAt = Instant.now();
         if (status == null) status = TradeStatus.WATCHING_ENTRY;
+        if (strategyType == null) strategyType = StrategyType.DTB;
     }
 
     @PreUpdate

@@ -1,0 +1,17 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: HINDUNILVR
+Timeframe: 1h
+Period: 2025-09-12T03:45:00Z to 2026-04-13T03:45:00Z
+Total pivots: 119
+
+Labels:
+  wave3_start: 0
+  wave5_start: 0
+  no_impulse:  119
+
+WAVE 3 STARTS
+-------------
+
+WAVE 5 STARTS
+--------------

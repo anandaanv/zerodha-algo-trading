@@ -1,0 +1,17 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: TITAN
+Timeframe: 1d
+Period: 2022-05-11T18:30:00Z to 2026-04-09T18:30:00Z
+Total pivots: 84
+
+Labels:
+  wave3_start: 0
+  wave5_start: 0
+  no_impulse:  84
+
+WAVE 3 STARTS
+-------------
+
+WAVE 5 STARTS
+--------------

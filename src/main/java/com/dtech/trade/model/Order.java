@@ -15,7 +15,8 @@ import java.time.ZonedDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-@Entity(name = "trade_order")
+@Entity(name = "legacyOrder")
+@Table(name = "legacy_order")
 public class Order implements RealTradeOrder {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)

@@ -1,0 +1,17 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: ADANIENT
+Timeframe: 1d
+Period: 2022-04-26T18:30:00Z to 2026-04-07T18:30:00Z
+Total pivots: 107
+
+Labels:
+  wave3_start: 0
+  wave5_start: 0
+  no_impulse:  107
+
+WAVE 3 STARTS
+-------------
+
+WAVE 5 STARTS
+--------------

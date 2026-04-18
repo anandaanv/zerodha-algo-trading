@@ -7,6 +7,7 @@ import {
   TradeSummaryDto,
   TradeOrderStatus,
 } from "../api";
+import { TradeActionTimelineDark } from "../components/TradeActionTimelineDark";
 
 const TradeOrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<TradeOrder[]>([]);
@@ -18,6 +19,7 @@ const TradeOrdersPage: React.FC = () => {
   );
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string>("");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const fetchData = async (status?: string) => {
     setLoading(true);
@@ -327,8 +329,15 @@ const TradeOrdersPage: React.FC = () => {
             </tr>
           ) : (
             orders.map((order) => (
-              <tr key={order.id}>
+              <React.Fragment key={order.id}>
+              <tr
+                onClick={() => order.signal?.id && setExpandedId(prev => prev === order.signal!.id ? null : order.signal!.id)}
+                style={{ cursor: "pointer" }}
+              >
                 <td style={tdStyle}>
+                  <span style={{ marginRight: 8, fontSize: 10, color: "#888" }}>
+                    {expandedId === order.signal?.id ? "▼" : "▶"}
+                  </span>
                   {new Date(order.entryTime).toLocaleString()}
                 </td>
                 <td style={tdStyle}>
@@ -390,6 +399,14 @@ const TradeOrdersPage: React.FC = () => {
                 <td style={tdStyle}>{order.exitReason || "-"}</td>
                 <td style={tdStyle}>{order.signal?.patternType || "-"}</td>
               </tr>
+              {expandedId === order.signal?.id && order.signal?.id && (
+                <tr key={`exp-${order.id}`}>
+                  <td colSpan={14} style={{ padding: 0 }}>
+                    <TradeActionTimelineDark signalId={order.signal!.id} />
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))
           )}
         </tbody>

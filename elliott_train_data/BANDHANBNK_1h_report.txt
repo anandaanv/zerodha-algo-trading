@@ -1,0 +1,20 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: BANDHANBNK
+Timeframe: 1h
+Period: 2025-09-15T03:45:00Z to 2026-04-13T08:45:00Z
+Total pivots: 134
+
+Labels:
+  wave3_start: 1
+  wave5_start: 0
+  no_impulse:  133
+
+WAVE 3 STARTS
+-------------
+#1  Date: 2025-12-05T03:45:00Z | Price: 146.64 | Direction: SHORT
+    W1: 147.31→142.22 (-3.5%) | W2: 146.64 (ret 86.8%) | W3: 146.64→134.25 (2.43x W1)
+
+
+WAVE 5 STARTS
+--------------

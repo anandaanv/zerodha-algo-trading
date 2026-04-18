@@ -1,0 +1,20 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: BOSCHLTD
+Timeframe: 1h
+Period: 2025-09-15T08:45:00Z to 2026-04-13T03:45:00Z
+Total pivots: 125
+
+Labels:
+  wave3_start: 1
+  wave5_start: 0
+  no_impulse:  124
+
+WAVE 3 STARTS
+-------------
+#1  Date: 2026-03-04T03:45:00Z | Price: 34900.00 | Direction: SHORT
+    W1: 35370.00→33920.00 (-4.1%) | W2: 34900.00 (ret 67.6%) | W3: 34900.00→28610.00 (4.34x W1)
+
+
+WAVE 5 STARTS
+--------------

@@ -432,6 +432,38 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* ZigZag Viewer Card - USER */}
+        {hasRole("USER") && (
+          <div
+            onClick={() => navigate("/zigzag-viewer")}
+            style={{
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2.5rem",
+              cursor: "pointer",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
+              transition: "transform 0.2s, box-shadow 0.2s",
+              textAlign: "center",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "translateY(-8px)";
+              e.currentTarget.style.boxShadow = "0 20px 40px rgba(0,0,0,0.2)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.boxShadow = "0 10px 30px rgba(0,0,0,0.15)";
+            }}
+          >
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>⬇️</div>
+            <h2 style={{ fontSize: "1.5rem", marginBottom: "0.5rem", color: "#333", fontWeight: 600 }}>
+              ZigZag Viewer
+            </h2>
+            <p style={{ color: "#666", fontSize: "0.95rem" }}>
+              View ZigZag pivots over faint candles for any symbol + timeframe
+            </p>
+          </div>
+        )}
+
         {/* Pipeline Card - USER */}
         {hasRole("USER") && (
           <div

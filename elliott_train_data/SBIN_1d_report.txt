@@ -1,0 +1,17 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: SBIN
+Timeframe: 1d
+Period: 2022-04-10T18:30:00Z to 2026-04-07T18:30:00Z
+Total pivots: 93
+
+Labels:
+  wave3_start: 0
+  wave5_start: 0
+  no_impulse:  93
+
+WAVE 3 STARTS
+-------------
+
+WAVE 5 STARTS
+--------------

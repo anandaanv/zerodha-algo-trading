@@ -24,6 +24,10 @@ public class ZigZagPoint {
     private Double retracementPct;
     private Double extensionPct;
 
+    private Double legSizePct;       // percentage move from prior pivot to this one: |thisPrice - priorPrice| / priorPrice * 100
+    private Double legDurationBars;  // number of bars from prior pivot to this one
+    private Double legSpeed;         // legSizePct / legDurationBars (move intensity per bar)
+
     private void setSequence(long sequence) {
         this.sequence = sequence;
         this.barIndex = Long.valueOf((sequence - LocalDateTime.of(LocalDate.ofYearDay(2000,1), LocalTime.of(0,0))

@@ -1,0 +1,20 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: APOLLOTYRE
+Timeframe: 1h
+Period: 2025-09-12T05:45:00Z to 2026-04-13T03:45:00Z
+Total pivots: 141
+
+Labels:
+  wave3_start: 1
+  wave5_start: 0
+  no_impulse:  140
+
+WAVE 3 STARTS
+-------------
+#1  Date: 2026-02-16T03:45:00Z | Price: 492.00 | Direction: SHORT
+    W1: 500.55→482.35 (-3.6%) | W2: 492.00 (ret 53.0%) | W3: 492.00→392.05 (5.49x W1)
+
+
+WAVE 5 STARTS
+--------------

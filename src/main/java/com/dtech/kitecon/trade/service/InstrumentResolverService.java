@@ -25,12 +25,17 @@ public class InstrumentResolverService {
 
     public ResolvedInstrument resolve(String symbol, TradingSegment segment,
                                      TradeDirection direction, BigDecimal underlyingLtp) {
+        return resolve(symbol, segment, direction, underlyingLtp, 0.0);
+    }
+
+    public ResolvedInstrument resolve(String symbol, TradingSegment segment,
+                                     TradeDirection direction, BigDecimal underlyingLtp, double otmPct) {
         if (segment == TradingSegment.EQ) {
             return resolveEQ(symbol);
         } else if (segment == TradingSegment.FUT) {
             return resolveFUT(symbol);
         } else {
-            return resolveOPT(symbol, direction, underlyingLtp);
+            return resolveOPT(symbol, direction, underlyingLtp, otmPct);
         }
     }
 
@@ -75,7 +80,19 @@ public class InstrumentResolverService {
                 .build();
     }
 
+    /**
+     * Resolve an OTM option instrument.
+     * @param otmPct how far OTM (0.0 = ATM, 0.03 = 3% OTM)
+     */
+    public ResolvedInstrument resolveOTMOption(String symbol, TradeDirection direction, BigDecimal underlyingLtp, double otmPct) {
+        return resolveOPT(symbol, direction, underlyingLtp, otmPct);
+    }
+
     private ResolvedInstrument resolveOPT(String symbol, TradeDirection direction, BigDecimal underlyingLtp) {
+        return resolveOPT(symbol, direction, underlyingLtp, 0.0);
+    }
+
+    private ResolvedInstrument resolveOPT(String symbol, TradeDirection direction, BigDecimal underlyingLtp, double otmPct) {
         String optionType = direction == TradeDirection.LONG ? "CE" : "PE";
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime cutoff = now.plusDays(45);
@@ -99,11 +116,19 @@ public class InstrumentResolverService {
                 .orElseThrow(() -> new RuntimeException("No expiry found"));
 
         double ltp = underlyingLtp.doubleValue();
+        // For OTM: offset the target strike from LTP
+        double targetStrike = ltp;
+        if (otmPct > 0) {
+            targetStrike = direction == TradeDirection.LONG
+                    ? ltp * (1 + otmPct)   // CE strike above LTP
+                    : ltp * (1 - otmPct);  // PE strike below LTP
+        }
+        final double ts = targetStrike;
         Instrument atm = options.stream()
                 .filter(i -> nearestExpiry.equals(i.getExpiry()))
                 .filter(i -> i.getStrike() != null)
-                .min(Comparator.comparingDouble(i -> Math.abs(Double.parseDouble(i.getStrike()) - ltp)))
-                .orElseThrow(() -> new RuntimeException("No ATM option found for: " + symbol));
+                .min(Comparator.comparingDouble(i -> Math.abs(Double.parseDouble(i.getStrike()) - ts)))
+                .orElseThrow(() -> new RuntimeException("No option found for: " + symbol + " near strike " + ts));
 
         return ResolvedInstrument.builder()
                 .tradingSymbol(atm.getTradingsymbol())

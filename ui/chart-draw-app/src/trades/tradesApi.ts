@@ -1,5 +1,5 @@
 import type { Trade } from "./types";
-import {apiFetch} from "../config/api";
+import {apiFetch, getApiUrl} from "../config/api";
 import {withAuth} from "../utils/apiHelper";
 
 function toIsoDate(d?: Date) {
@@ -43,4 +43,25 @@ export async function fetchTradeById(id: string | number): Promise<Trade> {
     throw new Error(`Failed to fetch trade ${id}: ${res.status} ${res.statusText}`);
   }
   return (await res.json()) as Trade;
+}
+
+export interface TradeAction {
+  id: number;
+  timestamp: string;
+  action: string;
+  symbol: string;
+  price: number | null;
+  stopLevel: number | null;
+  slabIndex: number | null;
+  pnlPct: number | null;
+  detail: string | null;
+}
+
+export async function fetchTradeActions(signalId: number): Promise<TradeAction[]> {
+  const res = await fetch(
+    getApiUrl(`/api/trade-signals/trade-actions/${signalId}`).toString(),
+    withAuth()
+  );
+  if (!res.ok) return [];
+  return res.json();
 }

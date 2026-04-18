@@ -3,8 +3,10 @@ package com.dtech.kitecon.trade.service;
 import com.dtech.kitecon.trade.dto.QuoteResult;
 import com.dtech.kitecon.trade.dto.ResolvedInstrument;
 import com.dtech.kitecon.trade.entity.SegmentConfig;
+import com.dtech.kitecon.trade.entity.TradeActionLog;
 import com.dtech.kitecon.trade.entity.TradeOrder;
 import com.dtech.kitecon.trade.entity.TradeSignal;
+import com.dtech.kitecon.trade.enums.StrategyType;
 import com.dtech.kitecon.trade.enums.ExitReason;
 import com.dtech.kitecon.trade.enums.TradeOrderStatus;
 import com.dtech.kitecon.trade.repository.SegmentConfigRepository;
@@ -26,6 +28,7 @@ public class TradeOrchestrationService {
     private final MarketQuoteService marketQuoteService;
     private final PaperOrderExecutionService paperOrderExecutionService;
     private final TradeOrderRepository tradeOrderRepository;
+    private final TradeActionLogger tradeActionLogger;
 
     public void onEntryTriggered(TradeSignal signal) {
         List<SegmentConfig> configs = segmentConfigRepository.findBySymbolAndEnabledTrue(signal.getSymbol());
@@ -47,8 +50,10 @@ public class TradeOrchestrationService {
                 }
 
                 BigDecimal ltp = underlyingQuote.getLtp();
+                // Use OTM for impulse strategy, ATM for DTB
+                double otmPct = (signal.getStrategyType() == StrategyType.IMPULSE) ? 0.03 : 0.0;
                 ResolvedInstrument resolved = instrumentResolverService.resolve(
-                        signal.getSymbol(), config.getSegment(), signal.getDirection(), ltp);
+                        signal.getSymbol(), config.getSegment(), signal.getDirection(), ltp, otmPct);
 
                 QuoteResult instrumentQuote = marketQuoteService.getQuote(
                         resolved.getTradingSymbol(), resolved.getInstrumentToken());
@@ -61,6 +66,11 @@ public class TradeOrchestrationService {
                 }
 
                 paperOrderExecutionService.enter(signal, config, resolved, instrumentQuote, underlyingQuote);
+                try {
+                    tradeActionLogger.log(signal, TradeActionLog.TradeAction.ENTRY_FILLED, ltp, "Order placed");
+                } catch (Exception e) {
+                    log.warn("Failed to log trade action: {}", e.getMessage());
+                }
 
             } catch (Exception e) {
                 log.error("Error creating paper order for signal {} segment {}: {}",
@@ -100,6 +110,17 @@ public class TradeOrchestrationService {
                 }
 
                 paperOrderExecutionService.exit(order, quote, underlyingLtp, reason);
+                try {
+                    TradeActionLog.TradeAction exitAction = reason == ExitReason.STOP_HIT
+                            ? TradeActionLog.TradeAction.STOP_HIT
+                            : (reason == ExitReason.TARGET_HIT
+                                ? TradeActionLog.TradeAction.TARGET_HIT
+                                : TradeActionLog.TradeAction.REVERSAL_EXIT);
+                    tradeActionLogger.logWithPnl(signal, exitAction, quote.getLtp(), null,
+                            "Exit reason=" + reason);
+                } catch (Exception e) {
+                    log.warn("Failed to log trade action: {}", e.getMessage());
+                }
 
             } catch (Exception e) {
                 log.error("Error exiting paper order {}: {}", order.getId(), e.getMessage(), e);

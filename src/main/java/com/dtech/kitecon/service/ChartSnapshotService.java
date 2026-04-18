@@ -404,7 +404,7 @@ public class ChartSnapshotService {
             Long to = endDate != null
                 ? endDate.atTime(23, 59, 59).toEpochSecond(ZoneOffset.UTC) : null;
 
-            List<OhlcBarDTO> bars = chartDataService.getBars(symbol, timeframe, from, to);
+            List<OhlcBarDTO> bars = chartDataService.getBars(symbol, timeframe, from, to, true);
             return bars.stream()
                 .map(b -> ValidationInput.OHLCData.builder()
                     .timestamp(b.getTime())

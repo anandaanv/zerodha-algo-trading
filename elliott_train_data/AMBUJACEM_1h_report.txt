@@ -1,0 +1,17 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: AMBUJACEM
+Timeframe: 1h
+Period: 2025-09-11T06:45:00Z to 2026-04-13T06:45:00Z
+Total pivots: 118
+
+Labels:
+  wave3_start: 0
+  wave5_start: 0
+  no_impulse:  118
+
+WAVE 3 STARTS
+-------------
+
+WAVE 5 STARTS
+--------------

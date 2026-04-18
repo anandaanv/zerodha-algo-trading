@@ -1,0 +1,20 @@
+IMPULSE SCAN SUMMARY
+====================
+Stock: ADANIENSOL
+Timeframe: 1h
+Period: 2025-09-11T04:45:00Z to 2026-04-13T06:45:00Z
+Total pivots: 127
+
+Labels:
+  wave3_start: 1
+  wave5_start: 0
+  no_impulse:  126
+
+WAVE 3 STARTS
+-------------
+#1  Date: 2026-01-13T03:45:00Z | Price: 963.10 | Direction: SHORT
+    W1: 969.00→934.10 (-3.6%) | W2: 963.10 (ret 83.1%) | W3: 963.10→876.30 (2.49x W1)
+
+
+WAVE 5 STARTS
+--------------

@@ -45,6 +45,9 @@ import GroupManagementPage from './admin/groups/GroupManagementPage';
 // Pattern Screener (scheduled screener management)
 import PatternScreenerPage from "./patternScreener/pages/PatternScreenerPage";
 
+// ZigZag Viewer
+import ZigZagViewer from "./pages/ZigZagViewer";
+
 // Pipeline
 import PipelinePage from "./pipeline/pages/PipelinePage";
 
@@ -218,6 +221,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="USER">
               <PatternScreenerPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/zigzag-viewer"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <ZigZagViewer />
             </ProtectedRoute>
           }
         />
