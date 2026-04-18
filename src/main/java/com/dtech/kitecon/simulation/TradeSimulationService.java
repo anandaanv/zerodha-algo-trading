@@ -163,6 +163,7 @@ public class TradeSimulationService {
                                     .entryTime(t)
                                     .status(TradeOrderStatus.OPEN)
                                     .instrumentType("EQ")
+                                    .instrumentToken(sig.getInstrumentToken() != null ? sig.getInstrumentToken() : 0L)
                                     .paperTrade(true)
                                     .stopLoss(sig.getStopLoss())
                                     .target(sig.getTarget())
