@@ -82,7 +82,26 @@ public class TradeSimulationService {
                 log.warn("[Simulation] Failed to load series for {}: {}", symbol, e.getMessage());
             }
         }
-        log.info("[Simulation] Loaded {} symbols, stepping {}m from {} to {}", fullSeries.size(), stepMinutes, from, to);
+        // Preload exit-granularity bar series (e.g. 5m bars for 15m scan)
+        Interval exitInterval = getExitInterval(interval);
+        Map<String, BarSeries> exitSeries = new HashMap<>();
+        if (exitInterval != interval) {
+            for (String symbol : fullSeries.keySet()) {
+                try {
+                    Instrument inst = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+                    Instant lookbackFrom = from.minus(30, java.time.temporal.ChronoUnit.DAYS);
+                    BarSeries series = loadBarSeries(inst, exitInterval, lookbackFrom, to);
+                    if (series != null && series.getBarCount() > 0) {
+                        exitSeries.put(symbol, series);
+                    }
+                } catch (Exception e) {
+                    log.warn("[Simulation] Failed to load exit series for {}: {}", symbol, e.getMessage());
+                }
+            }
+        }
+        int exitStepMinutes = exitInterval != interval ? 5 : stepMinutes;
+        log.info("[Simulation] Loaded {} symbols, stepping {}m (exits {}m) from {} to {}",
+                fullSeries.size(), stepMinutes, exitStepMinutes, from, to);
 
         // Step through time
         do {
@@ -97,40 +116,28 @@ public class TradeSimulationService {
                 BarSeries truncated = BarSeriesTruncator.truncate(full, t);
                 if (truncated.getBarCount() < 10) continue;
 
-                // Current bar = last bar in truncated series
-                Bar currentBar = truncated.getBar(truncated.getEndIndex());
+                // 1. Check exits — sub-step through finer-grained bars if available
+                BarSeries exitFull = exitSeries.get(symbol);
+                if (exitFull != null) {
+                    // Sub-step: iterate 5-min bars within this 15-min window [t - stepMinutes, t]
+                    Instant windowStart = t.minusSeconds((long) stepMinutes * 60);
+                    for (int sub = 1; sub <= stepMinutes / exitStepMinutes; sub++) {
+                        Instant subTime = windowStart.plusSeconds((long) sub * exitStepMinutes * 60);
+                        BarSeries exitTruncated = BarSeriesTruncator.truncate(exitFull, subTime);
+                        if (exitTruncated.getBarCount() < 2) continue;
+                        Bar exitBar = exitTruncated.getBar(exitTruncated.getEndIndex());
 
-                // 1. Check exits for open positions
-                List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, currentBar);
-                for (SimulationStrategy.ExitResult exit : exits) {
-                    TradeSignal sig = exit.signal();
-                    sig.setStatus(TradeStatus.COMPLETED);
-                    signalRepository.save(sig);
-                    ctx.getOpenPositions().remove(sig);
-                    ctx.getClosedPositions().add(sig);
-                    ctx.setTotalPnlPct(ctx.getTotalPnlPct() + exit.pnlPct());
-                    if (exit.pnlPct() > 0) ctx.setWins(ctx.getWins() + 1);
-                    else ctx.setLosses(ctx.getLosses() + 1);
-                    try {
-                        actionLogger.logWithPnl(sig,
-                                TradeActionLog.TradeAction.valueOf(exit.exitReason()),
-                                BigDecimal.valueOf(exit.exitPrice()),
-                                BigDecimal.valueOf(exit.pnlPct()),
-                                String.format("Sim exit @ %.2f", exit.exitPrice()));
-                        // Close the trade order
-                        List<TradeOrder> orders = orderRepository.findBySignalAndStatus(sig, TradeOrderStatus.OPEN);
-                        for (TradeOrder order : orders) {
-                            order.setExitPrice(BigDecimal.valueOf(exit.exitPrice()));
-                            order.setExitTime(t);
-                            order.setStatus(TradeOrderStatus.CLOSED);
-                            order.setExitReason(ExitReason.valueOf(exit.exitReason()));
-                            order.setRealisedPnl(BigDecimal.valueOf(exit.pnlPct()));
-                            order.setUnderlyingExitPrice(BigDecimal.valueOf(exit.exitPrice()));
-                            order.setUpdatedAt(t);
-                            orderRepository.save(order);
+                        List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, exitBar);
+                        for (SimulationStrategy.ExitResult exit : exits) {
+                            processExit(ctx, exit, subTime);
                         }
-                    } catch (Exception e) {
-                        log.debug("[Simulation] Failed to log exit: {}", e.getMessage());
+                    }
+                } else {
+                    // Fallback: check exits on the scan-timeframe bar
+                    Bar currentBar = truncated.getBar(truncated.getEndIndex());
+                    List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, currentBar);
+                    for (SimulationStrategy.ExitResult exit : exits) {
+                        processExit(ctx, exit, t);
                     }
                 }
 
@@ -141,15 +148,16 @@ public class TradeSimulationService {
                     List<TradeSignal> newSignals = strategy.scan(ctx, symbol, truncated);
                     for (TradeSignal sig : newSignals) {
                         sig.setSignalTime(t);
+                        sig.setCandleTime(t);
                         sig.setStatus(TradeStatus.ACTIVE);
                         signalRepository.save(sig);
                         ctx.getOpenPositions().add(sig);
                         ctx.setTotalSignalsGenerated(ctx.getTotalSignalsGenerated() + 1);
                         try {
                             actionLogger.log(sig, TradeActionLog.TradeAction.SIGNAL_CREATED,
-                                    sig.getEntryPrice(), "Sim signal");
+                                    sig.getEntryPrice(), "Sim signal", t);
                             actionLogger.log(sig, TradeActionLog.TradeAction.ENTRY_FILLED,
-                                    sig.getEntryPrice(), "Sim paper fill");
+                                    sig.getEntryPrice(), "Sim paper fill", t);
                             // Create trade order for /trade-orders page visibility
                             TradeOrder order = TradeOrder.builder()
                                     .signal(sig)
@@ -206,6 +214,50 @@ public class TradeSimulationService {
                 c.getOpen(), c.getHigh(), c.getLow(), c.getClose(),
                 Optional.ofNullable(c.getVolume()).orElse(0L), c.getTimestamp())));
         return series;
+    }
+
+    /**
+     * Returns the finer-grained interval used for exit monitoring.
+     * E.g. FifteenMinute signals → exits checked on FiveMinute bars.
+     */
+    private Interval getExitInterval(Interval scanInterval) {
+        return switch (scanInterval) {
+            case FifteenMinute -> Interval.FiveMinute;
+            case OneHour -> Interval.FifteenMinute;
+            case ThirtyMinute -> Interval.FiveMinute;
+            default -> scanInterval; // same TF for exit if no finer available
+        };
+    }
+
+    private void processExit(SimulationContext ctx, SimulationStrategy.ExitResult exit, Instant candleTime) {
+        TradeSignal sig = exit.signal();
+        sig.setStatus(TradeStatus.COMPLETED);
+        signalRepository.save(sig);
+        ctx.getOpenPositions().remove(sig);
+        ctx.getClosedPositions().add(sig);
+        ctx.setTotalPnlPct(ctx.getTotalPnlPct() + exit.pnlPct());
+        if (exit.pnlPct() > 0) ctx.setWins(ctx.getWins() + 1);
+        else ctx.setLosses(ctx.getLosses() + 1);
+        try {
+            actionLogger.logWithPnl(sig,
+                    TradeActionLog.TradeAction.valueOf(exit.exitReason()),
+                    BigDecimal.valueOf(exit.exitPrice()),
+                    BigDecimal.valueOf(exit.pnlPct()),
+                    String.format("Sim exit @ %.2f", exit.exitPrice()), candleTime);
+            List<TradeOrder> orders = orderRepository.findBySignalAndStatus(sig, TradeOrderStatus.OPEN);
+            for (TradeOrder order : orders) {
+                order.setExitPrice(BigDecimal.valueOf(exit.exitPrice()));
+                order.setExitTime(candleTime);
+                order.setStatus(TradeOrderStatus.CLOSED);
+                order.setExitReason(ExitReason.valueOf(exit.exitReason()));
+                order.setRealisedPnl(BigDecimal.valueOf(exit.pnlPct()));
+                order.setUnderlyingExitPrice(BigDecimal.valueOf(exit.exitPrice()));
+                order.setUpdatedAt(candleTime);
+                orderRepository.save(order);
+            }
+        } catch (Exception e) {
+            log.debug("[Simulation] Failed to log exit: {}", e.getMessage());
+        }
     }
 
     private SimulationResult buildResult(SimulationContext ctx) {
