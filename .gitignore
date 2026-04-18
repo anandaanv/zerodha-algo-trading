@@ -120,3 +120,29 @@ Desktop.ini
 
 ui/chart-draw-app/charting_library/**
 ds-python/.venv/
+
+# Local-only Claude Code helper files
+.local-dev-credentials
+
+# Generated training data (regenerated from labeler; do not commit)
+elliott_train_data/
+
+# Private strategy files (live in private submodule: strategies/)
+src/main/java/com/dtech/kitecon/elliott/ImpulseFeatureExtractor.java
+src/main/java/com/dtech/kitecon/elliott/ImpulseSignalScanner.java
+src/main/java/com/dtech/kitecon/elliott/ImpulseStrikeSelector.java
+src/main/java/com/dtech/kitecon/elliott/historical/
+src/main/java/com/dtech/kitecon/trade/strategy/ImpulseSlabExitStrategy.java
+src/main/java/com/dtech/kitecon/simulation/strategy/ImpulseSimulationStrategy.java
+ds-python/finrl-poc/service/train_impulse_model.py
+ds-python/finrl-poc/service/backtest_impulse_model.py
+ds-python/finrl-poc/service/prediction_server.py
+ds-python/finrl-poc/service/export_impulse_trades.py
+ds-python/finrl-poc/service/train_impulse_exit.py
+ds-python/finrl-poc/env/trailing_stop_env.py
+ds-python/finrl-poc/env/profit_extension_env.py
+ds-python/finrl-poc/service/model/impulse_*.pkl
+spec/Claude/impulse_strategy_production_config.md
+scripts/deploy_impulse.sh
+scripts/startup_trading.sh
+ds-python/.venv-*/

@@ -5,12 +5,19 @@ import com.dtech.algo.series.Interval;
 import com.dtech.algo.series.IntervalBarSeries;
 import com.dtech.chartdata.model.OhlcBarDTO;
 import com.dtech.kitecon.controller.BarSeriesHelper;
+import com.dtech.kitecon.data.Candle;
+import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.repository.CandleRepository;
+import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.service.MarketHoursService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Serves OHLC bars to the frontend.
@@ -28,13 +35,19 @@ public class ChartDataService {
     private final BarSeriesHelper barSeriesHelper;
     private final LiveCandleCache liveCandleCache;
     private final MarketHoursService marketHoursService;
+    private final CandleRepository candleRepository;
+    private final InstrumentRepository instrumentRepository;
 
     /**
      * Returns OHLC bars for a symbol/interval.
      * If from/to are provided (epoch seconds), results are filtered to that range.
      */
-    public List<OhlcBarDTO> getBars(String symbol, String interval, Long from, Long to) {
+    public List<OhlcBarDTO> getBars(String symbol, String interval, Long from, Long to, boolean fetchLatest) {
         Interval iv = Interval.valueOf(interval);
+
+        if (!fetchLatest) {
+            return getBarsFromDb(symbol, iv, from, to);
+        }
         IntervalBarSeries series = barSeriesHelper.getIntervalBarSeries(symbol, iv.name());
 
         long fromSec = from != null ? from : Long.MIN_VALUE;
@@ -78,6 +91,24 @@ public class ChartDataService {
             }
         }
 
+        return out;
+    }
+
+    private List<OhlcBarDTO> getBarsFromDb(String symbol, Interval iv, Long from, Long to) {
+        Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+        if (instrument == null) return new ArrayList<>();
+        Instant fromTs = from != null ? Instant.ofEpochSecond(from) : Instant.parse("2015-01-01T00:00:00Z");
+        Instant toTs   = to   != null ? Instant.ofEpochSecond(to)   : Instant.now();
+        List<Candle> candles = candleRepository.findAllByInstrumentAndTimeframeAndTimestampBetween(instrument, iv, fromTs, toTs);
+        candles.sort(Comparator.comparing(Candle::getTimestamp));
+        List<OhlcBarDTO> out = new ArrayList<>(candles.size());
+        for (Candle c : candles) {
+            out.add(new OhlcBarDTO(
+                    c.getTimestamp().getEpochSecond(),
+                    c.getOpen(), c.getHigh(), c.getLow(), c.getClose(),
+                    Optional.ofNullable(c.getVolume()).orElse(0L).doubleValue()
+            ));
+        }
         return out;
     }
 }

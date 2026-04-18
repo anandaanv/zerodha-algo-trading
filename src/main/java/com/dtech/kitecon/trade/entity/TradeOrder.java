@@ -68,6 +68,18 @@ public class TradeOrder {
     @Column(precision = 14, scale = 2)
     private BigDecimal realisedPnl;
 
+    @Column(name = "underlying_entry_price", precision = 14, scale = 4)
+    private BigDecimal underlyingEntryPrice;
+
+    @Column(name = "underlying_exit_price", precision = 14, scale = 4)
+    private BigDecimal underlyingExitPrice;
+
+    @Column(name = "stop_loss", precision = 14, scale = 4)
+    private BigDecimal stopLoss;
+
+    @Column(name = "target", precision = 14, scale = 4)
+    private BigDecimal target;
+
     @Column(nullable = false, length = 10)
     private String instrumentType;
 

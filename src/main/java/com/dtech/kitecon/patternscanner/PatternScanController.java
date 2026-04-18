@@ -16,6 +16,7 @@ public class PatternScanController {
 
     private final PatternScanService patternScanService;
     private final com.dtech.kitecon.backtest.PatternComboBacktestService patternComboBacktestService;
+    private final com.dtech.kitecon.elliott.ImpulseTrainingDataService impulseTrainingDataService;
 
     @GetMapping("/nifty50")
     public ResponseEntity<List<String>> getNifty50() {
@@ -84,6 +85,37 @@ public class PatternScanController {
             return ResponseEntity.ok(java.util.Map.of("summary", result, "csvPath", csvPath));
         } catch (Exception e) {
             log.error("TLB FnO backtest failed: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/impulse-train/{symbol}")
+    public ResponseEntity<?> generateImpulseData(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "1h") String tf,
+            @RequestParam(defaultValue = "pivot-scan") String strategy) {
+        try {
+            com.dtech.algo.series.Interval interval = parseInterval(tf);
+            String result = impulseTrainingDataService.generateForSymbol(symbol, interval, strategy);
+            return ResponseEntity.ok(java.util.Map.of("summary", result));
+        } catch (Exception e) {
+            log.error("Impulse data gen failed for {}: {}", symbol, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/impulse-train-batch")
+    public ResponseEntity<?> generateImpulseBatch(
+            @RequestParam(defaultValue = "1h") String tf,
+            @RequestParam(defaultValue = "RELIANCE,TCS,INFY,ADANIENT,POWERGRID,RECLTD,CONCOR") String symbols,
+            @RequestParam(defaultValue = "pivot-scan") String strategy) {
+        try {
+            com.dtech.algo.series.Interval interval = parseInterval(tf);
+            List<String> symbolList = java.util.Arrays.asList(symbols.split(","));
+            String result = impulseTrainingDataService.generateForSymbols(symbolList, interval, strategy);
+            return ResponseEntity.ok(java.util.Map.of("report", result));
+        } catch (Exception e) {
+            log.error("Impulse batch failed: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }

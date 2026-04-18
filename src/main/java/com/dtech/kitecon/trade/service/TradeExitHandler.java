@@ -1,15 +1,20 @@
 package com.dtech.kitecon.trade.service;
 
+import com.dtech.kitecon.trade.entity.TradeActionLog;
 import com.dtech.kitecon.trade.entity.TradeExecution;
 import com.dtech.kitecon.trade.entity.TradeMonitorLog;
 import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.kitecon.trade.enums.ExitReason;
 import com.dtech.kitecon.trade.enums.MonitorAction;
+import com.dtech.kitecon.trade.enums.StrategyType;
 import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeStatus;
 import com.dtech.kitecon.trade.repository.TradeExecutionRepository;
 import com.dtech.kitecon.trade.repository.TradeMonitorLogRepository;
 import com.dtech.kitecon.trade.repository.TradeSignalRepository;
+import com.dtech.kitecon.trade.strategy.ExitDecision;
+import com.dtech.kitecon.trade.strategy.ExitStrategy;
+import com.dtech.kitecon.trade.strategy.ExitStrategyRouter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,6 +56,8 @@ public class TradeExitHandler {
     private final TradeMonitorLogRepository logRepository;
     private final TradeOrchestrationService tradeOrchestrationService;
     private final RlExitClient rlExitClient;
+    private final ExitStrategyRouter exitStrategyRouter;
+    private final TradeActionLogger tradeActionLogger;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -63,6 +70,43 @@ public class TradeExitHandler {
         TradeExecution execution = executionRepository.findBySignal(signal).orElse(null);
         if (execution == null) {
             writeLog(signal, ltp, null, null, MonitorAction.ERROR, "No execution record found for ACTIVE signal", dryRun);
+            return;
+        }
+
+        // Strategy-specific exit logic (IMPULSE uses slab-trail; DTB/null falls through to existing logic)
+        if (signal.getStrategyType() == StrategyType.IMPULSE) {
+            ExitStrategy strategy = exitStrategyRouter.getStrategy(signal.getStrategyType());
+            ExitDecision decision = strategy.evaluate(signal, ltp, ltp);
+            switch (decision.action()) {
+                case EXIT -> {
+                    triggerExit(signal, execution, ltp, decision.exitReason(), dryRun);
+                    return;
+                }
+                case UPDATE_SLAB -> {
+                    signalRepository.save(signal);
+                    BigDecimal unrealisedPnl = calculateUnrealisedPnl(signal, execution, ltp);
+                    BigDecimal unrealisedPct = execution.getMarginDeployed() != null && execution.getMarginDeployed().compareTo(BigDecimal.ZERO) > 0
+                            ? unrealisedPnl.divide(execution.getMarginDeployed(), 6, java.math.RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100))
+                            : BigDecimal.ZERO;
+                    writeLog(signal, ltp, unrealisedPnl, unrealisedPct, MonitorAction.NONE,
+                            String.format("Slab advanced to index %d — new SL=%.4f", decision.newSlabIndex(), signal.getStopLoss().doubleValue()), dryRun);
+                    try {
+                        tradeActionLogger.logSlab(signal, decision.newSlabIndex(), ltp, signal.getStopLoss());
+                    } catch (Exception e) {
+                        log.warn("Failed to log trade action: {}", e.getMessage());
+                    }
+                    return;
+                }
+                case HOLD -> {
+                    BigDecimal unrealisedPnl = calculateUnrealisedPnl(signal, execution, ltp);
+                    BigDecimal unrealisedPct = execution.getMarginDeployed() != null && execution.getMarginDeployed().compareTo(BigDecimal.ZERO) > 0
+                            ? unrealisedPnl.divide(execution.getMarginDeployed(), 6, java.math.RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100))
+                            : BigDecimal.ZERO;
+                    writeLog(signal, ltp, unrealisedPnl, unrealisedPct, MonitorAction.NONE,
+                            String.format("Impulse monitoring: LTP=%.4f SL=%.4f", ltp.doubleValue(), signal.getStopLoss().doubleValue()), dryRun);
+                    return;
+                }
+            }
             return;
         }
 
@@ -168,6 +212,17 @@ public class TradeExitHandler {
                     String.format("[DRY RUN] Exit at %.4f reason=%s netPnL=%.2f",
                             ltp.doubleValue(), reason, execution.getNetPnlInr().doubleValue()),
                     dryRun);
+            try {
+                TradeActionLog.TradeAction exitAction = reason == ExitReason.STOP_HIT
+                        ? TradeActionLog.TradeAction.STOP_HIT
+                        : (reason == ExitReason.TARGET_HIT
+                            ? TradeActionLog.TradeAction.TARGET_HIT
+                            : TradeActionLog.TradeAction.REVERSAL_EXIT);
+                tradeActionLogger.logWithPnl(signal, exitAction, ltp, execution.getNetPnlPct(),
+                        String.format("[DRY RUN] Exit reason=%s", reason));
+            } catch (Exception e) {
+                log.warn("Failed to log trade action: {}", e.getMessage());
+            }
         } else {
             String orderId = brokerOrderService.placeExitOrder(signal, execution);
             execution.setExitOrderId(orderId);

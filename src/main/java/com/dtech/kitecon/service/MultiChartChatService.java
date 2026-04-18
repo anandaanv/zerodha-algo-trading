@@ -30,7 +30,7 @@ public class MultiChartChatService {
                     drawingExtractor.extractDrawings(ctx.getChartStateJson());
                 String intervalName = Interval.fromUiKey(ctx.getTimeframe()).name();
                 List<OhlcBarDTO> bars = chartDataService.getBars(
-                    ctx.getSymbol(), intervalName, ctx.getVisibleFrom(), ctx.getVisibleTo());
+                    ctx.getSymbol(), intervalName, ctx.getVisibleFrom(), ctx.getVisibleTo(), true);
                 log.info("Multi-chart context '{}': symbol={}, drawings={}, bars={}",
                     ctx.getLabel(), ctx.getSymbol(), drawings.size(), bars.size());
                 return new OpenAIProviderService.ResolvedChart(

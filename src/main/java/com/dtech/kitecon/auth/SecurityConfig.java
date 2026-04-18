@@ -88,6 +88,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/chart-state/export", "/api/chart-state/import", "/api/remote-sync/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/kite-configs/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        // Simulation endpoints — ADMIN only
+                        .requestMatchers("/api/simulation/**").hasRole("ADMIN")
                         // Elliott debug dump viewer — ADMIN only
                         .requestMatchers("/api/debug/elliott/**", "/api/debug/**").hasRole("ADMIN")
                         // Snapshot and analysis endpoints - allow USER role

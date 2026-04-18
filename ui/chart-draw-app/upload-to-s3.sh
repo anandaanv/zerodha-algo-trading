@@ -25,13 +25,7 @@ echo "Local path: $LOCAL_PATH"
 echo "S3 bucket: s3://$S3_BUCKET"
 echo ""
 echo "WARNING: This will delete all files in s3://$S3_BUCKET"
-read -p "Continue? (y/n) " -n 1 -r
-echo ""
 
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted"
-    exit 1
-fi
 
 # Empty the S3 bucket
 echo "Emptying S3 bucket..."

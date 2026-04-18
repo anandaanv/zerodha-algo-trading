@@ -10,6 +10,8 @@ import com.dtech.chartpattern.zigzag.ZigZagService;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.repository.InstrumentRepository;
+import com.dtech.kitecon.service.copilot.MarketStructureService;
+import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -27,6 +29,7 @@ public class ZigZagController {
     private final ZigZagService zigZagService;
     private final ChartPatternProperties properties;
     private final ChartPlotService chartPlotService;
+    private final MarketStructureService marketStructureService;
 
     @PostMapping("/stock")
     public ResponseEntity<List<ZigZagResponses.StockResult>> computeForStock(@RequestBody ZigZagRequests.StockRequest req) {
@@ -109,5 +112,19 @@ public class ZigZagController {
         return ResponseEntity.ok()
                 .headers(headers)
                 .body(png);
+    }
+
+    @GetMapping("/market-structure")
+    public ResponseEntity<List<MarketStructurePoint>> getMarketStructure(
+            @RequestParam("symbol") String symbol,
+            @RequestParam("timeframe") String timeframe) {
+        Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+        if (instrument == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        Interval interval = Interval.valueOf(timeframe);
+        List<ZigZagPoint> pivots = zigZagService.detectAndPersist(symbol, instrument, interval, false);
+        var data = marketStructureService.analyse(pivots, interval.name());
+        return ResponseEntity.ok(data.getSwingPoints());
     }
 }

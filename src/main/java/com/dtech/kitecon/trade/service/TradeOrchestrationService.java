@@ -3,8 +3,10 @@ package com.dtech.kitecon.trade.service;
 import com.dtech.kitecon.trade.dto.QuoteResult;
 import com.dtech.kitecon.trade.dto.ResolvedInstrument;
 import com.dtech.kitecon.trade.entity.SegmentConfig;
+import com.dtech.kitecon.trade.entity.TradeActionLog;
 import com.dtech.kitecon.trade.entity.TradeOrder;
 import com.dtech.kitecon.trade.entity.TradeSignal;
+import com.dtech.kitecon.trade.enums.StrategyType;
 import com.dtech.kitecon.trade.enums.ExitReason;
 import com.dtech.kitecon.trade.enums.TradeOrderStatus;
 import com.dtech.kitecon.trade.repository.SegmentConfigRepository;
@@ -26,6 +28,7 @@ public class TradeOrchestrationService {
     private final MarketQuoteService marketQuoteService;
     private final PaperOrderExecutionService paperOrderExecutionService;
     private final TradeOrderRepository tradeOrderRepository;
+    private final TradeActionLogger tradeActionLogger;
 
     public void onEntryTriggered(TradeSignal signal) {
         List<SegmentConfig> configs = segmentConfigRepository.findBySymbolAndEnabledTrue(signal.getSymbol());
@@ -41,22 +44,33 @@ public class TradeOrchestrationService {
                         signal.getSymbol(), signal.getInstrumentToken());
 
                 if (underlyingQuote == null) {
-                    log.warn("No quote available for underlying symbol {}", signal.getSymbol());
+                    log.warn("No underlying quote for {}, skipping entry for segment {}",
+                            signal.getSymbol(), config.getSegment());
                     continue;
                 }
 
                 BigDecimal ltp = underlyingQuote.getLtp();
+                // Use OTM for impulse strategy, ATM for DTB
+                double otmPct = (signal.getStrategyType() == StrategyType.IMPULSE) ? 0.03 : 0.0;
                 ResolvedInstrument resolved = instrumentResolverService.resolve(
-                        signal.getSymbol(), config.getSegment(), signal.getDirection(), ltp);
+                        signal.getSymbol(), config.getSegment(), signal.getDirection(), ltp, otmPct);
 
                 QuoteResult instrumentQuote = marketQuoteService.getQuote(
                         resolved.getTradingSymbol(), resolved.getInstrumentToken());
 
                 if (instrumentQuote == null) {
-                    instrumentQuote = underlyingQuote;
+                    log.warn("No instrument quote for {} (token={}), skipping entry. " +
+                            "Will retry on next entry-handler poll.",
+                            resolved.getTradingSymbol(), resolved.getInstrumentToken());
+                    continue;
                 }
 
-                paperOrderExecutionService.enter(signal, config, resolved, instrumentQuote);
+                paperOrderExecutionService.enter(signal, config, resolved, instrumentQuote, underlyingQuote);
+                try {
+                    tradeActionLogger.log(signal, TradeActionLog.TradeAction.ENTRY_FILLED, ltp, "Order placed");
+                } catch (Exception e) {
+                    log.warn("Failed to log trade action: {}", e.getMessage());
+                }
 
             } catch (Exception e) {
                 log.error("Error creating paper order for signal {} segment {}: {}",
@@ -73,17 +87,40 @@ public class TradeOrchestrationService {
                 QuoteResult quote = marketQuoteService.getQuote(order.getSymbol(), order.getInstrumentToken());
 
                 if (quote == null) {
-                    log.warn("No quote available for symbol {}, using entry price as fallback", order.getSymbol());
-                    quote = QuoteResult.builder()
-                            .symbol(order.getSymbol())
-                            .instrumentToken(order.getInstrumentToken())
-                            .ltp(order.getEntryPrice())
-                            .askPrice(order.getEntryPrice())
-                            .bidPrice(order.getEntryPrice())
-                            .build();
+                    // No silent fallback: leave order OPEN so the next exit-handler poll retries.
+                    // Using entry price as a fake exit price (the previous behaviour) produced
+                    // bogus zero-P&L closes and was indistinguishable from a genuine flat trade.
+                    log.warn("No quote for order {} symbol {} (token={}). " +
+                            "Leaving OPEN for next poll retry.",
+                            order.getId(), order.getSymbol(), order.getInstrumentToken());
+                    continue;
                 }
 
-                paperOrderExecutionService.exit(order, quote, reason);
+                // Best-effort capture of underlying spot for audit.
+                BigDecimal underlyingLtp = null;
+                try {
+                    QuoteResult underlyingQuote = marketQuoteService.getQuote(
+                            order.getUnderlyingSymbol(), null);
+                    if (underlyingQuote != null) {
+                        underlyingLtp = underlyingQuote.getLtp();
+                    }
+                } catch (Exception ue) {
+                    log.debug("Underlying quote fetch failed for {}: {}",
+                            order.getUnderlyingSymbol(), ue.getMessage());
+                }
+
+                paperOrderExecutionService.exit(order, quote, underlyingLtp, reason);
+                try {
+                    TradeActionLog.TradeAction exitAction = reason == ExitReason.STOP_HIT
+                            ? TradeActionLog.TradeAction.STOP_HIT
+                            : (reason == ExitReason.TARGET_HIT
+                                ? TradeActionLog.TradeAction.TARGET_HIT
+                                : TradeActionLog.TradeAction.REVERSAL_EXIT);
+                    tradeActionLogger.logWithPnl(signal, exitAction, quote.getLtp(), null,
+                            "Exit reason=" + reason);
+                } catch (Exception e) {
+                    log.warn("Failed to log trade action: {}", e.getMessage());
+                }
 
             } catch (Exception e) {
                 log.error("Error exiting paper order {}: {}", order.getId(), e.getMessage(), e);

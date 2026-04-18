@@ -21,7 +21,8 @@ public class ChartDataController {
             @RequestParam @NotBlank String symbol,
             @RequestParam @NotBlank String interval,
             @RequestParam(required = false) Long from,
-            @RequestParam(required = false) Long to) {
-        return chartDataService.getBars(symbol, interval, null, null);
+            @RequestParam(required = false) Long to,
+            @RequestParam(required = false, defaultValue = "true") boolean fetchLatest) {
+        return chartDataService.getBars(symbol, interval, from, to, fetchLatest);
     }
 }

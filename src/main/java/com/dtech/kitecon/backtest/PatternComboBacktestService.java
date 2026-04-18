@@ -17,6 +17,19 @@ import org.ta4j.core.indicators.RSIIndicator;
 import org.ta4j.core.indicators.averages.EMAIndicator;
 import org.ta4j.core.indicators.adx.ADXIndicator;
 import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+import org.ta4j.core.indicators.ATRIndicator;
+import org.ta4j.core.indicators.StochasticOscillatorDIndicator;
+import org.ta4j.core.indicators.StochasticOscillatorKIndicator;
+import org.ta4j.core.indicators.adx.MinusDIIndicator;
+import org.ta4j.core.indicators.adx.PlusDIIndicator;
+import org.ta4j.core.indicators.averages.SMAIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandWidthIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator;
+import org.ta4j.core.indicators.bollinger.PercentBIndicator;
+import org.ta4j.core.indicators.helpers.VolumeIndicator;
+import org.ta4j.core.indicators.statistics.StandardDeviationIndicator;
 
 import java.io.FileWriter;
 import java.io.IOException;
@@ -2403,7 +2416,21 @@ public class PatternComboBacktestService {
         "macd_watching,macd_signal_watching,bb_width_watching,bb_pct_b_watching," +
         "macd_daily,macd_signal_daily,bb_width_daily,bb_pct_b_daily," +
         "bb_expanding,bb_aligned,rsi_slope,macd_hist_slope,adx_slope," +
-        "pattern_height,target_eventually_hit,mfe_pct,mae_pct,mfe_bars\n";
+        "pattern_height,target_eventually_hit,mfe_pct,mae_pct,mfe_bars," +
+        "stoch_rsi_k_at_p1,stoch_rsi_k_at_p2," +
+        "stoch_k_at_p1,stoch_k_at_p2," +
+        "stoch_d_at_p1,stoch_d_at_p2," +
+        "adx_at_p1,adx_at_p2," +
+        "plus_di_at_p1,plus_di_at_p2," +
+        "minus_di_at_p1,minus_di_at_p2," +
+        "bb_width_at_p1,bb_width_at_p2," +
+        "bb_pctb_at_p1,bb_pctb_at_p2," +
+        "ema20_dist_at_p1,ema20_dist_at_p2," +
+        "ema50_dist_at_p1,ema50_dist_at_p2," +
+        "ema200_dist_at_p1,ema200_dist_at_p2," +
+        "volume_ratio_at_p1,volume_ratio_at_p2," +
+        "atr_at_p1,atr_at_p2," +
+        "rsi_divergence,macd_divergence,volume_divergence,p1_p2_bars_distance\n";
 
     public String backtestTrendlineBreakout(String symbol, Interval tf, String csvPath) throws IOException {
         List<String> csvLines = new ArrayList<>();
@@ -2485,6 +2512,18 @@ public class PatternComboBacktestService {
         double[] rsiArr = computeRsiPublic(series, RSI_PERIOD);
         double[] macdHistArr = computeMacdHistPublic(series);
         double[] stochRsiKArr = computeStochRsiK(rsiArr);
+        double[] stochKArr = computeStochK(series);
+        double[] stochDArr = computeStochD(series);
+        double[] adxArr = computeAdx(series);
+        double[] plusDIArr = computePlusDI(series);
+        double[] minusDIArr = computeMinusDI(series);
+        double[] bbWidthArr = computeBBWidth(series);
+        double[] bbPctBArr = computeBBPctB(series);
+        double[] ema20DistArr = computeEma20Dist(series);
+        double[] ema50DistArr = computeEma50Dist(series);
+        double[] ema200DistArr = computeEma200Dist(series);
+        double[] volumeRatioArr = computeVolumeRatio(series);
+        double[] atrTa4jArr = computeAtrTa4j(series);
 
         // Compute indicators on this TF
         DailyIndicators tfInd = computeDailyIndicators(series);
@@ -2528,11 +2567,41 @@ public class PatternComboBacktestService {
             // Indicator values at pattern points
             Integer p1Idx = tsToIdx.get(p.getPivot1().getTimestamp());
             Integer p2Idx = tsToIdx.get(p.getPivot2().getTimestamp());
-            double rsiAtP1 = (p1Idx != null && p1Idx < rsiArr.length) ? rsiArr[p1Idx] : 0;
-            double rsiAtP2 = (p2Idx != null && p2Idx < rsiArr.length) ? rsiArr[p2Idx] : 0;
-            double macdHistAtP1 = (p1Idx != null && p1Idx < macdHistArr.length) ? macdHistArr[p1Idx] : 0;
-            double macdHistAtP2 = (p2Idx != null && p2Idx < macdHistArr.length) ? macdHistArr[p2Idx] : 0;
+            double rsiAtP1 = safeGet(rsiArr, p1Idx);
+            double rsiAtP2 = safeGet(rsiArr, p2Idx);
+            double macdHistAtP1 = safeGet(macdHistArr, p1Idx);
+            double macdHistAtP2 = safeGet(macdHistArr, p2Idx);
             double stochK = entryIdx < stochRsiKArr.length ? stochRsiKArr[entryIdx] : 0;
+            double stochRsiKAtP1 = safeGet(stochRsiKArr, p1Idx);
+            double stochRsiKAtP2 = safeGet(stochRsiKArr, p2Idx);
+            double stochKAtP1 = safeGet(stochKArr, p1Idx);
+            double stochKAtP2 = safeGet(stochKArr, p2Idx);
+            double stochDAtP1 = safeGet(stochDArr, p1Idx);
+            double stochDAtP2 = safeGet(stochDArr, p2Idx);
+            double adxAtP1 = safeGet(adxArr, p1Idx);
+            double adxAtP2 = safeGet(adxArr, p2Idx);
+            double plusDIAtP1 = safeGet(plusDIArr, p1Idx);
+            double plusDIAtP2 = safeGet(plusDIArr, p2Idx);
+            double minusDIAtP1 = safeGet(minusDIArr, p1Idx);
+            double minusDIAtP2 = safeGet(minusDIArr, p2Idx);
+            double bbWidthAtP1 = safeGet(bbWidthArr, p1Idx);
+            double bbWidthAtP2 = safeGet(bbWidthArr, p2Idx);
+            double bbPctBAtP1 = safeGet(bbPctBArr, p1Idx);
+            double bbPctBAtP2 = safeGet(bbPctBArr, p2Idx);
+            double ema20DistAtP1 = safeGet(ema20DistArr, p1Idx);
+            double ema20DistAtP2 = safeGet(ema20DistArr, p2Idx);
+            double ema50DistAtP1 = safeGet(ema50DistArr, p1Idx);
+            double ema50DistAtP2 = safeGet(ema50DistArr, p2Idx);
+            double ema200DistAtP1 = safeGet(ema200DistArr, p1Idx);
+            double ema200DistAtP2 = safeGet(ema200DistArr, p2Idx);
+            double volumeRatioAtP1 = safeGet(volumeRatioArr, p1Idx);
+            double volumeRatioAtP2 = safeGet(volumeRatioArr, p2Idx);
+            double atrAtP1 = safeGet(atrTa4jArr, p1Idx);
+            double atrAtP2 = safeGet(atrTa4jArr, p2Idx);
+            double rsiDivergence = rsiAtP2 - rsiAtP1;
+            double macdDivergence = macdHistAtP2 - macdHistAtP1;
+            double volumeDivergence = volumeRatioAtP1 > 0 ? volumeRatioAtP2 / volumeRatioAtP1 : 1.0;
+            int p1p2BarsDistance = (p1Idx != null && p2Idx != null) ? Math.abs(p2Idx - p1Idx) : 0;
 
             Instant entryTime = bars.get(entryIdx).getEndTime();
 
@@ -2685,7 +2754,21 @@ public class PatternComboBacktestService {
                 "%.4f,%.4f,%.4f,%.4f," +
                 "%.4f,%.4f,%.4f,%.4f," +
                 "%.1f,%.1f,%.4f,%.4f,%.4f," +
-                "%.2f,%s,%.2f,%.2f,%d\n",
+                "%.2f,%s,%.2f,%.2f,%d," +
+                "%.4f,%.4f," +
+                "%.2f,%.2f," +
+                "%.2f,%.2f," +
+                "%.2f,%.2f," +
+                "%.2f,%.2f," +
+                "%.2f,%.2f," +
+                "%.4f,%.4f," +
+                "%.4f,%.4f," +
+                "%.2f,%.2f," +
+                "%.2f,%.2f," +
+                "%.2f,%.2f," +
+                "%.4f,%.4f," +
+                "%.4f,%.4f," +
+                "%.2f,%.4f,%.4f,%d\n",
                 entryTime, symbol, bullish ? "LONG" : "SHORT",
                 entry, slTrendline, slCandleMedian, target, rr,
                 result, pnlPct, exitPrice, exitReason, barsHeld,
@@ -2697,7 +2780,21 @@ public class PatternComboBacktestService {
                 dMacd, dMacdSig, dBbWidth, dBbPctB,
                 bbExp, bbAl, rsiSlp, macdHistSlp, adxSlp,
                 p.getAbDistance(), targetEventuallyHit,
-                mfePct, maePct, mfeBars));
+                mfePct, maePct, mfeBars,
+                stochRsiKAtP1, stochRsiKAtP2,
+                stochKAtP1, stochKAtP2,
+                stochDAtP1, stochDAtP2,
+                adxAtP1, adxAtP2,
+                plusDIAtP1, plusDIAtP2,
+                minusDIAtP1, minusDIAtP2,
+                bbWidthAtP1, bbWidthAtP2,
+                bbPctBAtP1, bbPctBAtP2,
+                ema20DistAtP1, ema20DistAtP2,
+                ema50DistAtP1, ema50DistAtP2,
+                ema200DistAtP1, ema200DistAtP2,
+                volumeRatioAtP1, volumeRatioAtP2,
+                atrAtP1, atrAtP2,
+                rsiDivergence, macdDivergence, volumeDivergence, p1p2BarsDistance));
         }
 
         return new double[] { wins, losses, openCount, totalPnl };
@@ -2865,6 +2962,134 @@ public class PatternComboBacktestService {
         } catch (Exception e) {
             return 0.0;
         }
+    }
+
+    private double safeGet(double[] arr, Integer idx) {
+        return (idx != null && idx >= 0 && idx < arr.length) ? arr[idx] : 0.0;
+    }
+
+    private double[] computeStochK(BarSeries series) {
+        StochasticOscillatorKIndicator k = new StochasticOscillatorKIndicator(series, 14);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) arr[i] = safeDouble(k.getValue(i));
+        return arr;
+    }
+
+    private double[] computeStochD(BarSeries series) {
+        StochasticOscillatorKIndicator k = new StochasticOscillatorKIndicator(series, 14);
+        StochasticOscillatorDIndicator d = new StochasticOscillatorDIndicator(k);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) arr[i] = safeDouble(d.getValue(i));
+        return arr;
+    }
+
+    private double[] computeAdx(BarSeries series) {
+        ADXIndicator adx = new ADXIndicator(series, 14);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) arr[i] = safeDouble(adx.getValue(i));
+        return arr;
+    }
+
+    private double[] computePlusDI(BarSeries series) {
+        PlusDIIndicator plusDI = new PlusDIIndicator(series, 14);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) arr[i] = safeDouble(plusDI.getValue(i));
+        return arr;
+    }
+
+    private double[] computeMinusDI(BarSeries series) {
+        MinusDIIndicator minusDI = new MinusDIIndicator(series, 14);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) arr[i] = safeDouble(minusDI.getValue(i));
+        return arr;
+    }
+
+    private double[] computeBBWidth(BarSeries series) {
+        ClosePriceIndicator close = new ClosePriceIndicator(series);
+        SMAIndicator sma = new SMAIndicator(close, 20);
+        BollingerBandsMiddleIndicator mid = new BollingerBandsMiddleIndicator(sma);
+        StandardDeviationIndicator stdDev = new StandardDeviationIndicator(close, 20);
+        BollingerBandsUpperIndicator upper = new BollingerBandsUpperIndicator(mid, stdDev);
+        BollingerBandsLowerIndicator lower = new BollingerBandsLowerIndicator(mid, stdDev);
+        BollingerBandWidthIndicator bbw = new BollingerBandWidthIndicator(upper, mid, lower);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) arr[i] = safeDouble(bbw.getValue(i));
+        return arr;
+    }
+
+    private double[] computeBBPctB(BarSeries series) {
+        ClosePriceIndicator close = new ClosePriceIndicator(series);
+        PercentBIndicator pctB = new PercentBIndicator(close, 20, 2.0);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) arr[i] = safeDouble(pctB.getValue(i));
+        return arr;
+    }
+
+    private double[] computeEma20Dist(BarSeries series) {
+        ClosePriceIndicator close = new ClosePriceIndicator(series);
+        EMAIndicator ema = new EMAIndicator(close, 20);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) {
+            double c = safeDouble(close.getValue(i));
+            double e = safeDouble(ema.getValue(i));
+            arr[i] = c > 0 ? (c - e) / c * 100.0 : 0.0;
+        }
+        return arr;
+    }
+
+    private double[] computeEma50Dist(BarSeries series) {
+        ClosePriceIndicator close = new ClosePriceIndicator(series);
+        EMAIndicator ema = new EMAIndicator(close, 50);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) {
+            double c = safeDouble(close.getValue(i));
+            double e = safeDouble(ema.getValue(i));
+            arr[i] = c > 0 ? (c - e) / c * 100.0 : 0.0;
+        }
+        return arr;
+    }
+
+    private double[] computeEma200Dist(BarSeries series) {
+        ClosePriceIndicator close = new ClosePriceIndicator(series);
+        EMAIndicator ema = new EMAIndicator(close, 200);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) {
+            double c = safeDouble(close.getValue(i));
+            double e = safeDouble(ema.getValue(i));
+            arr[i] = c > 0 ? (c - e) / c * 100.0 : 0.0;
+        }
+        return arr;
+    }
+
+    private double[] computeVolumeRatio(BarSeries series) {
+        VolumeIndicator vol = new VolumeIndicator(series);
+        SMAIndicator volSma = new SMAIndicator(vol, 20);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) {
+            double v = safeDouble(vol.getValue(i));
+            double s = safeDouble(volSma.getValue(i));
+            arr[i] = s > 0 ? v / s : 1.0;
+        }
+        return arr;
+    }
+
+    private double[] computeAtrTa4j(BarSeries series) {
+        ATRIndicator atr = new ATRIndicator(series, 14);
+        int n = series.getBarCount();
+        double[] arr = new double[n];
+        for (int i = 0; i < n; i++) arr[i] = safeDouble(atr.getValue(i));
+        return arr;
     }
 
     public DailyIndicators computeDailyIndicators(BarSeries dailySeries) {

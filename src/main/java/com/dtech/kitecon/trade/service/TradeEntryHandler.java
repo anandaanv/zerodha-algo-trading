@@ -3,6 +3,7 @@ package com.dtech.kitecon.trade.service;
 import com.dtech.kitecon.patternscanner.PatternDto;
 import com.dtech.kitecon.patternscanner.PatternScanService;
 import com.dtech.kitecon.patternscanner.TradeFilterClient;
+import com.dtech.kitecon.trade.entity.TradeActionLog;
 import com.dtech.kitecon.trade.entity.TradeExecution;
 import com.dtech.kitecon.trade.entity.TradeMonitorLog;
 import com.dtech.kitecon.trade.entity.TradeSignal;
@@ -55,6 +56,7 @@ public class TradeEntryHandler {
     private final TradeOrchestrationService tradeOrchestrationService;
     private final PatternScanService patternScanService;
     private final TradeFilterClient tradeFilterClient;
+    private final TradeActionLogger tradeActionLogger;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -102,6 +104,11 @@ public class TradeEntryHandler {
 
         log.info("[EntryHandler] Entry triggered for signal {} {} {} at LTP={}",
                 signal.getId(), signal.getSymbol(), signal.getDirection(), ltp);
+        try {
+            tradeActionLogger.log(signal, TradeActionLog.TradeAction.ENTRY_TRIGGERED, ltp, "Entry condition met");
+        } catch (Exception e) {
+            log.warn("Failed to log trade action: {}", e.getMessage());
+        }
 
         if (dryRun) {
             // Simulate fill at current LTP
@@ -112,6 +119,11 @@ public class TradeEntryHandler {
             tradeOrchestrationService.onEntryTriggered(signal);
             writeLog(signal, ltp, null, MonitorAction.ENTRY_ORDER_PLACED,
                     "[DRY RUN] Entry simulated at " + ltp, dryRun);
+            try {
+                tradeActionLogger.log(signal, TradeActionLog.TradeAction.ENTRY_FILLED, ltp, "Filled");
+            } catch (Exception e) {
+                log.warn("Failed to log trade action: {}", e.getMessage());
+            }
         } else {
             String orderId = brokerOrderService.placeMarketOrder(signal);
             signal.setStatus(TradeStatus.ENTRY_PENDING);

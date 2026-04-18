@@ -79,3 +79,7 @@ Any new top-level page that doesn't belong under an existing parent section **mu
 - Frontend navigates to `/api/admin/kite-configs/1/connect` (NOT `/kite-login`)
 - nginx routes `/api/*` to Tomcat; `/kite-login` is not proxied and will serve the React SPA
 - Callback URL in Kite developer console must match the production domain
+
+## Local Backend Login Credentials
+
+When you need a JWT from the local backend to test `/api/**` endpoints, read the credentials from `.local-dev-credentials` at the repo root (gitignored). Do NOT hardcode these credentials in scripts, commits, or memory files — always read from the file at use time. If the file is missing, ask the user before proceeding.
