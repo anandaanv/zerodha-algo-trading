@@ -66,6 +66,7 @@ public class TradeActionLog {
         TARGET_UPDATED,
         SLAB_HIT,
         STOP_HIT,
+        TSL_HIT,
         TARGET_HIT,
         REVERSAL_EXIT,
         TIMEOUT_EXIT,
