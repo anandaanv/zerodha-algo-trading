@@ -27,6 +27,9 @@ public class TradeActionLog {
     @Column(nullable = false)
     private Instant timestamp;
 
+    @Column(name = "candle_time")
+    private Instant candleTime;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private TradeAction action;

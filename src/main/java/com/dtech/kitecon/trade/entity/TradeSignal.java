@@ -84,6 +84,9 @@ public class TradeSignal {
     @Column(name = "signal_time")
     private Instant signalTime;
 
+    @Column(name = "candle_time")
+    private Instant candleTime;
+
     @Column(name = "entry_valid_until")
     private Instant entryValidUntil;
 
