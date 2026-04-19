@@ -12,7 +12,9 @@ import java.math.BigDecimal;
 @RequiredArgsConstructor
 public class DtbExitStrategy implements ExitStrategy {
     @Override
-    public ExitDecision evaluate(TradeSignal signal, BigDecimal currentLtp, BigDecimal underlyingLtp) {
+    public ExitDecision evaluate(TradeSignal signal, ExitContext ctx) {
+        BigDecimal underlyingLtp = ctx.underlyingLtp();
+        BigDecimal currentLtp = ctx.ltp();
         boolean isLong = signal.getDirection() == TradeDirection.LONG;
         if (isLong) {
             if (underlyingLtp.compareTo(signal.getStopLoss()) <= 0) return ExitDecision.exit(ExitReason.STOP_HIT, currentLtp);

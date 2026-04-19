@@ -118,6 +118,7 @@ public class TradeSimulationService {
 
                 // 1. Check exits — sub-step through finer-grained bars if available
                 BarSeries exitFull = exitSeries.get(symbol);
+                boolean exitHandled = false;
                 if (exitFull != null) {
                     // Sub-step: iterate 5-min bars within this 15-min window [t - stepMinutes, t]
                     Instant windowStart = t.minusSeconds((long) stepMinutes * 60);
@@ -126,16 +127,20 @@ public class TradeSimulationService {
                         BarSeries exitTruncated = BarSeriesTruncator.truncate(exitFull, subTime);
                         if (exitTruncated.getBarCount() < 2) continue;
                         Bar exitBar = exitTruncated.getBar(exitTruncated.getEndIndex());
+                        // Validate bar is within the current window — stale data means no 5m coverage
+                        if (exitBar.getEndTime().isBefore(windowStart)) continue;
+                        exitHandled = true;
 
-                        List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, exitBar);
+                        List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, exitBar, truncated, exitTruncated);
                         for (SimulationStrategy.ExitResult exit : exits) {
                             processExit(ctx, exit, subTime);
                         }
                     }
-                } else {
+                }
+                if (!exitHandled) {
                     // Fallback: check exits on the scan-timeframe bar
                     Bar currentBar = truncated.getBar(truncated.getEndIndex());
-                    List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, currentBar);
+                    List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, currentBar, truncated, null);
                     for (SimulationStrategy.ExitResult exit : exits) {
                         processExit(ctx, exit, t);
                     }
