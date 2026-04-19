@@ -113,6 +113,12 @@ public class TradeSignal {
     @Column
     private Integer currentSlabIndex;  // Current locked slab level (-1 = no slab reached)
 
+    @Column
+    private Integer barsInTrade;
+
+    @Column
+    private Integer barsSinceLastSlabAdvance;
+
     @PrePersist
     void prePersist() {
         createdAt = updatedAt = Instant.now();

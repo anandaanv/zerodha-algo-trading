@@ -38,8 +38,11 @@ def load_model():
 
     exit_model_path = os.path.join(os.path.dirname(__file__), "../models/ppo_exit_optimizer_70_full.zip")
     if os.path.exists(exit_model_path):
-        EXIT_MODEL = PPO.load(exit_model_path)
-        print(f"[ExitOptimizer] RL exit model loaded from {exit_model_path}")
+        try:
+            EXIT_MODEL = PPO.load(exit_model_path)
+            print(f"[ExitOptimizer] RL exit model loaded from {exit_model_path}")
+        except Exception as e:
+            print(f"[ExitOptimizer] Failed to load RL exit model: {e} — exit predictions disabled")
     else:
         print(f"[ExitOptimizer] No exit model found at {exit_model_path} — exit predictions disabled")
 

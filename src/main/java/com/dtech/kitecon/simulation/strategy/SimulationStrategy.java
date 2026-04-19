@@ -10,8 +10,9 @@ public interface SimulationStrategy {
     /** Check if any new signals should be generated at this timestamp */
     List<TradeSignal> scan(SimulationContext ctx, String symbol, BarSeries truncatedSeries);
 
-    /** Check open positions against the current bar. Return signals that should exit. */
-    List<ExitResult> checkExits(SimulationContext ctx, List<TradeSignal> openPositions, String symbol, Bar currentBar);
+    /** Check open positions against the current bar. BarSeries used for indicator computation. */
+    List<ExitResult> checkExits(SimulationContext ctx, List<TradeSignal> openPositions, String symbol,
+                                 Bar currentBar, BarSeries truncatedSeries, BarSeries exitSeries5m);
 
     String getStrategyType();
 
