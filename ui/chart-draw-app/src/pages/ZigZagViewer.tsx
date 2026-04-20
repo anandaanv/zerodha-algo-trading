@@ -63,6 +63,8 @@ export default function ZigZagViewer() {
   const [pivotCount, setPivotCount] = useState(0);
   const [showReversals, setShowReversals] = useState(true);
   const [showChoch, setShowChoch] = useState(false);
+  const [showIncremental, setShowIncremental] = useState(false);
+  const [incrementalPivotCount, setIncrementalPivotCount] = useState(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -100,8 +102,8 @@ export default function ZigZagViewer() {
     setLastUpdated(null);
 
     try {
-      // Fetch OHLC, ZigZag, and market structure in parallel
-      const [ohlcRes, zigzagRes, structureRes] = await Promise.all([
+      // Fetch OHLC, ZigZag, market structure, and optionally incremental ZigZag
+      const fetches: Promise<Response>[] = [
         fetch(
           getApiUrl(
             `/api/ohlc?symbol=${symbol}&interval=${timeframe}`
@@ -126,7 +128,15 @@ export default function ZigZagViewer() {
           ).toString(),
           withAuth()
         ),
-      ]);
+        // Always fetch incremental for comparison
+        fetch(
+          getApiUrl(
+            `/api/chartpattern/zigzag/incremental?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`
+          ).toString(),
+          withAuth()
+        ),
+      ];
+      const [ohlcRes, zigzagRes, structureRes, incrementalRes] = await Promise.all(fetches);
 
       if (!ohlcRes.ok || !zigzagRes.ok) {
         setStatus("Error loading data");
@@ -137,6 +147,8 @@ export default function ZigZagViewer() {
       const zigzagDataArray: ZigZagResponse[] = await zigzagRes.json();
       const structurePoints: StructurePoint[] = structureRes.ok ? await structureRes.json() : [];
       structurePointsRef.current = structurePoints;
+      const incrementalPivots: Pivot[] = incrementalRes?.ok ? await incrementalRes.json() : [];
+      setIncrementalPivotCount(incrementalPivots.length);
 
       if (ohlcData.length === 0 || zigzagDataArray.length === 0) {
         setStatus("No data available");
@@ -268,6 +280,29 @@ export default function ZigZagViewer() {
       }));
 
       zigzagSeries.setData(lineData);
+
+      // Add IncrementalZigZag overlay (blue dashed line) if available
+      if (incrementalPivots.length > 0) {
+        const incrSeries = chart.addLineSeries({
+          color: "#2196f3",
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+
+        const incrByTime = new Map<number, Pivot>();
+        for (const p of incrementalPivots) {
+          const t = Math.floor(new Date(p.timestamp).getTime() / 1000);
+          if (!incrByTime.has(t)) incrByTime.set(t, p);
+        }
+        const incrLineData = Array.from(incrByTime.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([t, p]) => ({ time: t as Time, value: p.value }));
+
+        incrSeries.setData(incrLineData);
+      }
 
       // Set markers for pivots (orange arrows)
       const pivotMarkers: SeriesMarker<Time>[] = cleanPivots.map(({ t, p }) => ({
@@ -477,6 +512,12 @@ export default function ZigZagViewer() {
           />
           Show ChoCH confirmation markers (advanced)
         </label>
+
+        {incrementalPivotCount > 0 && (
+          <span style={{ color: "#2196f3", fontSize: "13px" }}>
+            IncrementalZigZag: {incrementalPivotCount} pivots (blue dashed line)
+          </span>
+        )}
 
         <span style={{ color: "#666", fontSize: "14px", minHeight: "20px" }}>
           {status}

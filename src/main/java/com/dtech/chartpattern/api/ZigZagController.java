@@ -12,13 +12,22 @@ import com.dtech.algo.series.Interval;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.service.copilot.MarketStructureService;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint;
+import com.dtech.kitecon.simulation.IncrementalZigZag;
+import com.dtech.kitecon.strategy.dataloader.BarsLoader;
+import com.dtech.kitecon.repository.CandleRepository;
+import com.dtech.kitecon.data.Candle;
+import org.ta4j.core.BarSeries;
+import org.ta4j.core.BaseBarSeriesBuilder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
 import java.util.*;
+import java.util.Comparator;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/chartpattern/zigzag")
@@ -30,6 +39,7 @@ public class ZigZagController {
     private final ChartPatternProperties properties;
     private final ChartPlotService chartPlotService;
     private final MarketStructureService marketStructureService;
+    private final CandleRepository candleRepository;
 
     @PostMapping("/stock")
     public ResponseEntity<List<ZigZagResponses.StockResult>> computeForStock(@RequestBody ZigZagRequests.StockRequest req) {
@@ -126,5 +136,54 @@ public class ZigZagController {
         List<ZigZagPoint> pivots = zigZagService.detectAndPersist(symbol, instrument, interval, false);
         var data = marketStructureService.analyse(pivots, interval.name());
         return ResponseEntity.ok(data.getSwingPoints());
+    }
+
+    /**
+     * Returns IncrementalZigZag pivots — what the simulation/live scanner sees.
+     * Compare with /stock endpoint (confirmed pivots) to verify alignment.
+     */
+    @GetMapping("/incremental")
+    public ResponseEntity<List<ZigZagPoint>> getIncrementalPivots(
+            @RequestParam("symbol") String symbol,
+            @RequestParam("timeframe") String timeframe) {
+        Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+        if (instrument == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        Interval interval = Interval.valueOf(timeframe);
+        ZigZagParams params = zigZagService.resolveParams(symbol, interval);
+        ZigZagParams backtestParams = ZigZagParams.ofDefaults(
+                params.getAtrLength(), params.getAtrMult(),
+                params.getPctMin(), params.getHysteresis(),
+                params.getMinBarsBetweenPivots(),
+                params.isDynamicPctEnabled(), params.getVolMult(),
+                params.getRvolWindow(), ZigZagParams.Mode.BACKTEST);
+
+        // Load all bars from DB
+        Instant from = Instant.parse("2015-01-01T00:00:00Z");
+        List<Candle> candles = candleRepository
+                .findAllByInstrumentAndTimeframeAndTimestampBetween(instrument, interval, from, Instant.now());
+        candles.sort(Comparator.comparing(Candle::getTimestamp));
+
+        // Process bars through IncrementalZigZag (matching simulation behavior)
+        IncrementalZigZag izz = new IncrementalZigZag(backtestParams);
+        for (int i = 0; i < candles.size(); i++) {
+            Candle c = candles.get(i);
+            org.ta4j.core.Bar bar = BarsLoader.getBar(
+                    c.getOpen(), c.getHigh(), c.getLow(), c.getClose(),
+                    java.util.Optional.ofNullable(c.getVolume()).orElse(0L), c.getTimestamp());
+            izz.processBar(bar, i);
+        }
+
+        // Return pivots with trailing extreme
+        if (candles.isEmpty()) {
+            return ResponseEntity.ok(List.of());
+        }
+        Candle lastCandle = candles.get(candles.size() - 1);
+        org.ta4j.core.Bar lastBar = BarsLoader.getBar(
+                lastCandle.getOpen(), lastCandle.getHigh(), lastCandle.getLow(), lastCandle.getClose(),
+                java.util.Optional.ofNullable(lastCandle.getVolume()).orElse(0L), lastCandle.getTimestamp());
+        List<ZigZagPoint> pivots = izz.getPivotsWithTrailingExtreme(lastBar);
+        return ResponseEntity.ok(pivots);
     }
 }
