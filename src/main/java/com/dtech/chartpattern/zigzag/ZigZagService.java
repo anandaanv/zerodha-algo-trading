@@ -215,7 +215,7 @@ public class ZigZagService {
      *   * Up:  (Low(k-1)->High(k)) / (Low(k-3)->High(k-2)) * 100
      *   * Down:(High(k-1)->Low(k))  / (High(k-3)->Low(k-2))  * 100
      */
-    private void computePivotMetrics(java.util.List<ZigZagPoint> pivots) {
+    public void computePivotMetrics(java.util.List<ZigZagPoint> pivots) {
         if (pivots == null || pivots.isEmpty()) return;
 
         for (int k = 0; k < pivots.size(); k++) {
