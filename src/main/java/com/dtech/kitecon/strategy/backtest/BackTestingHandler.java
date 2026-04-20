@@ -17,9 +17,9 @@ import org.ta4j.core.Trade.TradeType;
 
 import org.ta4j.core.backtest.BarSeriesManager;
 import org.ta4j.core.criteria.*;
-import org.ta4j.core.criteria.pnl.AverageLossCriterion;
-import org.ta4j.core.criteria.pnl.AverageProfitCriterion;
-import org.ta4j.core.criteria.pnl.ProfitLossCriterion;
+import org.ta4j.core.criteria.pnl.GrossAverageLossCriterion;
+import org.ta4j.core.criteria.pnl.GrossAverageProfitCriterion;
+import org.ta4j.core.criteria.pnl.GrossProfitLossCriterion;
 import org.ta4j.core.num.DecimalNum;
 
 import java.util.*;
@@ -112,9 +112,9 @@ public class BackTestingHandler {
     //FIXME Criterion should have a method to get name. This map population is pathetic.
     Map<String, Double> backtestresultsMap = new LinkedHashMap<>();
     backtestresultsMap.put("AverageProfitableTrades",
-            calculateCriterion(new AverageLossCriterion(), series, tradingRecord));
+            calculateCriterion(new GrossAverageLossCriterion(), series, tradingRecord));
     backtestresultsMap.put("AverageProfit",
-            calculateCriterion(new AverageProfitCriterion(), series, tradingRecord));
+            calculateCriterion(new GrossAverageProfitCriterion(), series, tradingRecord));
     backtestresultsMap.put("LinearTransactionCost",
             calculateCriterion(new LinearTransactionCostCriterion(5000, 0.005), series, tradingRecord));
     backtestresultsMap.put("MaximumDrawdown",
@@ -126,7 +126,7 @@ public class BackTestingHandler {
     backtestresultsMap.put("RewardRiskRatio",
             calculateCriterion(new ReturnOverMaxDrawdownCriterion(), series, tradingRecord));
     backtestresultsMap.put("ProfitLoss",
-            calculateCriterion(new ProfitLossCriterion(), series, tradingRecord));
+            calculateCriterion(new GrossProfitLossCriterion(), series, tradingRecord));
     return backtestresultsMap;
   }
 

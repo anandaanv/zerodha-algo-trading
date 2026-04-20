@@ -40,7 +40,8 @@ public class ExtendedBarSeries implements IntervalBarSeries {
             replace = true;
         }
 
-        BaseBar bar = new BaseBar(Duration.ofDays(1), endTime, numOf(openPrice), numOf(highPrice), numOf(lowPrice),
+        Instant beginTime = endTime.minus(Duration.ofDays(1));
+        BaseBar bar = new BaseBar(Duration.ofDays(1), beginTime, endTime, numOf(openPrice), numOf(highPrice), numOf(lowPrice),
                 numOf(closePrice), numOf(volume), numOf(0), 0);
 //        if(replace == false && this.getBarCount() > 0 && syncExecutor != null) {
 //            syncExecutor.submit(new CandleSyncToken(bar, instrument, interval));
