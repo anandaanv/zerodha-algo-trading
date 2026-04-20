@@ -135,8 +135,15 @@ export default function ZigZagViewer() {
           ).toString(),
           withAuth()
         ),
+        // Fetch impulse labels
+        fetch(
+          getApiUrl(
+            `/api/chartpattern/zigzag/impulse-labels?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`
+          ).toString(),
+          withAuth()
+        ),
       ];
-      const [ohlcRes, zigzagRes, structureRes, incrementalRes] = await Promise.all(fetches);
+      const [ohlcRes, zigzagRes, structureRes, incrementalRes, impulseRes] = await Promise.all(fetches);
 
       if (!ohlcRes.ok || !zigzagRes.ok) {
         setStatus("Error loading data");
@@ -149,6 +156,8 @@ export default function ZigZagViewer() {
       structurePointsRef.current = structurePoints;
       const incrementalPivots: Pivot[] = incrementalRes?.ok ? await incrementalRes.json() : [];
       setIncrementalPivotCount(incrementalPivots.length);
+      const impulseLabels: {timestamp: string; label: string; direction: string; price: string}[] =
+        impulseRes?.ok ? await impulseRes.json() : [];
 
       if (ohlcData.length === 0 || zigzagDataArray.length === 0) {
         setStatus("No data available");
@@ -285,7 +294,7 @@ export default function ZigZagViewer() {
       if (incrementalPivots.length > 0) {
         const incrSeries = chart.addLineSeries({
           color: "#2196f3",
-          lineWidth: 1,
+          lineWidth: 2,
           lineStyle: 2, // dashed
           priceLineVisible: false,
           lastValueVisible: false,
@@ -302,6 +311,23 @@ export default function ZigZagViewer() {
           .map(([t, p]) => ({ time: t as Time, value: p.value }));
 
         incrSeries.setData(incrLineData);
+      }
+
+      // Add impulse label markers (green/red diamonds)
+      if (impulseLabels.length > 0) {
+        const impulseMarkers: SeriesMarker<Time>[] = impulseLabels.map((il) => {
+          const t = Math.floor(new Date(il.timestamp).getTime() / 1000) as Time;
+          const dir = parseInt(il.direction) || 0;
+          const isBullish = il.label === "wave3_start" && dir >= 0;
+          return {
+            time: t,
+            position: isBullish ? "belowBar" : "aboveBar",
+            color: isBullish ? "#4caf50" : "#f44336",
+            shape: "diamond" as const,
+            text: il.label === "wave3_start" ? "W3" : "W5",
+          };
+        });
+        pivotMarkersRef.current = [...pivotMarkersRef.current, ...impulseMarkers];
       }
 
       // Set markers for pivots (orange arrows)

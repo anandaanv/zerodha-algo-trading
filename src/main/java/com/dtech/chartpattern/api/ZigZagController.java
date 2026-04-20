@@ -186,4 +186,87 @@ public class ZigZagController {
         List<ZigZagPoint> pivots = izz.getPivotsWithTrailingExtreme(lastBar);
         return ResponseEntity.ok(pivots);
     }
+
+    /**
+     * Returns impulse-labeled pivots from the historical labeler.
+     * Shows where wave3 starts are detected on the confirmed ZigZag.
+     */
+    @GetMapping("/impulse-labels")
+    public ResponseEntity<?> getImpulseLabels(
+            @RequestParam("symbol") String symbol,
+            @RequestParam("timeframe") String timeframe) {
+        try {
+            Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+            if (instrument == null) return ResponseEntity.badRequest().build();
+
+            Interval interval = Interval.valueOf(timeframe);
+            ZigZagParams params = zigZagService.resolveParams(symbol, interval);
+            ZigZagParams backtestParams = ZigZagParams.ofDefaults(
+                    params.getAtrLength(), params.getAtrMult(),
+                    params.getPctMin(), params.getHysteresis(),
+                    params.getMinBarsBetweenPivots(),
+                    params.isDynamicPctEnabled(), params.getVolMult(),
+                    params.getRvolWindow(), ZigZagParams.Mode.BACKTEST);
+
+            // Get bar series
+            org.ta4j.core.BarSeries series = zigZagService.getBarSeries(symbol, instrument, interval);
+            if (series == null || series.isEmpty()) return ResponseEntity.ok(java.util.List.of());
+
+            // Detect pivots
+            java.util.List<ZigZagPoint> pivots = zigZagService.detect(series, backtestParams);
+
+            // Build bar list and tsToIdx
+            java.util.List<org.ta4j.core.Bar> bars = new java.util.ArrayList<>();
+            for (int i = 0; i < series.getBarCount(); i++) bars.add(series.getBar(i));
+            java.util.Map<Instant, Integer> tsToIdx = new java.util.HashMap<>();
+            for (int i = 0; i < bars.size(); i++) tsToIdx.put(bars.get(i).getEndTime(), i);
+
+            // Enrich and label
+            com.dtech.kitecon.elliott.ImpulseLabeler labeler = org.springframework.beans.factory.BeanFactoryUtils
+                    .beanOfType(org.springframework.web.context.support.WebApplicationContextUtils
+                    .getWebApplicationContext(null), com.dtech.kitecon.elliott.ImpulseLabeler.class);
+
+            // Actually, we can't easily get the labeler bean here. Let's just read from the CSV instead.
+            // Read the pre-generated training CSV
+            String csvPath = "elliott_train_data/" + symbol + "_" + interval.getUiKey() + "_historical-raw_impulse.csv";
+            java.io.File csvFile = new java.io.File(csvPath);
+            if (!csvFile.exists()) {
+                return ResponseEntity.ok(java.util.Map.of("error", "CSV not found. Run training data generation first.", "path", csvPath));
+            }
+
+            // Parse CSV to extract impulse labels with timestamps
+            java.util.List<java.util.Map<String, Object>> impulseLabels = new java.util.ArrayList<>();
+            try (java.io.BufferedReader br = new java.io.BufferedReader(new java.io.FileReader(csvFile))) {
+                String header = br.readLine();
+                String[] cols = header.split(",");
+                int tsIdx = -1, labelIdx = -1, dirIdx = -1, priceIdx = -1;
+                for (int i = 0; i < cols.length; i++) {
+                    if ("timestamp".equals(cols[i])) tsIdx = i;
+                    else if ("label".equals(cols[i])) labelIdx = i;
+                    else if ("direction".equals(cols[i])) dirIdx = i;
+                    else if ("price".equals(cols[i])) priceIdx = i;
+                }
+
+                String line;
+                while ((line = br.readLine()) != null) {
+                    String[] parts = line.split(",", -1);
+                    if (tsIdx >= 0 && labelIdx >= 0 && parts.length > labelIdx) {
+                        String label = parts[labelIdx];
+                        if ("wave3_start".equals(label) || "wave5_start".equals(label)) {
+                            java.util.Map<String, Object> entry = new java.util.HashMap<>();
+                            entry.put("timestamp", parts[tsIdx]);
+                            entry.put("label", label);
+                            entry.put("direction", dirIdx >= 0 ? parts[dirIdx] : "0");
+                            entry.put("price", priceIdx >= 0 ? parts[priceIdx] : "0");
+                            impulseLabels.add(entry);
+                        }
+                    }
+                }
+            }
+
+            return ResponseEntity.ok(impulseLabels);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("error", e.getMessage()));
+        }
+    }
 }
