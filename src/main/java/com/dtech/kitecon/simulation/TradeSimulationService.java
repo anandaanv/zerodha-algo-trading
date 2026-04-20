@@ -74,8 +74,8 @@ public class TradeSimulationService {
                     log.debug("[Simulation] Instrument not found for {}", symbol);
                     continue;
                 }
-                // Load bars with 1-year lookback for ZigZag + indicators (not just the sim window)
-                Instant lookbackFrom = from.minus(365, java.time.temporal.ChronoUnit.DAYS);
+                // Load ALL available bars (match training's full-history lookback for identical ATR/ZigZag)
+                Instant lookbackFrom = Instant.parse("2015-01-01T00:00:00Z");
                 BarSeries series = loadBarSeries(inst, interval, lookbackFrom, to);
                 if (series != null && series.getBarCount() > 0) {
                     fullSeries.put(symbol, series);
