@@ -6,6 +6,7 @@ import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.CandleRepository;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.simulation.strategy.SimulationStrategy;
+import com.dtech.kitecon.simulation.Ta4jZigZagBridge;
 import com.dtech.kitecon.strategy.dataloader.BarsLoader;
 import com.dtech.kitecon.trade.entity.TradeActionLog;
 import com.dtech.kitecon.trade.entity.TradeOrder;
@@ -119,11 +120,18 @@ public class TradeSimulationService {
                 bars.add(full.getBar(i));
             }
 
-            // Create empty growing series
+            // Create empty growing series and attach ZigZag bridge BEFORE adding bars
+            // This ensures OnChange fires for every bar (matching training behavior)
             BarSeries growing = new BaseBarSeriesBuilder()
                     .withName(symbol + "_sim").build();
 
+            // Create ZigZag bridge on empty series — it registers as OnChange listener
+            // When bars are added below, ZigZag processes each one incrementally
+            // Using hardcoded defaults: ATR period 14, multiplier 1.5
+            new Ta4jZigZagBridge(growing, 14, 1.5);
+
             // Pre-add bars before the simulation start time (lookback for indicators)
+            // OnChange fires for each bar → ZigZag auto-updates incrementally
             int preAddCount = 0;
             for (Bar bar : bars) {
                 if (!bar.getEndTime().isAfter(from)) {
