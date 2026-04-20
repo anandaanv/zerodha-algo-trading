@@ -103,18 +103,64 @@ public class TradeSimulationService {
         log.info("[Simulation] Loaded {} symbols, stepping {}m (exits {}m) from {} to {}",
                 fullSeries.size(), stepMinutes, exitStepMinutes, from, to);
 
+        // Build growing series per symbol — add bars incrementally instead of truncating
+        // This enables OnChange listeners (ZigZag, indicators) to auto-update
+        Map<String, BarSeries> growingSeries = new HashMap<>();
+        Map<String, List<Bar>> sortedBars = new HashMap<>();
+        Map<String, Integer> nextBarIndex = new HashMap<>();
+
+        for (Map.Entry<String, BarSeries> entry : fullSeries.entrySet()) {
+            String symbol = entry.getKey();
+            BarSeries full = entry.getValue();
+
+            // Extract all bars sorted by time
+            List<Bar> bars = new ArrayList<>();
+            for (int i = 0; i < full.getBarCount(); i++) {
+                bars.add(full.getBar(i));
+            }
+
+            // Create empty growing series
+            BarSeries growing = new BaseBarSeriesBuilder()
+                    .withName(symbol + "_sim").build();
+
+            // Pre-add bars before the simulation start time (lookback for indicators)
+            int preAddCount = 0;
+            for (Bar bar : bars) {
+                if (!bar.getEndTime().isAfter(from)) {
+                    growing.addBar(bar);
+                    preAddCount++;
+                }
+            }
+
+            growingSeries.put(symbol, growing);
+            sortedBars.put(symbol, bars);
+            nextBarIndex.put(symbol, preAddCount);
+            log.debug("[Simulation] {} pre-added {} lookback bars, {} total available",
+                    symbol, preAddCount, bars.size());
+        }
+
         // Step through time
         do {
             Instant t = clock.getCurrentTime();
             ctx.setTotalSteps(ctx.getTotalSteps() + 1);
 
-            for (Map.Entry<String, BarSeries> entry : fullSeries.entrySet()) {
+            for (Map.Entry<String, BarSeries> entry : growingSeries.entrySet()) {
                 String symbol = entry.getKey();
-                BarSeries full = entry.getValue();
+                BarSeries growing = entry.getValue();
 
-                // CRITICAL: truncate to current simulated time — no future data
-                BarSeries truncated = BarSeriesTruncator.truncate(full, t);
-                if (truncated.getBarCount() < 10) continue;
+                // Add new bars up to current simulated time (OnChange fires → ZigZag auto-updates)
+                List<Bar> bars = sortedBars.get(symbol);
+                int nextIdx = nextBarIndex.getOrDefault(symbol, 0);
+                while (nextIdx < bars.size() && !bars.get(nextIdx).getEndTime().isAfter(t)) {
+                    growing.addBar(bars.get(nextIdx));
+                    nextIdx++;
+                }
+                nextBarIndex.put(symbol, nextIdx);
+
+                if (growing.getBarCount() < 10) continue;
+
+                // Use growing series as the "truncated" series — it only has bars up to t
+                BarSeries truncated = growing;
 
                 // 1. Check exits — sub-step through finer-grained bars if available
                 BarSeries exitFull = exitSeries.get(symbol);
