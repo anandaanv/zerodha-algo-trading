@@ -57,9 +57,8 @@ dependencies {
     implementation 'org.ehcache:ehcache'
     implementation 'com.zerodhatech.kiteconnect:kiteconnect:3.5.1'
     implementation group: 'com.google.guava', name: 'guava', version: '29.0-jre'
-    // Use official ta4j release artifacts from Maven Central
-    implementation 'org.ta4j:ta4j-core:0.18'
-    implementation 'org.ta4j:ta4j-examples:0.18'
+    // Use ta4j-zerodha fork (0.22.7) with OnChange event system (installed from local Maven)
+    implementation 'org.ta4j:ta4j-core:0.22.7-SNAPSHOT'
     testImplementation 'com.h2database:h2'
 //    developmentOnly 'org.springframework.boot:spring-boot-devtools'
     implementation group: 'mysql', name: 'mysql-connector-java', version: '8.0.33'
