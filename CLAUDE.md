@@ -87,3 +87,34 @@ When you need a JWT from the local backend to test `/api/**` endpoints, read the
 ## Long-Running Commands
 
 For any command that takes more than 2 minutes (simulations, batch CSV generation, model training), check progress every 5 minutes and report status to the user. Do not wait silently for extended periods.
+
+## Knowledge Tools — Graphify & MemPalace
+
+### Graphify (Knowledge Graph)
+Builds a queryable knowledge graph of the codebase. Use for understanding code structure, finding dependencies, and navigating architecture.
+
+```bash
+graphify update .          # re-extract code files (no LLM, fast)
+graphify query "question"  # query the graph
+graphify explain "Node"    # explain a node and its neighbors
+graphify path "A" "B"      # shortest path between nodes
+graphify watch .           # auto-rebuild on code changes
+```
+
+- Output: `graphify-out/graph.json`, `graphify-out/graph.html`, `graphify-out/GRAPH_REPORT.md`
+- Use `/graphify .` for full pipeline with LLM extraction (docs, papers, images)
+- Use `graphify update .` for quick code-only re-extraction (no LLM needed)
+
+### MemPalace (AI Memory)
+Persistent memory system for tracking decisions, trade results, architecture context across sessions.
+
+```bash
+mempalace mine .           # index project files into memory
+mempalace search "query"   # find memories by semantic search
+mempalace status           # palace overview and stats
+```
+
+- Palace location: `~/.mempalace/palace`
+- Wing: `zerodha_algo_trading`
+- Use for: storing simulation results, strategy decisions, debugging context
+- After major changes, run `mempalace mine .` to update the index
