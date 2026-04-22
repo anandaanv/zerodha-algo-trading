@@ -1,1 +1,1 @@
-strategies/impulse/java/ImpulseAnalysisCore.java
+/codes/algotrade/zerodha-algo-trading/strategies/impulse/java/ImpulseAnalysisCore.java
