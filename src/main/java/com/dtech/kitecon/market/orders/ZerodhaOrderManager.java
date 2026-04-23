@@ -25,12 +25,8 @@ import org.springframework.stereotype.Component;
 public class ZerodhaOrderManager implements OrderManager {
   private final MarketFacadeProvider marketFacadeProvider;
 
-  // Order product type: MTF, CNC, MIS, NRML — configurable via property
-  @Value("${trade.order.product:MTF}")
-  private String orderProduct;
-
   @Override
-  public String placeMISOrder(Double price, int amount, Instrument instrument, String orderType)
+  public String placeOrder(Double price, int amount, Instrument instrument, String orderType, String product)
       throws OrderException {
     try {
       MarketFacade facade = marketFacadeProvider.getFacade();
@@ -41,7 +37,7 @@ public class ZerodhaOrderManager implements OrderManager {
       params.transactionType = orderType.toUpperCase();
       params.quantity = amount;
       params.price = price;
-      params.product = orderProduct;
+      params.product = product != null ? product : "MTF";
       params.orderType = "LIMIT";
       params.validity = "DAY";
       OrderResponse response = facade.placeOrder(params, "regular");

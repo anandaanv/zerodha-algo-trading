@@ -16,14 +16,12 @@ public class CapitalAllocationService {
 
     private final MarketFacadeProvider marketFacadeProvider;
 
-    @Value("${trade.capital.allocation.pct:30}")
-    private double allocationPct;
-
     @Value("${trade.portfolio.value:500000}")
     private long fallbackPortfolioValue;
 
     public int computeQuantity(BigDecimal capitalPct, BigDecimal price, int lotSize) {
         double availableCapital = getAvailableCapital();
+        double allocationPct = capitalPct != null ? capitalPct.doubleValue() : 30.0;
         double capital = availableCapital * allocationPct / 100.0;
 
         int maxUnits = (int) (capital / price.doubleValue());

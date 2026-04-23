@@ -35,6 +35,9 @@ public class SegmentConfig {
     @Column(length = 20)
     private String provider;
 
+    @Column(name = "order_product", length = 10)
+    private String orderProduct;
+
     @Column(columnDefinition = "TEXT")
     private String notes;
 
@@ -42,6 +45,9 @@ public class SegmentConfig {
     void prePersist() {
         if (provider == null) {
             provider = "KITE";
+        }
+        if (orderProduct == null) {
+            orderProduct = "MTF";
         }
     }
 }

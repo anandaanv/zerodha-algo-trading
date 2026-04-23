@@ -91,8 +91,9 @@ public class PaperOrderExecutionService {
                         resolved.getTradingSymbol(), new String[]{"NSE", "BSE", "NFO", "BFO"});
                 if (kiteInstrument != null) {
                     String direction = (orderDirection == TradeDirection.LONG) ? "BUY" : "SELL";
-                    String orderId = orderManager.placeMISOrder(
-                            entryPrice.doubleValue(), qty, kiteInstrument, direction);
+                    String orderId = orderManager.placeOrder(
+                            entryPrice.doubleValue(), qty, kiteInstrument, direction,
+                            config.getOrderProduct());
                     order.setPaperTrade(false);
                     tradeOrderRepository.save(order);
                     log.info("[LiveOrder] PLACED orderId={} {} {} qty={} price={} instrument={}",

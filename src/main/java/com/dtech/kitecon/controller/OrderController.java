@@ -23,7 +23,7 @@ public class OrderController {
       @PathVariable String instrument, @PathVariable String direction) throws OrderException {
     Instrument tradingIdentity = instrumentRepository
         .findByTradingsymbolAndExchangeIn(instrument, exchanges);
-    return orderManager.placeMISOrder(price, 200, tradingIdentity, direction);
+    return orderManager.placeOrder(price, 200, tradingIdentity, direction, "CNC");
   }
 
 }

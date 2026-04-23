@@ -12,6 +12,7 @@ export interface SegmentConfig {
   capitalPct: number;
   provider?: string;
   notes?: string;
+  orderProduct?: string;
 }
 
 export interface TradeOrder {

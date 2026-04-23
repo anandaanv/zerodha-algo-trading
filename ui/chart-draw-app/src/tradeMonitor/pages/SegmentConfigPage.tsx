@@ -233,6 +233,7 @@ const SegmentConfigPage: React.FC = () => {
                 segment: "EQ",
                 enabled: false,
                 capitalPct: 2.0,
+                orderProduct: "MTF",
               })
             }
           >
@@ -248,6 +249,7 @@ const SegmentConfigPage: React.FC = () => {
             <th style={thStyle}>Segment</th>
             <th style={thStyle}>Capital %</th>
             <th style={thStyle}>Enabled</th>
+            <th style={thStyle}>Product</th>
             <th style={thStyle}>Provider</th>
             <th style={thStyle}>Actions</th>
           </tr>
@@ -305,6 +307,20 @@ const SegmentConfigPage: React.FC = () => {
                   }
                 />
               </td>
+              <td style={tdStyle}>
+                <select
+                  style={inputStyle}
+                  value={newConfig.orderProduct || "MTF"}
+                  onChange={(e) =>
+                    setNewConfig({ ...newConfig, orderProduct: e.target.value })
+                  }
+                >
+                  <option value="MTF">MTF</option>
+                  <option value="CNC">CNC</option>
+                  <option value="MIS">MIS</option>
+                  <option value="NRML">NRML</option>
+                </select>
+              </td>
               <td style={tdStyle}>{newConfig.provider || "KITE"}</td>
               <td style={tdStyle}>
                 <button
@@ -325,7 +341,21 @@ const SegmentConfigPage: React.FC = () => {
           {configs.map((config) => (
             <tr key={config.id}>
               <td style={tdStyle}>{config.symbol}</td>
-              <td style={tdStyle}>{config.segment}</td>
+              <td style={tdStyle}>
+                {editingId === config.id ? (
+                  <select
+                    style={inputStyle}
+                    defaultValue={config.segment}
+                    onChange={(e) => (config.segment = e.target.value as TradingSegment)}
+                  >
+                    <option value="EQ">EQ</option>
+                    <option value="FUT">FUT</option>
+                    <option value="OPT">OPT</option>
+                  </select>
+                ) : (
+                  config.segment
+                )}
+              </td>
               <td style={tdStyle}>
                 {editingId === config.id ? (
                   <input
@@ -342,7 +372,31 @@ const SegmentConfigPage: React.FC = () => {
                 )}
               </td>
               <td style={tdStyle}>
-                <div style={enabledDotStyle(config.enabled)} />
+                {editingId === config.id ? (
+                  <input
+                    type="checkbox"
+                    defaultChecked={config.enabled}
+                    onChange={(e) => (config.enabled = e.target.checked)}
+                  />
+                ) : (
+                  <div style={enabledDotStyle(config.enabled)} />
+                )}
+              </td>
+              <td style={tdStyle}>
+                {editingId === config.id ? (
+                  <select
+                    style={inputStyle}
+                    defaultValue={config.orderProduct || "MTF"}
+                    onChange={(e) => (config.orderProduct = e.target.value)}
+                  >
+                    <option value="MTF">MTF</option>
+                    <option value="CNC">CNC</option>
+                    <option value="MIS">MIS</option>
+                    <option value="NRML">NRML</option>
+                  </select>
+                ) : (
+                  config.orderProduct || "MTF"
+                )}
               </td>
               <td style={tdStyle}>{config.provider || "KITE"}</td>
               <td style={tdStyle}>
