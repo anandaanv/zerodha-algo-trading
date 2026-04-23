@@ -57,17 +57,7 @@ git checkout "$BRANCH" 2>/dev/null || git checkout main
 git pull
 cd "$PROJECT_DIR"
 
-# ── 4. Fix symlinks ──
-echo ""
-echo "▶ Step 4: Fix symlinks..."
-for link in $(find src/main/java -type l ! -exec test -e {} \; -print 2>/dev/null); do
-    target=$(readlink "$link")
-    new_target=$(echo "$target" | sed "s|/codes/algotrade/zerodha-algo-trading|$PROJECT_DIR|g")
-    rm -f "$link"
-    ln -s "$new_target" "$link"
-    echo "  Fixed: $(basename $link)"
-done
-echo "  ✓ Symlinks OK"
+# ── 4. (No longer needed — symlinks replaced by Gradle srcDir) ──
 
 # ── 5. Build WAR ──
 echo ""
