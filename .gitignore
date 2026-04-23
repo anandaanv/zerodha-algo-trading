@@ -157,3 +157,7 @@ ds-python/finrl-poc/service/model/
 .claude/docs/impulse-labeler-design.md
 spec/Claude/impulse_detection_spec.md
 trade_setups/elliott/impulse_waves.md
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json

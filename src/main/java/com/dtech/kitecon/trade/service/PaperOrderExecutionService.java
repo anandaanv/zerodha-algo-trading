@@ -1,5 +1,8 @@
 package com.dtech.kitecon.trade.service;
 
+import com.dtech.kitecon.data.Instrument;
+import com.dtech.kitecon.market.orders.OrderManager;
+import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.trade.dto.QuoteResult;
 import com.dtech.kitecon.trade.dto.ResolvedInstrument;
 import com.dtech.kitecon.trade.entity.SegmentConfig;
@@ -12,6 +15,7 @@ import com.dtech.kitecon.trade.enums.TradingSegment;
 import com.dtech.kitecon.trade.repository.TradeOrderRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -25,6 +29,11 @@ public class PaperOrderExecutionService {
 
     private final TradeOrderRepository tradeOrderRepository;
     private final CapitalAllocationService capitalAllocationService;
+    private final OrderManager orderManager;
+    private final InstrumentRepository instrumentRepository;
+
+    @Value("${impulse.live.orders:false}")
+    private boolean liveOrdersEnabled;
 
     public TradeOrder enter(TradeSignal signal, SegmentConfig config,
                            ResolvedInstrument resolved,
@@ -73,6 +82,31 @@ public class PaperOrderExecutionService {
                 signal.getId(), signal.getSymbol(), config.getSegment(), qty, entryPrice,
                 underlyingEntry, signal.getStopLoss(), signal.getTarget(),
                 resolved.getInstrumentType());
+
+        // Place live order on Kite if enabled
+        if (liveOrdersEnabled) {
+            try {
+                Instrument kiteInstrument = instrumentRepository.findByTradingsymbolAndExchangeIn(
+                        resolved.getTradingSymbol(), new String[]{"NSE", "NFO"});
+                if (kiteInstrument != null) {
+                    String direction = (orderDirection == TradeDirection.LONG) ? "BUY" : "SELL";
+                    String orderId = orderManager.placeMISOrder(
+                            entryPrice.doubleValue(), qty, kiteInstrument, direction);
+                    order.setPaperTrade(false);
+                    tradeOrderRepository.save(order);
+                    log.info("[LiveOrder] PLACED orderId={} {} {} qty={} price={} instrument={}",
+                            orderId, resolved.getTradingSymbol(), direction, qty, entryPrice,
+                            resolved.getInstrumentType());
+                } else {
+                    log.warn("[LiveOrder] Instrument not found for {}, falling back to paper",
+                            resolved.getTradingSymbol());
+                }
+            } catch (Exception e) {
+                log.error("[LiveOrder] Failed to place order for {}: {}",
+                        resolved.getTradingSymbol(), e.getMessage());
+                // Order stays as paper trade — don't crash the flow
+            }
+        }
 
         return order;
     }
