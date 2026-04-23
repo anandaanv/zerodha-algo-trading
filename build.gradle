@@ -18,6 +18,14 @@ java {
     }
 }
 
+sourceSets {
+    main {
+        java {
+            srcDir 'strategies/impulse/src/main/java'
+        }
+    }
+}
+
 group = 'com.dtech'
 version = '0.0.1-SNAPSHOT'
 

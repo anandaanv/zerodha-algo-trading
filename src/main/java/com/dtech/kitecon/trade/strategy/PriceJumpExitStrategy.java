@@ -1,1 +1,0 @@
-/codes/algotrade/zerodha-algo-trading/strategies/impulse/java/PriceJumpExitStrategy.java
