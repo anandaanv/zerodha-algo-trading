@@ -34,7 +34,8 @@ public class ZerodhaOrderManager implements OrderManager {
       params.transactionType = orderType.toUpperCase();
       params.quantity = amount;
       params.price = price;
-      params.product = "NRML";
+      // CNC for equity (NSE/BSE), NRML for derivatives (NFO/BFO)
+      params.product = "NFO".equals(exchange) || "BFO".equals(exchange) ? "NRML" : "CNC";
       params.orderType = "LIMIT";
       params.validity = "DAY";
       OrderResponse response = facade.placeOrder(params, "regular");
