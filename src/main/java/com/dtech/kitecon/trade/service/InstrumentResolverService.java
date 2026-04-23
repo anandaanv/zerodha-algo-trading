@@ -40,11 +40,16 @@ public class InstrumentResolverService {
     }
 
     private ResolvedInstrument resolveEQ(String symbol) {
-        Instrument inst = instrumentRepository.findByTradingsymbolAndExchangeIn(
-                symbol, new String[]{"NSE", "BSE"});
-        if (inst == null) {
+        List<Instrument> instruments = instrumentRepository.findAllByTradingsymbolAndExchangeIn(
+                symbol, new String[]{"BSE", "NSE"});
+        if (instruments.isEmpty()) {
             throw new RuntimeException("EQ instrument not found: " + symbol);
         }
+        // Prefer BSE over NSE (NSE may be disabled on API key)
+        Instrument inst = instruments.stream()
+                .filter(i -> "BSE".equals(i.getExchange()))
+                .findFirst()
+                .orElse(instruments.get(0));
         return ResolvedInstrument.builder()
                 .tradingSymbol(inst.getTradingsymbol())
                 .instrumentToken(inst.getInstrumentToken())

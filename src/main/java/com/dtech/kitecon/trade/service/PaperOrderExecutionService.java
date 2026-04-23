@@ -1,6 +1,7 @@
 package com.dtech.kitecon.trade.service;
 
 import com.dtech.kitecon.data.Instrument;
+import java.util.List;
 import com.dtech.kitecon.market.orders.OrderManager;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.trade.dto.QuoteResult;
@@ -87,8 +88,9 @@ public class PaperOrderExecutionService {
         // Place live order on Kite if enabled (impulse only — DTB stays paper)
         if (liveOrdersEnabled && signal.getStrategyType() == StrategyType.IMPULSE) {
             try {
-                Instrument kiteInstrument = instrumentRepository.findByTradingsymbolAndExchangeIn(
-                        resolved.getTradingSymbol(), new String[]{"NSE", "BSE", "NFO", "BFO"});
+                List<Instrument> instruments = instrumentRepository.findAllByTradingsymbolAndExchangeIn(
+                        resolved.getTradingSymbol(), new String[]{"BSE", "NSE", "NFO", "BFO"});
+                Instrument kiteInstrument = instruments.isEmpty() ? null : instruments.get(0);
                 if (kiteInstrument != null) {
                     String direction = (orderDirection == TradeDirection.LONG) ? "BUY" : "SELL";
                     String orderId = orderManager.placeOrder(
