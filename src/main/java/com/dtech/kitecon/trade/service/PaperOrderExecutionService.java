@@ -11,6 +11,7 @@ import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.kitecon.trade.enums.ExitReason;
 import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeOrderStatus;
+import com.dtech.kitecon.trade.enums.StrategyType;
 import com.dtech.kitecon.trade.enums.TradingSegment;
 import com.dtech.kitecon.trade.repository.TradeOrderRepository;
 import lombok.RequiredArgsConstructor;
@@ -83,8 +84,8 @@ public class PaperOrderExecutionService {
                 underlyingEntry, signal.getStopLoss(), signal.getTarget(),
                 resolved.getInstrumentType());
 
-        // Place live order on Kite if enabled
-        if (liveOrdersEnabled) {
+        // Place live order on Kite if enabled (impulse only — DTB stays paper)
+        if (liveOrdersEnabled && signal.getStrategyType() == StrategyType.IMPULSE) {
             try {
                 Instrument kiteInstrument = instrumentRepository.findByTradingsymbolAndExchangeIn(
                         resolved.getTradingSymbol(), new String[]{"NSE", "NFO"});
