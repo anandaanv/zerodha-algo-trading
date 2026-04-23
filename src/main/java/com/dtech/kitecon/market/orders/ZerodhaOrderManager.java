@@ -33,7 +33,7 @@ public class ZerodhaOrderManager implements OrderManager {
       params.transactionType = orderType.toUpperCase();
       params.quantity = amount;
       params.price = price;
-      params.product = "NFO".equals(exchange) ? "NRML" : "MIS";
+      params.product = "NRML";
       params.orderType = "LIMIT";
       params.validity = "DAY";
       params.disclosedQuantity = amount;
