@@ -35,6 +35,8 @@ export interface TradeOrder {
   status: TradeOrderStatus;
   exitReason?: string;
   realisedPnl?: number;
+  ltp?: number;
+  unrealisedPnl?: number;
   underlyingEntryPrice?: number;
   underlyingExitPrice?: number;
   stopLoss?: number;

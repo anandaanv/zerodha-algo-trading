@@ -308,6 +308,8 @@ const TradeOrdersPage: React.FC = () => {
             <th style={thStyle}>Stop</th>
             <th style={thStyle}>Target</th>
             <th style={thStyle}>P&L</th>
+            <th style={thStyle}>LTP</th>
+            <th style={thStyle}>Unreal P&L</th>
             <th style={thStyle}>Status</th>
             <th style={thStyle}>Exit Reason</th>
             <th style={thStyle}>Pattern</th>
@@ -317,7 +319,7 @@ const TradeOrdersPage: React.FC = () => {
           {orders.length === 0 ? (
             <tr>
               <td
-                colSpan={14}
+                colSpan={16}
                 style={{
                   ...tdStyle,
                   textAlign: "center",
@@ -392,6 +394,19 @@ const TradeOrdersPage: React.FC = () => {
                   )}
                 </td>
                 <td style={tdStyle}>
+                  {order.ltp != null ? order.ltp.toFixed(2) : "-"}
+                </td>
+                <td style={pnlStyle(order.unrealisedPnl)}>
+                  {order.unrealisedPnl != null ? (
+                    <>
+                      {order.unrealisedPnl > 0 ? "+" : ""}
+                      {order.unrealisedPnl.toFixed(2)}
+                    </>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td style={tdStyle}>
                   <span style={statusBadgeStyle(order.status)}>
                     {order.status}
                   </span>
@@ -401,7 +416,7 @@ const TradeOrdersPage: React.FC = () => {
               </tr>
               {expandedId === order.signal?.id && order.signal?.id && (
                 <tr key={`exp-${order.id}`}>
-                  <td colSpan={14} style={{ padding: 0 }}>
+                  <td colSpan={16} style={{ padding: 0 }}>
                     <TradeActionTimelineDark signalId={order.signal!.id} />
                   </td>
                 </tr>
