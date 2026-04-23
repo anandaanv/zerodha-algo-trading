@@ -116,12 +116,19 @@ public class InstrumentResolverService {
                 .orElseThrow(() -> new RuntimeException("No expiry found"));
 
         double ltp = underlyingLtp.doubleValue();
+        // Expiry week check: use ATM if expiry is within 5 days (OTM has no value)
+        boolean expiryWeek = nearestExpiry.isBefore(now.plusDays(5));
+        double effectiveOtmPct = expiryWeek ? 0.0 : otmPct;
+        if (expiryWeek && otmPct > 0) {
+            log.info("[InstrumentResolver] {} expiry week ({}) — using ATM instead of {}% OTM",
+                    symbol, nearestExpiry.toLocalDate(), otmPct * 100);
+        }
         // For OTM: offset the target strike from LTP
         double targetStrike = ltp;
-        if (otmPct > 0) {
+        if (effectiveOtmPct > 0) {
             targetStrike = direction == TradeDirection.LONG
-                    ? ltp * (1 + otmPct)   // CE strike above LTP
-                    : ltp * (1 - otmPct);  // PE strike below LTP
+                    ? ltp * (1 + effectiveOtmPct)   // CE strike above LTP
+                    : ltp * (1 - effectiveOtmPct);  // PE strike below LTP
         }
         final double ts = targetStrike;
         Instrument atm = options.stream()
