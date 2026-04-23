@@ -24,6 +24,7 @@ public class SimulationController {
     private final ZigZagService zigZagService;
     private final InstrumentRepository instrumentRepository;
     private final TradeOrchestrationService orchestrationService;
+    private final com.dtech.kitecon.trade.repository.TradeSignalRepository signalRepository;
 
     @PostMapping("/run")
     public ResponseEntity<?> run(
@@ -125,6 +126,7 @@ public class SimulationController {
             if (placeOrder) {
                 var signal = r.toSignal(Instant.now(), timeframe);
                 signal.setInstrumentToken(instrument.getInstrumentToken());
+                signalRepository.save(signal);
                 orchestrationService.onEntryTriggered(signal);
                 response.put("orderPlaced", true);
                 response.put("message", "Signal created and order triggered via orchestration");
