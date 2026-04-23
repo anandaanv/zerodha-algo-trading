@@ -90,7 +90,11 @@ public class PaperOrderExecutionService {
             try {
                 List<Instrument> instruments = instrumentRepository.findAllByTradingsymbolAndExchangeIn(
                         resolved.getTradingSymbol(), new String[]{"BSE", "NSE", "NFO", "BFO"});
-                Instrument kiteInstrument = instruments.isEmpty() ? null : instruments.get(0);
+                // Prefer BSE over NSE (NSE may be disabled on API key)
+                Instrument kiteInstrument = instruments.stream()
+                        .filter(i -> "BSE".equals(i.getExchange()))
+                        .findFirst()
+                        .orElse(instruments.isEmpty() ? null : instruments.get(0));
                 if (kiteInstrument != null) {
                     String direction = (orderDirection == TradeDirection.LONG) ? "BUY" : "SELL";
                     String orderId = orderManager.placeOrder(
