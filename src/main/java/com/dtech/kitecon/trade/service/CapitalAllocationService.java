@@ -42,9 +42,11 @@ public class CapitalAllocationService {
     private double getAvailableCapital() {
         try {
             Margin margin = marketFacadeProvider.getFacade().getMargins("equity");
-            double cash = Double.parseDouble(margin.available.cash);
-            log.info("CapitalAllocation: fetched available cash from Kite: {}", cash);
-            return cash;
+            // Use net balance (cash may be 0 after market hours, but net/liveBalance reflects actual funds)
+            double balance = Double.parseDouble(margin.net);
+            log.info("CapitalAllocation: fetched balance from Kite: net={} cash={} liveBalance={}",
+                    margin.net, margin.available.cash, margin.available.liveBalance);
+            return balance;
         } catch (Exception e) {
             log.warn("CapitalAllocation: failed to fetch margins, using fallback portfolioValue={}: {}",
                     fallbackPortfolioValue, e.getMessage());
