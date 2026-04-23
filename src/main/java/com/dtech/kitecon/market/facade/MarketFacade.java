@@ -153,4 +153,11 @@ public interface MarketFacade {
      * @param userId User ID
      */
     void setUserId(String userId);
+
+    /**
+     * Get account margins/funds for a segment.
+     * @param segment "equity" or "commodity"
+     * @return Margin object with available cash, utilised, etc.
+     */
+    Margin getMargins(String segment) throws MarketException;
 }

@@ -7,8 +7,10 @@ import com.dtech.kitecon.market.facade.MarketFacade;
 import com.zerodhatech.models.HistoricalData;
 import com.zerodhatech.models.Instrument;
 import com.zerodhatech.models.LTPQuote;
+import com.zerodhatech.models.Margin;
 import com.zerodhatech.models.Order;
 import com.zerodhatech.models.OrderParams;
+import com.zerodhatech.models.OrderResponse;
 import com.zerodhatech.models.Profile;
 import com.zerodhatech.models.Quote;
 import com.zerodhatech.models.Trade;
@@ -164,7 +166,7 @@ public class DhanMarketFacade implements MarketFacade {
     // ==================== Orders ====================
 
     @Override
-    public Order placeOrder(OrderParams params, String variety) throws MarketException {
+    public OrderResponse placeOrder(OrderParams params, String variety) throws MarketException {
         // TODO: Implement Dhan order placement
         throw new MarketException("dhan", "NOT_IMPLEMENTED",
             "Dhan order placement not yet implemented", null);
@@ -205,6 +207,11 @@ public class DhanMarketFacade implements MarketFacade {
     @Override
     public void setUserId(String userId) {
         // Not applicable for Dhan
+    }
+
+    @Override
+    public Margin getMargins(String segment) throws MarketException {
+        throw new MarketException("dhan", "501", "getMargins not implemented for Dhan", null);
     }
 
     // ==================== Helper Methods ====================

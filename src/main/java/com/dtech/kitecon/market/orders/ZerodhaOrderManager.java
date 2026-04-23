@@ -12,15 +12,22 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @RequiredArgsConstructor(onConstructor = @__(@Autowired))
 @Component
 @Qualifier("zerodhaOrderManagerOld")
+@Slf4j
 public class ZerodhaOrderManager implements OrderManager {
   private final MarketFacadeProvider marketFacadeProvider;
+
+  // Order product type: MTF, CNC, MIS, NRML — configurable via property
+  @Value("${trade.order.product:MTF}")
+  private String orderProduct;
 
   @Override
   public String placeMISOrder(Double price, int amount, Instrument instrument, String orderType)
@@ -34,8 +41,7 @@ public class ZerodhaOrderManager implements OrderManager {
       params.transactionType = orderType.toUpperCase();
       params.quantity = amount;
       params.price = price;
-      // MTF for equity (NSE/BSE), NRML for derivatives (NFO/BFO)
-      params.product = "NFO".equals(exchange) || "BFO".equals(exchange) ? "NRML" : "MTF";
+      params.product = orderProduct;
       params.orderType = "LIMIT";
       params.validity = "DAY";
       OrderResponse response = facade.placeOrder(params, "regular");

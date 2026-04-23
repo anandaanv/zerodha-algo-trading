@@ -164,6 +164,17 @@ public class ZerodhaMarketFacade implements MarketFacade {
         kiteConnect.setUserId(userId);
     }
 
+    @Override
+    public Margin getMargins(String segment) throws MarketException {
+        try {
+            return kiteConnect.getMargins(segment);
+        } catch (KiteException | IOException e) {
+            throw new MarketException("zerodha", extractErrorCode(e), "Failed to get margins", e);
+        } catch (Exception e) {
+            throw new MarketException("zerodha", "500", "Failed to get margins", e);
+        }
+    }
+
     // ==================== Helper Methods ====================
 
     /**
