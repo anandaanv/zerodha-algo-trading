@@ -107,7 +107,7 @@ public class ZerodhaMarketFacade implements MarketFacade {
     // ==================== Orders ====================
 
     @Override
-    public Order placeOrder(OrderParams params, String variety) throws MarketException {
+    public OrderResponse placeOrder(OrderParams params, String variety) throws MarketException {
         try {
             return kiteConnect.placeOrder(params, variety);
         } catch (KiteException | IOException e) {

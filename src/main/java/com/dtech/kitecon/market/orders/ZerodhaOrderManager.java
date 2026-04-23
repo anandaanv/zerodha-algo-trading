@@ -6,6 +6,7 @@ import com.dtech.kitecon.market.facade.MarketFacade;
 import com.dtech.kitecon.market.facade.MarketFacadeProvider;
 import com.zerodhatech.models.Order;
 import com.zerodhatech.models.OrderParams;
+import com.zerodhatech.models.OrderResponse;
 import com.zerodhatech.models.Trade;
 import java.util.List;
 import java.util.UUID;
@@ -38,8 +39,8 @@ public class ZerodhaOrderManager implements OrderManager {
       params.validity = "DAY";
       params.disclosedQuantity = amount;
       params.parentOrderId = UUID.randomUUID().toString();
-      Order order = facade.placeOrder(params, "regular");
-      return order.orderId;
+      OrderResponse response = facade.placeOrder(params, "regular");
+      return response.orderId;
     } catch (MarketException e) {
       throw new OrderException(e);
     } catch (Throwable e) {
