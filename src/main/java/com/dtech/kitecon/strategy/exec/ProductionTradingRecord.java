@@ -29,8 +29,8 @@ public class ProductionTradingRecord extends BaseTradingRecord implements AlgoTr
     super.operate(index, price, amount);
     Trade.TradeType type = getOrderType();
     try {
-      this.orderId = ordermanager.placeMISOrder(price.doubleValue(),
-          amount.intValue(), instrument, type.name());
+      this.orderId = ordermanager.placeOrder(price.doubleValue(),
+          amount.intValue(), instrument, type.name(), "MTF");
     } catch (OrderException e) {
       log.catching(e);
     }

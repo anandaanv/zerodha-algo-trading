@@ -9,6 +9,7 @@ import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.kiteconnect.kitehttp.exceptions.KiteException;
 import com.zerodhatech.models.Order;
 import com.zerodhatech.models.OrderParams;
+import com.zerodhatech.models.OrderResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -44,14 +45,12 @@ class KiteOrderManagerTest {
         Integer quantity = 10;
         double price = 100.05;
         Integer disclosedQuantity = 10;
-        String parentOrderId = UUID.randomUUID().toString();
 
         com.dtech.trade.model.Order orderToPlace = new com.dtech.trade.model.Order();
         orderToPlace.setQuantity(quantity);
         orderToPlace.setPrice(price);
         orderToPlace.setInstrument(instrument);
         orderToPlace.setOrderType(orderType);
-        orderToPlace.setParentOrderId(parentOrderId);
         orderToPlace.setDisclosedQuantity(quantity);
 
         OrderParams params = new OrderParams();
@@ -64,18 +63,25 @@ class KiteOrderManagerTest {
         params.orderType = "LIMIT";
         params.validity = "DAY";
         params.disclosedQuantity = disclosedQuantity;
-        params.parentOrderId = parentOrderId;
-        Order kiteOrder = new Order();
-        kiteOrder.exchangeOrderId = "001";
+
+        // Mock placeOrder to return OrderResponse (kiteconnect 4.0+)
+        OrderResponse orderResponse = new OrderResponse();
+        orderResponse.orderId = "001";
         Mockito.when(kiteConnect.placeOrder(argThat(argument -> {
-            return argument.parentOrderId.equals(parentOrderId) &&
-                    argument.orderType.equals("LIMIT") &&
+            return argument.orderType.equals("LIMIT") &&
                     argument.product.equals("MIS") &&
                     argument.quantity.equals(quantity) &&
                     argument.price.equals(price) &&
                     argument.exchange.equals(instrument.getExchange()) &&
                     argument.disclosedQuantity.equals(quantity);
-        }), eq("regular"))).thenReturn(kiteOrder);
+        }), eq("regular"))).thenReturn(orderResponse);
+
+        // Mock getOrderHistory to return the order details
+        Order kiteOrder = new Order();
+        kiteOrder.orderId = "001";
+        kiteOrder.exchangeOrderId = "001";
+        Mockito.when(kiteConnect.getOrderHistory("001")).thenReturn(java.util.Collections.singletonList(kiteOrder));
+
         Mockito.when(kiteConnectConfig.getKiteConnect()).thenReturn(kiteConnect);
 
         RealTradeOrder realTradeOrder = kiteOrderManager.placeIntradayLimitsOrder(orderToPlace);

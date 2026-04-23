@@ -21,6 +21,7 @@ CREATE TABLE trade_order (
     strike DECIMAL(14,4),
     expiry DATE,
     paper_trade BOOLEAN DEFAULT TRUE,
+    order_product VARCHAR(10) DEFAULT 'MTF',
     created_at DATETIME(6),
     updated_at DATETIME(6)
 );

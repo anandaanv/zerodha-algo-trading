@@ -161,3 +161,13 @@ trade_setups/elliott/impulse_waves.md
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+.mempalaceignore
+
+# Graphify outputs
+graphify-out/
+
+# JVM crash logs
+hs_err_pid*.log
+
+# Kotlin compiler temp
+.kotlin/
