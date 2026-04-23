@@ -104,7 +104,7 @@ public class PaperOrderExecutionService {
                 }
             } catch (Exception e) {
                 log.error("[LiveOrder] Failed to place order for {}: {}",
-                        resolved.getTradingSymbol(), e.getMessage());
+                        resolved.getTradingSymbol(), e.getMessage(), e);
                 // Order stays as paper trade — don't crash the flow
             }
         }
