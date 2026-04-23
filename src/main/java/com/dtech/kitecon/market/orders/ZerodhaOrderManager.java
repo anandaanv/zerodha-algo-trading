@@ -37,8 +37,6 @@ public class ZerodhaOrderManager implements OrderManager {
       params.product = "NRML";
       params.orderType = "LIMIT";
       params.validity = "DAY";
-      params.disclosedQuantity = amount;
-      params.parentOrderId = UUID.randomUUID().toString();
       OrderResponse response = facade.placeOrder(params, "regular");
       return response.orderId;
     } catch (MarketException e) {
