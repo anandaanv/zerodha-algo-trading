@@ -111,6 +111,9 @@ public class ZerodhaMarketFacade implements MarketFacade {
         try {
             return kiteConnect.placeOrder(params, variety);
         } catch (KiteException | IOException e) {
+            log.error("[KiteOrder] FAILED exchange={} symbol={} txn={} qty={} price={} product={} orderType={} error={}",
+                    params.exchange, params.tradingsymbol, params.transactionType,
+                    params.quantity, params.price, params.product, params.orderType, e.getMessage());
             throw new MarketException("zerodha", extractErrorCode(e),
                 String.format("Failed to place order for %s", params.tradingsymbol), e);
         }
