@@ -8,6 +8,7 @@ import com.dtech.trade.order.RealTradeOrder;
 import com.zerodhatech.kiteconnect.KiteConnect;
 import com.zerodhatech.models.Order;
 import com.zerodhatech.models.OrderParams;
+import com.zerodhatech.models.OrderResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -38,8 +39,16 @@ public class KiteOrderManager implements OrderManager {
         params.disclosedQuantity = order.getDisclosedQuantity();
         params.parentOrderId = order.getParentOrderId();
         try {
-            Order exchangeOrder = connectConfig.getKiteConnect().placeOrder(params, "regular");
-            return new ZerodhaOrder(exchangeOrder, order.getInstrument());
+            OrderResponse response = connectConfig.getKiteConnect().placeOrder(params, "regular");
+            // kiteconnect 4.0.0 returns OrderResponse with orderId; fetch full order details
+            java.util.List<Order> orderHistory = connectConfig.getKiteConnect().getOrderHistory(response.orderId);
+            if (orderHistory != null && !orderHistory.isEmpty()) {
+                return new ZerodhaOrder(orderHistory.get(0), order.getInstrument());
+            }
+            // Fallback: create a minimal Order with just the orderId if order history is unavailable
+            Order placedOrder = new Order();
+            placedOrder.orderId = response.orderId;
+            return new ZerodhaOrder(placedOrder, order.getInstrument());
         } catch (Throwable e) {
             throw new OrderException(e);
         }

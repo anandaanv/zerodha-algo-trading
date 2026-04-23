@@ -98,10 +98,10 @@ public interface MarketFacade {
      *
      * @param params Order parameters
      * @param variety Order variety (e.g., "regular", "amo", "bo", "co")
-     * @return Order object with order ID
+     * @return OrderResponse object with order ID
      * @throws MarketException if order placement fails
      */
-    Order placeOrder(OrderParams params, String variety) throws MarketException;
+    OrderResponse placeOrder(OrderParams params, String variety) throws MarketException;
 
     /**
      * Get trades for a specific order
