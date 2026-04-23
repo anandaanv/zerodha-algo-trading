@@ -27,28 +27,32 @@ public class KiteOrderManager implements OrderManager {
 
     @Override
     public RealTradeOrder placeIntradayLimitsOrder(RealTradeOrder order) throws OrderException {
+        return placeOrder(order.getPrice(), order.getQuantity(), order.getInstrument(),
+                         order.getOrderType(), "MIS");
+    }
+
+    public RealTradeOrder placeOrder(Double price, int amount, com.dtech.kitecon.data.Instrument instrument,
+                                     String orderType, String product) throws OrderException {
         OrderParams params = new OrderParams();
         params.exchange = "NSE";
-        params.tradingsymbol = order.getInstrument().getTradingsymbol();
-        params.transactionType = order.getOrderType().toUpperCase();
-        params.quantity = order.getQuantity();
-        params.price = order.getPrice();
-        params.product = "MIS";
+        params.tradingsymbol = instrument.getTradingsymbol();
+        params.transactionType = orderType.toUpperCase();
+        params.quantity = amount;
+        params.price = price;
+        params.product = product != null ? product : "MIS";
         params.orderType = "LIMIT";
         params.validity = "DAY";
-        params.disclosedQuantity = order.getDisclosedQuantity();
-        params.parentOrderId = order.getParentOrderId();
         try {
             OrderResponse response = connectConfig.getKiteConnect().placeOrder(params, "regular");
             // kiteconnect 4.0.0 returns OrderResponse with orderId; fetch full order details
             java.util.List<Order> orderHistory = connectConfig.getKiteConnect().getOrderHistory(response.orderId);
             if (orderHistory != null && !orderHistory.isEmpty()) {
-                return new ZerodhaOrder(orderHistory.get(0), order.getInstrument());
+                return new ZerodhaOrder(orderHistory.get(0), instrument);
             }
             // Fallback: create a minimal Order with just the orderId if order history is unavailable
             Order placedOrder = new Order();
             placedOrder.orderId = response.orderId;
-            return new ZerodhaOrder(placedOrder, order.getInstrument());
+            return new ZerodhaOrder(placedOrder, instrument);
         } catch (Throwable e) {
             throw new OrderException(e);
         }
