@@ -186,9 +186,14 @@ public class SimulationController {
                     "price", price
             ));
         } catch (Exception e) {
+            // Unwrap to get the actual Kite error message
+            Throwable root = e;
+            while (root.getCause() != null) root = root.getCause();
             return ResponseEntity.badRequest().body(Map.of(
                     "status", "failed",
                     "error", e.getMessage() != null ? e.getMessage() : "unknown",
+                    "kiteError", root.getMessage() != null ? root.getMessage() : "unknown",
+                    "errorType", root.getClass().getSimpleName(),
                     "exchange", exchange,
                     "symbol", symbol
             ));
