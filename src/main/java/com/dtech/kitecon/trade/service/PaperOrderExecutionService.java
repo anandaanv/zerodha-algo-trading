@@ -88,7 +88,7 @@ public class PaperOrderExecutionService {
         if (liveOrdersEnabled && signal.getStrategyType() == StrategyType.IMPULSE) {
             try {
                 Instrument kiteInstrument = instrumentRepository.findByTradingsymbolAndExchangeIn(
-                        resolved.getTradingSymbol(), new String[]{"NSE", "NFO"});
+                        resolved.getTradingSymbol(), new String[]{"NSE", "BSE", "NFO", "BFO"});
                 if (kiteInstrument != null) {
                     String direction = (orderDirection == TradeDirection.LONG) ? "BUY" : "SELL";
                     String orderId = orderManager.placeMISOrder(
@@ -102,7 +102,7 @@ public class PaperOrderExecutionService {
                     log.warn("[LiveOrder] Instrument not found for {}, falling back to paper",
                             resolved.getTradingSymbol());
                 }
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 log.error("[LiveOrder] Failed to place order for {}: {}",
                         resolved.getTradingSymbol(), e.getMessage(), e);
                 // Order stays as paper trade — don't crash the flow
