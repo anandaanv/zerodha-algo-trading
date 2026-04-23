@@ -100,6 +100,12 @@ public class TradeOrder {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Transient
+    private BigDecimal ltp;
+
+    @Transient
+    private BigDecimal unrealisedPnl;
+
     @PrePersist
     void prePersist() {
         Instant now = Instant.now();

@@ -1,9 +1,12 @@
 package com.dtech.kitecon.trade.controller;
 
+import com.dtech.kitecon.market.facade.MarketFacadeProvider;
 import com.dtech.kitecon.trade.dto.TradeSummaryDto;
 import com.dtech.kitecon.trade.entity.TradeOrder;
+import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeOrderStatus;
 import com.dtech.kitecon.trade.repository.TradeOrderRepository;
+import com.zerodhatech.models.LTPQuote;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/trade-orders")
@@ -20,6 +24,7 @@ import java.util.List;
 public class TradeOrderController {
 
     private final TradeOrderRepository tradeOrderRepository;
+    private final MarketFacadeProvider marketFacadeProvider;
 
     @GetMapping("/")
     public ResponseEntity<List<TradeOrder>> getOrders(@RequestParam(required = false) String status) {
@@ -36,7 +41,53 @@ public class TradeOrderController {
             orders = tradeOrderRepository.findAllByOrderByCreatedAtDesc();
         }
 
+        enrichWithLivePnl(orders);
         return ResponseEntity.ok(orders);
+    }
+
+    private void enrichWithLivePnl(List<TradeOrder> orders) {
+        List<TradeOrder> openOrders = orders.stream()
+                .filter(o -> o.getStatus() == TradeOrderStatus.OPEN)
+                .toList();
+
+        if (openOrders.isEmpty()) return;
+
+        // Build instrument keys for batch LTP call: "NFO:SYMBOL" or "NSE:SYMBOL"
+        String[] instruments = openOrders.stream()
+                .map(o -> {
+                    String exchange = o.getSegment().name().equals("EQ") ? "NSE" : "NFO";
+                    return exchange + ":" + o.getSymbol();
+                })
+                .distinct()
+                .toArray(String[]::new);
+
+        try {
+            Map<String, LTPQuote> ltpMap = marketFacadeProvider.getFacade().getLTP(instruments);
+
+            for (TradeOrder order : openOrders) {
+                String exchange = order.getSegment().name().equals("EQ") ? "NSE" : "NFO";
+                String key = exchange + ":" + order.getSymbol();
+                LTPQuote quote = ltpMap.get(key);
+                if (quote == null) continue;
+
+                BigDecimal ltp = BigDecimal.valueOf(quote.lastPrice);
+                order.setLtp(ltp);
+
+                if (order.getEntryPrice() != null && order.getQuantity() != null) {
+                    BigDecimal pnl;
+                    if (order.getDirection() == TradeDirection.LONG) {
+                        pnl = ltp.subtract(order.getEntryPrice())
+                                .multiply(BigDecimal.valueOf(order.getQuantity()));
+                    } else {
+                        pnl = order.getEntryPrice().subtract(ltp)
+                                .multiply(BigDecimal.valueOf(order.getQuantity()));
+                    }
+                    order.setUnrealisedPnl(pnl.setScale(2, RoundingMode.HALF_UP));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch live LTP for open orders: {}", e.getMessage());
+        }
     }
 
     @GetMapping("/summary")
