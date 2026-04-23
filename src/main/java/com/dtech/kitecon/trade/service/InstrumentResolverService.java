@@ -41,7 +41,7 @@ public class InstrumentResolverService {
 
     private ResolvedInstrument resolveEQ(String symbol) {
         Instrument inst = instrumentRepository.findByTradingsymbolAndExchangeIn(
-                symbol, new String[]{"NSE"});
+                symbol, new String[]{"NSE", "BSE"});
         if (inst == null) {
             throw new RuntimeException("EQ instrument not found: " + symbol);
         }
