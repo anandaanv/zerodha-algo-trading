@@ -27,12 +27,13 @@ public class ZerodhaOrderManager implements OrderManager {
     try {
       MarketFacade facade = marketFacadeProvider.getFacade();
       OrderParams params = new OrderParams();
-      params.exchange = "NSE";
+      String exchange = instrument.getExchange() != null ? instrument.getExchange() : "NSE";
+      params.exchange = exchange;
       params.tradingsymbol = instrument.getTradingsymbol();
       params.transactionType = orderType.toUpperCase();
       params.quantity = amount;
       params.price = price;
-      params.product = "MIS";
+      params.product = "NFO".equals(exchange) ? "NRML" : "MIS";
       params.orderType = "LIMIT";
       params.validity = "DAY";
       params.disclosedQuantity = amount;
