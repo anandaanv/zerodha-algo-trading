@@ -6,6 +6,9 @@ import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.elliott.ImpulseAnalysisCore;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.kitecon.trade.service.TradeOrchestrationService;
+import com.dtech.kitecon.market.facade.MarketFacadeProvider;
+import com.zerodhatech.models.OrderParams;
+import com.zerodhatech.models.OrderResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +28,7 @@ public class SimulationController {
     private final InstrumentRepository instrumentRepository;
     private final TradeOrchestrationService orchestrationService;
     private final com.dtech.kitecon.trade.repository.TradeSignalRepository signalRepository;
+    private final MarketFacadeProvider marketFacadeProvider;
 
     @PostMapping("/run")
     public ResponseEntity<?> run(
@@ -146,5 +150,48 @@ public class SimulationController {
                 "BAJFINANCE", "HINDUNILVR", "ITC", "LT", "KOTAKBANK", "AXISBANK", "MARUTI", "TITAN",
                 "SUNPHARMA", "TATAMOTORS", "NTPC", "WIPRO", "ADANIENT", "HCLTECH", "ULTRACEMCO",
                 "ASIANPAINT", "BAJAJ-AUTO", "ONGC", "NESTLEIND", "JSWSTEEL", "TATASTEEL", "TECHM", "POWERGRID");
+    }
+
+    /**
+     * Direct Kite order test — bypasses all trade logic.
+     * POST /api/simulation/test-order?exchange=BSE&symbol=RELIANCE&txn=BUY&qty=1&price=1300
+     */
+    @PostMapping("/test-order")
+    public ResponseEntity<?> testOrder(
+            @RequestParam String exchange,
+            @RequestParam String symbol,
+            @RequestParam String txn,
+            @RequestParam int qty,
+            @RequestParam double price
+    ) {
+        try {
+            OrderParams params = new OrderParams();
+            params.exchange = exchange;
+            params.tradingsymbol = symbol;
+            params.transactionType = txn.toUpperCase();
+            params.quantity = qty;
+            params.price = price;
+            params.product = "NFO".equals(exchange) || "BFO".equals(exchange) ? "NRML" : "CNC";
+            params.orderType = "LIMIT";
+            params.validity = "DAY";
+
+            OrderResponse response = marketFacadeProvider.getFacade().placeOrder(params, "regular");
+            return ResponseEntity.ok(Map.of(
+                    "status", "order_placed",
+                    "orderId", response.orderId,
+                    "exchange", exchange,
+                    "symbol", symbol,
+                    "txn", txn,
+                    "qty", qty,
+                    "price", price
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "failed",
+                    "error", e.getMessage() != null ? e.getMessage() : "unknown",
+                    "exchange", exchange,
+                    "symbol", symbol
+            ));
+        }
     }
 }
