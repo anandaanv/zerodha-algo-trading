@@ -260,7 +260,7 @@ export default function PipelinePage() {
           </div>
           <div>
             <span style={{ color: TEXT_SECONDARY, fontSize: 11 }}>Pattern</span>
-            <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{signal.patternType}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2 }}>{signal.patternType || signal.strategyType || '—'}</div>
           </div>
           <div>
             <span style={{ color: TEXT_SECONDARY, fontSize: 11 }}>Entry Price</span>
@@ -557,7 +557,7 @@ export default function PipelinePage() {
                       <td style={{ ...cellStyle, color: sig.direction === 'LONG' ? '#4caf50' : '#d32f2f' }}>
                         {sig.direction}
                       </td>
-                      <td style={cellStyle}>{sig.patternType}</td>
+                      <td style={cellStyle}>{sig.patternType || sig.strategyType || '—'}</td>
                       <td style={cellStyle}>{sig.entryPrice.toFixed(2)}</td>
                       <td style={cellStyle}>{sig.stopLoss.toFixed(2)}</td>
                       <td style={cellStyle}>{sig.target.toFixed(2)}</td>
