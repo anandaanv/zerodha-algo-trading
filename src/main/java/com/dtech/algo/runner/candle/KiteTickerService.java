@@ -62,7 +62,6 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
     @PostConstruct
     public void init() {
         try {
-            kiteConnectConfig.initFromDatabase();
             KiteConnect kiteConnect = kiteConnectPool.getPrimaryClient();
 
             if (kiteConnect == null || kiteConnect.getAccessToken() == null) {
@@ -323,7 +322,7 @@ public class KiteTickerService implements OnTicks, OnConnect, OnDisconnect, OnEr
             if (kc == null) return;
             String currentToken = kc.getAccessToken();
             // Re-read from pool (which reads from DB) to detect external token refresh
-            kiteConnectPool.initAllFromDatabase();
+            kiteConnectPool.loadFromUserKiteConfigs();
             String newToken = kiteConnectPool.getPrimaryClient() != null
                     ? kiteConnectPool.getPrimaryClient().getAccessToken() : null;
             if (newToken != null && !newToken.equals(currentToken)) {
