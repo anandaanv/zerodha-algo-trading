@@ -20,22 +20,8 @@ public class CapitalAllocationService {
     private long fallbackPortfolioValue;
 
     public int computeQuantity(BigDecimal capitalPct, BigDecimal price, int lotSize) {
-        double availableCapital = getAvailableCapital();
-        double allocationPct = capitalPct != null ? capitalPct.doubleValue() : 30.0;
-        double capital = availableCapital * allocationPct / 100.0;
-
-        int maxUnits = (int) (capital / price.doubleValue());
-
-        int qty;
-        if (lotSize <= 1) {
-            qty = Math.max(1, maxUnits);
-        } else {
-            int numLots = Math.max(1, maxUnits / lotSize);
-            qty = numLots * lotSize;
-        }
-
-        log.info("CapitalAllocation: available={} allocationPct={}% capital={} price={} lotSize={} → qty={}",
-                String.format("%.2f", availableCapital), allocationPct, String.format("%.2f", capital), price, lotSize, qty);
+        int qty = Math.max(1, lotSize);
+        log.info("CapitalAllocation: 1-lot mode — price={} lotSize={} → qty={}", price, lotSize, qty);
         return qty;
     }
 
