@@ -52,6 +52,7 @@ class TradeOrchestrationServiceTest {
                 .symbol("RELIANCE")
                 .direction(TradeDirection.LONG)
                 .instrumentToken(123L)
+                .strategyType(StrategyType.DTB)
                 .build();
 
         SegmentConfig eqConfig = SegmentConfig.builder()
@@ -95,9 +96,9 @@ class TradeOrchestrationServiceTest {
                 .thenReturn(configs);
         when(marketQuoteService.getQuote(anyString(), any()))
                 .thenReturn(underlyingQuote);
-        when(instrumentResolverService.resolve("RELIANCE", TradingSegment.EQ, TradeDirection.LONG, BigDecimal.valueOf(2500)))
+        when(instrumentResolverService.resolve("RELIANCE", TradingSegment.EQ, TradeDirection.LONG, BigDecimal.valueOf(2500), 0.0))
                 .thenReturn(eqResolved);
-        when(instrumentResolverService.resolve("RELIANCE", TradingSegment.FUT, TradeDirection.LONG, BigDecimal.valueOf(2500)))
+        when(instrumentResolverService.resolve("RELIANCE", TradingSegment.FUT, TradeDirection.LONG, BigDecimal.valueOf(2500), 0.0))
                 .thenReturn(futResolved);
 
         tradeOrchestrationService.onEntryTriggered(signal);

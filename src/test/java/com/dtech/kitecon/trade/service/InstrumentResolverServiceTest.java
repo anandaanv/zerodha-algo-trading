@@ -38,7 +38,7 @@ class InstrumentResolverServiceTest {
                 .instrumentType("EQ")
                 .build();
 
-        when(instrumentRepository.findAllByTradingsymbolAndExchangeIn("RELIANCE", new String[]{"NSE"}))
+        when(instrumentRepository.findAllByTradingsymbolAndExchangeIn("RELIANCE", new String[]{"BSE", "NSE"}))
                 .thenReturn(List.of(inst));
 
         ResolvedInstrument resolved = instrumentResolverService.resolve(
@@ -53,7 +53,7 @@ class InstrumentResolverServiceTest {
 
     @Test
     void testResolveEQ_NotFound() {
-        when(instrumentRepository.findAllByTradingsymbolAndExchangeIn("NOTFOUND", new String[]{"NSE"}))
+        when(instrumentRepository.findAllByTradingsymbolAndExchangeIn("NOTFOUND", new String[]{"BSE", "NSE"}))
                 .thenReturn(List.of());
 
         assertThrows(RuntimeException.class, () ->

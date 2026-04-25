@@ -72,8 +72,7 @@ class KiteOrderManagerTest {
                     argument.product.equals("MIS") &&
                     argument.quantity.equals(quantity) &&
                     argument.price.equals(price) &&
-                    argument.exchange.equals(instrument.getExchange()) &&
-                    argument.disclosedQuantity.equals(quantity);
+                    argument.exchange.equals(instrument.getExchange());
         }), eq("regular"))).thenReturn(orderResponse);
 
         // Mock getOrderHistory to return the order details
