@@ -1,18 +1,17 @@
-FROM gradle:jdk11
+FROM eclipse-temurin:21-jdk AS build
 
-ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get -y upgrade
-RUN apt-get -y install git wget
+WORKDIR /code
+COPY . .
+RUN ./gradlew bootJar --no-daemon -x test
 
-USER root
+FROM eclipse-temurin:21-jre
 
-RUN mkdir code
-COPY . /code
-#RUN mkdir -p /root/.gradle/wrapper/dists/gradle-6.6.1-bin
-#ADD ./gradle-6.6.1-bin /root/.gradle/wrapper/dists/gradle-6.6.1-bin
-RUN cd /code && ./gradlew bootjar
+WORKDIR /app
+COPY --from=build /code/build/libs/kitecon-0.0.1-SNAPSHOT.jar /app/app.jar
+COPY --from=build /code/start.sh /app/start.sh
 
-# Ensure JVM receives larger code cache by default and ~4g heap
-ENV JAVA_TOOL_OPTIONS="-XX:ReservedCodeCacheSize=256m -XX:InitialCodeCacheSize=64m -Xms4g -Xmx4g"
+EXPOSE 8080
 
-CMD /code/start.sh
+ENV JAVA_TOOL_OPTIONS="-XX:ReservedCodeCacheSize=256m -XX:InitialCodeCacheSize=64m -Xms4g -Xmx6g -XX:+ExitOnOutOfMemoryError"
+
+CMD ["java", "-jar", "/app/app.jar"]
