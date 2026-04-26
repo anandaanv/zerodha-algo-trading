@@ -14,6 +14,7 @@ import com.dtech.kitecon.repository.copilot.CopilotSkillRepository;
 import com.dtech.kitecon.service.copilot.dto.*;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Slf4j
 @SpringBootTest(classes = KiteconApplication.class)
 @ActiveProfiles("integration")
+@Disabled("Requires real MySQL + OpenAI API — will be replaced by Testcontainers in T6.2")
 class CopilotRealAIIntegrationTest {
 
     private static final String SYMBOL = "INFY";
