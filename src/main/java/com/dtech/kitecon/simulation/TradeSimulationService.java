@@ -61,8 +61,6 @@ public class TradeSimulationService {
         SimulationClock clock = new SimulationClock(from, to, stepMinutes);
         SimulationContext ctx = new SimulationContext(clock, strategyType, symbols, timeframe);
         activeContext = ctx;
-        strategy.reset();  // clear caches from previous runs
-        clock.start();
 
         // Preload full bar series per symbol from DB
         Interval interval = Interval.valueOf(timeframe);
@@ -74,8 +72,8 @@ public class TradeSimulationService {
                     log.debug("[Simulation] Instrument not found for {}", symbol);
                     continue;
                 }
-                // Load ALL available bars (match training's full-history lookback for identical ATR/ZigZag)
-                Instant lookbackFrom = Instant.parse("2015-01-01T00:00:00Z");
+                // Load ~2 years of lookback before simulation start for ZigZag + indicator warmup
+                Instant lookbackFrom = from.minus(730, java.time.temporal.ChronoUnit.DAYS);
                 BarSeries series = loadBarSeries(inst, interval, lookbackFrom, to);
                 if (series != null && series.getBarCount() > 0) {
                     fullSeries.put(symbol, series);
@@ -142,23 +140,27 @@ public class TradeSimulationService {
                     symbol, preAddCount, bars.size());
         }
 
-        // Step through time
-        do {
-            Instant t = clock.getCurrentTime();
-            ctx.setTotalSteps(ctx.getTotalSteps() + 1);
+        // Process one stock fully before moving to the next — avoids redundant indicator recomputation
+        for (String symbol : growingSeries.keySet()) {
+            BarSeries growing = growingSeries.get(symbol);
+            List<Bar> bars = sortedBars.get(symbol);
+            int nextIdx = nextBarIndex.getOrDefault(symbol, 0);
 
-            for (Map.Entry<String, BarSeries> entry : growingSeries.entrySet()) {
-                String symbol = entry.getKey();
-                BarSeries growing = entry.getValue();
+            strategy.reset();  // clear caches for this stock
+            SimulationClock symbolClock = new SimulationClock(from, to, stepMinutes);
+            symbolClock.start();
+
+            log.info("[Simulation] Processing {} ({} bars available)", symbol, bars.size());
+
+            do {
+                Instant t = symbolClock.getCurrentTime();
+                ctx.setTotalSteps(ctx.getTotalSteps() + 1);
 
                 // Add new bars up to current simulated time (OnChange fires → ZigZag auto-updates)
-                List<Bar> bars = sortedBars.get(symbol);
-                int nextIdx = nextBarIndex.getOrDefault(symbol, 0);
                 while (nextIdx < bars.size() && !bars.get(nextIdx).getEndTime().isAfter(t)) {
                     growing.addBar(bars.get(nextIdx));
                     nextIdx++;
                 }
-                nextBarIndex.put(symbol, nextIdx);
 
                 if (growing.getBarCount() < 10) continue;
 
@@ -237,10 +239,9 @@ public class TradeSimulationService {
                         }
                     }
                 }
-            }
-        } while (clock.advance());
+            } while (symbolClock.advance());
+        }
 
-        clock.stop();
         log.info("[Simulation] Complete: {} steps, {} signals, {} closed, {} open",
                 ctx.getTotalSteps(), ctx.getTotalSignalsGenerated(),
                 ctx.getClosedPositions().size(), ctx.getOpenPositions().size());
