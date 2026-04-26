@@ -387,7 +387,7 @@ public class CopilotAnalysisController {
 
             com.dtech.ta.elliott.VerifiedElliottResult result = elliottVerificationService.verify(
                     firstPass.getScoredScenarios(), symbol, resolvedPrimaryTf, userId,
-                    com.dtech.elliott.advanced.scenario.filter.config.FilterConfig.defaults());
+                    com.dtech.ta.elliott.filter.config.FilterConfig.defaults());
 
             return ResponseEntity.ok(result);
         } catch (Exception e) {

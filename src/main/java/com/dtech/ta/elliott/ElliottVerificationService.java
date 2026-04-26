@@ -1,10 +1,10 @@
 package com.dtech.ta.elliott;
 
-import com.dtech.elliott.advanced.domain.scenario.Scenario;
-import com.dtech.elliott.advanced.domain.scenario.ScoredScenarioAdapter;
-import com.dtech.elliott.advanced.scenario.filter.api.ScenarioFilterEngine;
-import com.dtech.elliott.advanced.scenario.filter.config.FilterConfig;
-import com.dtech.elliott.advanced.scenario.filter.domain.FilteredScenarioSet;
+import com.dtech.ta.elliott.scenario.Scenario;
+import com.dtech.ta.elliott.scenario.ScoredScenarioAdapter;
+import com.dtech.ta.elliott.filter.api.ScenarioFilterEngine;
+import com.dtech.ta.elliott.filter.config.FilterConfig;
+import com.dtech.ta.elliott.filter.domain.FilteredScenarioSet;
 import com.dtech.kitecon.service.copilot.CopilotAIService;
 import com.dtech.ta.elliott.scenario.ScoredScenario;
 import com.fasterxml.jackson.databind.ObjectMapper;

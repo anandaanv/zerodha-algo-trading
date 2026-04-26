@@ -1,0 +1,17 @@
+ui/chart-draw-app/charting_library/
+ui/chart-draw-app/public/charting_library/
+ui/chart-draw-app/node_modules/
+node_modules/
+build/
+.gradle/
+graphify-out/
+ElliotWaveAnalysis/
+elliott_train_data/
+test_output/
+charts/
+logs/
+images/
+.kotlin/
+*.min.js
+*.bundle.js
+*.chunk.js

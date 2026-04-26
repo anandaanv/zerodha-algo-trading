@@ -1,6 +1,6 @@
 package com.dtech.ta.elliott;
 
-import com.dtech.elliott.advanced.scenario.filter.domain.FilteredScenarioSet;
+import com.dtech.ta.elliott.filter.domain.FilteredScenarioSet;
 
 public record VerifiedElliottResult(
         FilteredScenarioSet filteredScenarioSet,

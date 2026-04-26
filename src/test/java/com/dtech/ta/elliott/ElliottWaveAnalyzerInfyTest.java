@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.junit.jupiter.api.Disabled;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.ta4j.core.BarSeries;
@@ -34,6 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Run: ./gradlew test --tests "*.ElliottWaveAnalyzerInfyTest"
  */
 @Slf4j
+@Disabled("Requires real MySQL — deferred to T6.2")
 @SpringBootTest(classes = KiteconApplication.class)
 @ActiveProfiles("integration")
 class ElliottWaveAnalyzerInfyTest {
