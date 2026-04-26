@@ -25,6 +25,12 @@ class CopilotSkillServiceTest {
     @Mock
     private CopilotSkillRepository skillRepository;
 
+    @Mock
+    private CopilotSkillPromptBuilder promptBuilder;
+
+    @Mock
+    private CopilotSkillSeederService seederService;
+
     @InjectMocks
     private CopilotSkillService skillService;
 
@@ -34,6 +40,9 @@ class CopilotSkillServiceTest {
 
     @BeforeEach
     void setUp() {
+        promptBuilder = new CopilotSkillPromptBuilder();
+        skillService = new CopilotSkillService(skillRepository, promptBuilder, seederService);
+
         triangleSkill = CopilotSkill.builder()
                 .id(1L)
                 .userId(100L)
@@ -286,85 +295,37 @@ class CopilotSkillServiceTest {
     }
 
     @Test
-    void testSeedDemoSkillsForUserIdempotent() {
+    void testSeedDemoSkillsDelegatesToSeeder() {
         Long userId = 100L;
-
-        // First call: skills don't exist
-        when(skillRepository.findByUserIdAndSkillKey(userId, "triangle"))
-                .thenReturn(Optional.empty());
-        when(skillRepository.findByUserIdAndSkillKey(userId, "wave_4"))
-                .thenReturn(Optional.empty());
-
         skillService.seedDemoSkillsForUser(userId);
-
-        verify(skillRepository, times(2)).save(any(CopilotSkill.class));
-
-        // Second call: skills already exist
-        reset(skillRepository);
-        when(skillRepository.findByUserIdAndSkillKey(userId, "triangle"))
-                .thenReturn(Optional.of(triangleSkill));
-
-        skillService.seedDemoSkillsForUser(userId);
-
-        verify(skillRepository, times(0)).save(any());
+        verify(seederService).seedDemoSkillsForUser(userId);
     }
 
     @Test
-    void testSeedReasoningSkillsForUserIdempotent() {
+    void testSeedReasoningSkillsDelegatesToSeeder() {
         Long userId = 100L;
-
-        // First call: skills don't exist
-        when(skillRepository.findByUserIdAndSkillKey(userId, "confluence_checker"))
-                .thenReturn(Optional.empty());
-
         skillService.seedReasoningSkillsForUser(userId);
-
-        verify(skillRepository, times(2)).save(any(CopilotSkill.class));
-
-        // Second call: skills already exist
-        reset(skillRepository);
-        when(skillRepository.findByUserIdAndSkillKey(userId, "confluence_checker"))
-                .thenReturn(Optional.of(confluenceSkill));
-
-        skillService.seedReasoningSkillsForUser(userId);
-
-        verify(skillRepository, times(0)).save(any());
+        verify(seederService).seedReasoningSkillsForUser(userId);
     }
 
     @Test
-    void testSeedChartPatternSkillsForUser() {
+    void testSeedChartPatternSkillsDelegatesToSeeder() {
         Long userId = 100L;
-
-        // Mock all chart pattern skills as not existing
-        when(skillRepository.findByUserIdAndSkillKey(eq(userId), any()))
-                .thenReturn(Optional.empty());
-
+        when(seederService.seedChartPatternSkillsForUser(userId)).thenReturn(18);
         int count = skillService.seedChartPatternSkillsForUser(userId);
-
-        assertEquals(18, count, "Should seed 18 chart pattern skills");
-        verify(skillRepository, times(18)).save(any(CopilotSkill.class));
+        assertEquals(18, count);
+        verify(seederService).seedChartPatternSkillsForUser(userId);
     }
 
     @Test
-    void testSeedChartPatternSkillsForUserIdempotent() {
+    void testSeedWaveSkillsDelegatesToSeeder() {
         Long userId = 100L;
-
-        // First call: no skills exist
-        when(skillRepository.findByUserIdAndSkillKey(eq(userId), any()))
-                .thenReturn(Optional.empty());
-
-        int count1 = skillService.seedChartPatternSkillsForUser(userId);
-        assertEquals(18, count1, "Should seed 18 skills on first call");
-
-        // Second call: all skills already exist
-        reset(skillRepository);
-        when(skillRepository.findByUserIdAndSkillKey(eq(userId), any()))
-                .thenReturn(Optional.of(triangleSkill));
-
-        int count2 = skillService.seedChartPatternSkillsForUser(userId);
-        assertEquals(0, count2, "Should seed 0 skills on second call (idempotent)");
-        verify(skillRepository, times(0)).save(any());
+        when(seederService.seedWaveSkillsForUser(userId)).thenReturn(17);
+        int count = skillService.seedWaveSkillsForUser(userId);
+        assertEquals(17, count);
+        verify(seederService).seedWaveSkillsForUser(userId);
     }
+
 
     @Test
     void testGetAllSkillsForUserEmpty() {
