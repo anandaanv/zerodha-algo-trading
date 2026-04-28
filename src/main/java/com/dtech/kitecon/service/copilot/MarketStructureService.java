@@ -288,8 +288,8 @@ public class MarketStructureService {
             if (seg != null) segments.add(seg);
         }
 
-        // Return last 6 segments
-        int start = Math.max(0, segments.size() - 6);
+        // Return last 20 segments (feature extractor uses last 10)
+        int start = Math.max(0, segments.size() - 20);
         return new ArrayList<>(segments.subList(start, segments.size()));
     }
 
