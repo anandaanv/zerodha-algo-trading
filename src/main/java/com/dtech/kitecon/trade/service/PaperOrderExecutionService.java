@@ -148,6 +148,34 @@ public class PaperOrderExecutionService {
         log.info("[PaperOrder] EXIT order={} {} reason={} exitPrice={} underlyingLtp={} pnl={}",
                 order.getId(), order.getSymbol(), reason, exitPrice, underlyingLtp, pnl);
 
+        // Place live exit order on broker if this was a live trade
+        if (liveOrdersEnabled && !order.isPaperTrade()) {
+            try {
+                List<Instrument> instruments = instrumentRepository.findAllByTradingsymbolAndExchangeIn(
+                        order.getSymbol(), new String[]{"BSE", "NSE", "NFO", "BFO"});
+                Instrument kiteInstrument = instruments.stream()
+                        .filter(i -> "BSE".equals(i.getExchange()))
+                        .findFirst()
+                        .orElse(instruments.isEmpty() ? null : instruments.get(0));
+                if (kiteInstrument != null) {
+                    // Exit = reverse of entry direction
+                    String exitDirection = (order.getDirection() == TradeDirection.LONG) ? "SELL" : "BUY";
+                    String orderId = orderManager.placeOrder(
+                            0.0, // market order — price=0
+                            order.getQuantity(), kiteInstrument, exitDirection,
+                            "MIS");
+                    log.info("[LiveOrder] EXIT PLACED orderId={} {} {} qty={} instrument={}",
+                            orderId, order.getSymbol(), exitDirection, order.getQuantity(),
+                            kiteInstrument.getTradingsymbol());
+                } else {
+                    log.error("[LiveOrder] EXIT FAILED — instrument not found for {}", order.getSymbol());
+                }
+            } catch (Throwable e) {
+                log.error("[LiveOrder] EXIT FAILED for {} orderId={}: {}",
+                        order.getSymbol(), order.getId(), e.getMessage(), e);
+            }
+        }
+
         return order;
     }
 }
