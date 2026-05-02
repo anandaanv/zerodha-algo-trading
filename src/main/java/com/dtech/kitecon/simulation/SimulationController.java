@@ -107,7 +107,7 @@ public class SimulationController {
                 tsToIdx.put(barSeries.getBar(i).getEndTime(), i);
 
             var result = analysisCore.analyze(
-                    new ImpulseAnalysisCore.AnalysisInput(symbol, pivots, barSeries, tsToIdx, interval));
+                    new ImpulseAnalysisCore.AnalysisInput(symbol, pivots, barSeries, tsToIdx, interval, null));
 
             if (result.isEmpty())
                 return ResponseEntity.ok(Map.of(
