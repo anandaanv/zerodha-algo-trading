@@ -17,6 +17,10 @@ public class PatternScanController {
     private final PatternScanService patternScanService;
     private final com.dtech.kitecon.backtest.PatternComboBacktestService patternComboBacktestService;
     private final com.dtech.kitecon.elliott.ImpulseTrainingDataService impulseTrainingDataService;
+    private final com.dtech.kitecon.elliott.CandidatePivotTrainingDataService candidatePivotTrainingDataService;
+    private final com.dtech.kitecon.elliott.CleanImpulseTrainingDataService cleanImpulseTrainingDataService;
+    private final com.dtech.kitecon.simulation.ZigZagRetrospectService zigZagRetrospectService;
+    private final com.dtech.kitecon.simulation.CompareZigZags compareZigZags;
 
     @GetMapping("/nifty50")
     public ResponseEntity<List<String>> getNifty50() {
@@ -116,6 +120,58 @@ public class PatternScanController {
             return ResponseEntity.ok(java.util.Map.of("report", result));
         } catch (Exception e) {
             log.error("Impulse batch failed: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+
+    @GetMapping("/candidate-pivot-train/{symbol}")
+    public ResponseEntity<?> generateCandidatePivotData(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "1h") String tf) {
+        try {
+            Interval interval = parseInterval(tf);
+            String result = candidatePivotTrainingDataService.generateForSymbol(symbol, interval);
+            return ResponseEntity.ok(java.util.Map.of("summary", result));
+        } catch (Exception e) {
+            log.error("Candidate pivot data gen failed for {}: {}", symbol, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/clean-impulse-train/{symbol}")
+    public ResponseEntity<?> generateCleanImpulseData(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "1h") String tf) {
+        try {
+            Interval interval = parseInterval(tf);
+            String result = cleanImpulseTrainingDataService.generateForSymbol(symbol, interval);
+            return ResponseEntity.ok(java.util.Map.of("summary", result));
+        } catch (Exception e) {
+            log.error("Clean impulse data gen failed for {}: {}", symbol, e.getMessage(), e);
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/compare-zigzags/{symbol}")
+    public ResponseEntity<?> compareZigZags(@PathVariable String symbol, @RequestParam(defaultValue="1h") String tf) {
+        try {
+            Interval i = parseInterval(tf);
+            return ResponseEntity.ok(compareZigZags.compare(symbol, i));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/zigzag-validate/{symbol}")
+    public ResponseEntity<?> validateZigZag(
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "1h") String tf) {
+        try {
+            Interval interval = parseInterval(tf);
+            return ResponseEntity.ok(zigZagRetrospectService.retrospect(symbol, interval));
+        } catch (Exception e) {
+            log.error("ZigZag validate failed for {}: {}", symbol, e.getMessage(), e);
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }

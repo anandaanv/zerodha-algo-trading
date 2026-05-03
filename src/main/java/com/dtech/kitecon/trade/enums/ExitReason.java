@@ -9,5 +9,7 @@ public enum ExitReason {
     REVERSAL_CANDLE,
     MANUAL,
     EXPIRED,
+    EMA20_STOP,
+    COUNTER_SIGNAL,
     ERROR
 }

@@ -72,6 +72,8 @@ public class TradeActionLog {
         TARGET_HIT,
         REVERSAL_EXIT,
         MANUAL_EXIT,
+        EMA20_STOP,
+        COUNTER_SIGNAL,
         ERROR
     }
 

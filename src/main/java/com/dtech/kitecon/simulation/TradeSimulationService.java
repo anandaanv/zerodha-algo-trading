@@ -48,8 +48,13 @@ public class TradeSimulationService {
 
     private SimulationContext activeContext;
 
+    @org.springframework.beans.factory.annotation.Value("${simulation.wave.size:20}")
+    private int waveSize;
+
     /**
-     * Run a full simulation from start to end.
+     * Run a full simulation from start to end. Symbols are processed in waves
+     * (default 20) — only the active wave's bars and indicator state are kept
+     * in memory; previous waves are torn down via strategy.reset().
      */
     public SimulationResult run(String strategyType, List<String> symbols, String timeframe,
                                 Instant from, Instant to, int stepMinutes) {
@@ -58,10 +63,53 @@ public class TradeSimulationService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown strategy: " + strategyType));
 
-        SimulationClock clock = new SimulationClock(from, to, stepMinutes);
-        SimulationContext ctx = new SimulationContext(clock, strategyType, symbols, timeframe);
+        // One context accumulates stats across all waves
+        SimulationContext ctx = new SimulationContext(strategyType, symbols, timeframe);
+        ctx.setClock(new SimulationClock(from, to, stepMinutes));
         activeContext = ctx;
         strategy.reset();  // clear caches from previous runs
+
+        // Partition symbols into waves so we don't hold all 200 stocks' bars+indicators in memory.
+        int effectiveWaveSize = Math.max(1, waveSize);
+        List<List<String>> waves = new ArrayList<>();
+        for (int i = 0; i < symbols.size(); i += effectiveWaveSize) {
+            waves.add(symbols.subList(i, Math.min(i + effectiveWaveSize, symbols.size())));
+        }
+        log.info("[Simulation] {} symbols partitioned into {} wave(s) of up to {} each",
+                symbols.size(), waves.size(), effectiveWaveSize);
+
+        int waveIdx = 0;
+        for (List<String> waveSymbols : waves) {
+            waveIdx++;
+            log.info("[Simulation] Wave {}/{}: starting {} symbols", waveIdx, waves.size(), waveSymbols.size());
+            runWave(strategy, waveSymbols, timeframe, from, to, stepMinutes, ctx);
+            // Force-close any positions still open for this wave's symbols (wave-boundary timeout)
+            forceCloseWavePositions(ctx, waveSymbols);
+            // Drop strategy/indicator caches before loading next wave
+            strategy.reset();
+            System.gc();
+            log.info("[Simulation] Wave {}/{} done — cumulative: {} signals, {} closed, PnL={}%",
+                    waveIdx, waves.size(),
+                    ctx.getTotalSignalsGenerated(), ctx.getClosedPositions().size(),
+                    String.format("%.2f", ctx.getTotalPnlPct()));
+        }
+
+        log.info("[Simulation] Complete: {} signals, {} closed, {} open, PnL={}%",
+                ctx.getTotalSignalsGenerated(), ctx.getClosedPositions().size(),
+                ctx.getOpenPositions().size(), String.format("%.2f", ctx.getTotalPnlPct()));
+        return buildResult(ctx);
+    }
+
+    /**
+     * Runs the simulation time-loop for a single wave of symbols. Loads bars,
+     * builds growing series, advances the clock, scans/exits per-tick.
+     * Per-wave clock reuses the same from/to/stepMinutes — the time axis
+     * is the same across waves; only the universe of stocks differs.
+     */
+    private void runWave(SimulationStrategy strategy, List<String> symbols, String timeframe,
+                          Instant from, Instant to, int stepMinutes, SimulationContext ctx) {
+        SimulationClock clock = new SimulationClock(from, to, stepMinutes);
+        ctx.setClock(clock);
         clock.start();
 
         // Preload full bar series per symbol from DB
@@ -142,12 +190,13 @@ public class TradeSimulationService {
                     symbol, preAddCount, bars.size());
         }
 
-        // Step through time
+        // Step through time. Per-tick, process stocks in parallel so the prediction
+        // batcher receives concurrent submissions and can dispatch in batches.
         do {
-            Instant t = clock.getCurrentTime();
+            final Instant t = clock.getCurrentTime();
             ctx.setTotalSteps(ctx.getTotalSteps() + 1);
 
-            for (Map.Entry<String, BarSeries> entry : growingSeries.entrySet()) {
+            growingSeries.entrySet().parallelStream().forEach(entry -> {
                 String symbol = entry.getKey();
                 BarSeries growing = entry.getValue();
 
@@ -160,10 +209,17 @@ public class TradeSimulationService {
                 }
                 nextBarIndex.put(symbol, nextIdx);
 
-                if (growing.getBarCount() < 10) continue;
+                if (growing.getBarCount() < 10) return;
 
                 // Use growing series as the "truncated" series — it only has bars up to t
                 BarSeries truncated = growing;
+
+                // Snapshot openPositions so this lambda iterates a stable list
+                // (other parallel symbol-threads may mutate via processExit/scan).
+                List<TradeSignal> openSnapshot;
+                synchronized (ctx) {
+                    openSnapshot = new ArrayList<>(ctx.getOpenPositions());
+                }
 
                 // 1. Check exits — sub-step through finer-grained bars if available
                 BarSeries exitFull = exitSeries.get(symbol);
@@ -174,13 +230,13 @@ public class TradeSimulationService {
                     for (int sub = 1; sub <= stepMinutes / exitStepMinutes; sub++) {
                         Instant subTime = windowStart.plusSeconds((long) sub * exitStepMinutes * 60);
                         BarSeries exitTruncated = BarSeriesTruncator.truncate(exitFull, subTime);
-                        if (exitTruncated.getBarCount() < 2) continue;
+                        if (exitTruncated.getBarCount() < 2) return;
                         Bar exitBar = exitTruncated.getBar(exitTruncated.getEndIndex());
                         // Validate bar is within the current window — stale data means no 5m coverage
-                        if (exitBar.getEndTime().isBefore(windowStart)) continue;
+                        if (exitBar.getEndTime().isBefore(windowStart)) return;
                         exitHandled = true;
 
-                        List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, exitBar, truncated, exitTruncated);
+                        List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, openSnapshot, symbol, exitBar, truncated, exitTruncated);
                         for (SimulationStrategy.ExitResult exit : exits) {
                             processExit(ctx, exit, subTime);
                         }
@@ -189,14 +245,14 @@ public class TradeSimulationService {
                 if (!exitHandled) {
                     // Fallback: check exits on the scan-timeframe bar
                     Bar currentBar = truncated.getBar(truncated.getEndIndex());
-                    List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, ctx.getOpenPositions(), symbol, currentBar, truncated, null);
+                    List<SimulationStrategy.ExitResult> exits = strategy.checkExits(ctx, openSnapshot, symbol, currentBar, truncated, null);
                     for (SimulationStrategy.ExitResult exit : exits) {
                         processExit(ctx, exit, t);
                     }
                 }
 
                 // 2. Scan for new signals (limit to 2 open positions per symbol)
-                long activeForSymbol = ctx.getOpenPositions().stream()
+                long activeForSymbol = openSnapshot.stream()
                         .filter(s -> symbol.equals(s.getSymbol())).count();
                 if (activeForSymbol < 2) {
                     List<TradeSignal> newSignals = strategy.scan(ctx, symbol, truncated);
@@ -205,8 +261,10 @@ public class TradeSimulationService {
                         sig.setCandleTime(t);
                         sig.setStatus(TradeStatus.ACTIVE);
                         signalRepository.save(sig);
-                        ctx.getOpenPositions().add(sig);
-                        ctx.setTotalSignalsGenerated(ctx.getTotalSignalsGenerated() + 1);
+                        synchronized (ctx) {
+                            ctx.getOpenPositions().add(sig);
+                            ctx.setTotalSignalsGenerated(ctx.getTotalSignalsGenerated() + 1);
+                        }
                         try {
                             actionLogger.log(sig, TradeActionLog.TradeAction.SIGNAL_CREATED,
                                     sig.getEntryPrice(), "Sim signal", t);
@@ -237,15 +295,45 @@ public class TradeSimulationService {
                         }
                     }
                 }
-            }
+            });
         } while (clock.advance());
 
         clock.stop();
-        log.info("[Simulation] Complete: {} steps, {} signals, {} closed, {} open",
-                ctx.getTotalSteps(), ctx.getTotalSignalsGenerated(),
-                ctx.getClosedPositions().size(), ctx.getOpenPositions().size());
+    }
 
-        return buildResult(ctx);
+    /** Close any positions still open for symbols in this wave at the last available close. */
+    private void forceCloseWavePositions(SimulationContext ctx, List<String> waveSymbols) {
+        java.util.Set<String> waveSet = new java.util.HashSet<>(waveSymbols);
+        List<TradeSignal> toClose;
+        synchronized (ctx) {
+            toClose = new ArrayList<>();
+            for (TradeSignal sig : ctx.getOpenPositions()) {
+                if (waveSet.contains(sig.getSymbol())) toClose.add(sig);
+            }
+        }
+        for (TradeSignal sig : toClose) {
+            double entry = sig.getEntryPrice().doubleValue();
+            double exit = entry; // wave timeout: flat
+            double pnl = 0.0;
+            sig.setStatus(TradeStatus.COMPLETED);
+            signalRepository.save(sig);
+            synchronized (ctx) {
+                ctx.getOpenPositions().remove(sig);
+                ctx.getClosedPositions().add(sig);
+            }
+            try {
+                actionLogger.logWithPnl(sig, TradeActionLog.TradeAction.TIMEOUT_EXIT,
+                        BigDecimal.valueOf(exit), BigDecimal.valueOf(pnl),
+                        "Wave boundary close", clockNow(ctx));
+            } catch (Exception ignored) {}
+        }
+        if (!toClose.isEmpty()) {
+            log.info("[Simulation] Wave-boundary closed {} open position(s)", toClose.size());
+        }
+    }
+
+    private Instant clockNow(SimulationContext ctx) {
+        try { return ctx.getClock().getCurrentTime(); } catch (Exception e) { return Instant.now(); }
     }
 
     /**
@@ -277,7 +365,7 @@ public class TradeSimulationService {
     private Interval getExitInterval(Interval scanInterval) {
         return switch (scanInterval) {
             case FifteenMinute -> Interval.FiveMinute;
-            case OneHour -> Interval.FifteenMinute;
+            case OneHour -> Interval.OneHour;  // no sub-stepping — exits checked only on 1h close
             case ThirtyMinute -> Interval.FiveMinute;
             default -> scanInterval; // same TF for exit if no finer available
         };
@@ -287,11 +375,13 @@ public class TradeSimulationService {
         TradeSignal sig = exit.signal();
         sig.setStatus(TradeStatus.COMPLETED);
         signalRepository.save(sig);
-        ctx.getOpenPositions().remove(sig);
-        ctx.getClosedPositions().add(sig);
-        ctx.setTotalPnlPct(ctx.getTotalPnlPct() + exit.pnlPct());
-        if (exit.pnlPct() > 0) ctx.setWins(ctx.getWins() + 1);
-        else ctx.setLosses(ctx.getLosses() + 1);
+        synchronized (ctx) {
+            ctx.getOpenPositions().remove(sig);
+            ctx.getClosedPositions().add(sig);
+            ctx.setTotalPnlPct(ctx.getTotalPnlPct() + exit.pnlPct());
+            if (exit.pnlPct() > 0) ctx.setWins(ctx.getWins() + 1);
+            else ctx.setLosses(ctx.getLosses() + 1);
+        }
         try {
             actionLogger.logWithPnl(sig,
                     TradeActionLog.TradeAction.valueOf(exit.exitReason()),

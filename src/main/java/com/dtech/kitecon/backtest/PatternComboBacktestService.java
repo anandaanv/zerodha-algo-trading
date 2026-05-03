@@ -57,7 +57,29 @@ public class PatternComboBacktestService {
 
     private final ZigZagService zigZagService;
     private final InstrumentRepository instrumentRepository;
+    private final com.dtech.kitecon.repository.CandleRepository candleRepository;
     private final CandlestickPatternDetector candlestickPatternDetector = new CandlestickPatternDetector();
+
+    @org.springframework.beans.factory.annotation.Value("${tlb.target.fraction:1.0}")
+    private double tlbTargetFraction;
+
+    @org.springframework.beans.factory.annotation.Value("${tlb.pivot.source:zigzag}")
+    private String tlbPivotSource;  // "zigzag" or "ema-touch"
+
+    @org.springframework.beans.factory.annotation.Value("${tlb.ema-touch.window:10}")
+    private int tlbEmaTouchWindow;
+
+    @org.springframework.beans.factory.annotation.Value("${tlb.ema-touch.zone-atr:1.0}")
+    private double tlbEmaTouchZoneAtr;
+
+    @org.springframework.beans.factory.annotation.Value("${tlb.lenient.prior-pivots:5}")
+    private int tlbLenientPriorPivots;
+
+    @org.springframework.beans.factory.annotation.Value("${tlb.lenient.min-touches:1}")
+    private int tlbLenientMinTouches;
+
+    @org.springframework.beans.factory.annotation.Value("${tlb.lenient.touch-tol-atr:0.5}")
+    private double tlbLenientTouchTolAtr;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Public entry points
@@ -2351,6 +2373,7 @@ public class PatternComboBacktestService {
             barSeries.addBar(bar);
         }
 
+        // Live scan path — no tf in scope, use default 100-bar gap
         com.dtech.ta.patterns.TrendlineBreakoutDetector detector =
                 new com.dtech.ta.patterns.TrendlineBreakoutDetector(barSeries, atrArr);
 
@@ -2457,26 +2480,34 @@ public class PatternComboBacktestService {
     }
 
     public String backtestTrendlineBreakoutMultiple(List<String> symbols, Interval tf, String csvPath) throws IOException {
-        List<String> allLines = new ArrayList<>();
-        int totalWins = 0, totalLosses = 0, totalOpen = 0;
-        double totalPnl = 0.0;
-        int failed = 0;
+        // Parallelize per-symbol — each backtest is independent.
+        java.util.List<String> allLines = java.util.Collections.synchronizedList(new ArrayList<>());
+        java.util.concurrent.atomic.AtomicInteger totalWins = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger totalLosses = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger totalOpen = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.DoubleAdder totalPnl = new java.util.concurrent.atomic.DoubleAdder();
+        java.util.concurrent.atomic.AtomicInteger failed = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger done = new java.util.concurrent.atomic.AtomicInteger(0);
+        int totalSymbols = symbols.size();
 
-        for (String symbol : symbols) {
+        symbols.parallelStream().forEach(symbol -> {
             try {
                 List<String> csvLines = new ArrayList<>();
                 double[] stats = backtestTlbForSymbol(symbol, tf, csvLines);
-                if (stats == null) { failed++; continue; }
+                int d = done.incrementAndGet();
+                if (stats == null) { failed.incrementAndGet(); return; }
                 allLines.addAll(csvLines);
-                totalWins += (int) stats[0];
-                totalLosses += (int) stats[1];
-                totalOpen += (int) stats[2];
-                totalPnl += stats[3];
+                totalWins.addAndGet((int) stats[0]);
+                totalLosses.addAndGet((int) stats[1]);
+                totalOpen.addAndGet((int) stats[2]);
+                totalPnl.add(stats[3]);
+                if (d % 25 == 0) log.info("[TLB Backtest] {}/{} symbols done", d, totalSymbols);
             } catch (Exception e) {
                 log.warn("[TLB Backtest] Skipping {}: {}", symbol, e.getMessage());
-                failed++;
+                failed.incrementAndGet();
+                done.incrementAndGet();
             }
-        }
+        });
 
         if (csvPath != null) {
             try (FileWriter fw = new FileWriter(csvPath)) {
@@ -2486,11 +2517,13 @@ public class PatternComboBacktestService {
             log.info("[TLB Backtest] CSV written to {}", csvPath);
         }
 
-        int total = totalWins + totalLosses + totalOpen;
-        double winRate = (totalWins + totalLosses) > 0 ? (double) totalWins / (totalWins + totalLosses) * 100.0 : 0;
+        int wins = totalWins.get(), losses = totalLosses.get(), open = totalOpen.get(), failedCnt = failed.get();
+        double pnl = totalPnl.sum();
+        int total = wins + losses + open;
+        double winRate = (wins + losses) > 0 ? (double) wins / (wins + losses) * 100.0 : 0;
         String summary = String.format(
             "[TLB Backtest] %d symbols (%d failed) | %d trades | %d wins, %d losses, %d open | WR=%.1f%% | Total PnL=%.2f%%",
-            symbols.size(), failed, total, totalWins, totalLosses, totalOpen, winRate, totalPnl);
+            symbols.size(), failedCnt, total, wins, losses, open, winRate, pnl);
         log.info(summary);
         return summary;
     }
@@ -2499,11 +2532,80 @@ public class PatternComboBacktestService {
      * Core TLB backtest for a single symbol. Returns double[4] = {wins, losses, open, totalPnl}.
      * Appends CSV lines to csvLines.
      */
+    /**
+     * Full-history bar loader for TLB training (2015+).
+     * Bypasses ZigZagService's 600-day cap for OneHour and 3-year cap for Day.
+     */
+    private BarSeries loadFullBarSeries(Instrument instrument, Interval interval) {
+        java.time.Instant from = java.time.Instant.parse("2015-01-01T00:00:00Z");
+        java.util.List<com.dtech.kitecon.data.Candle> candles =
+                candleRepository.findAllByInstrumentAndTimeframeAndTimestampBetween(
+                        instrument, interval, from, java.time.Instant.now());
+        candles.sort(java.util.Comparator.comparing(com.dtech.kitecon.data.Candle::getTimestamp));
+        BarSeries series = new BaseBarSeriesBuilder().withName(instrument.getTradingsymbol()).build();
+        for (com.dtech.kitecon.data.Candle c : candles) {
+            series.addBar(com.dtech.kitecon.strategy.dataloader.BarsLoader.getBar(
+                    c.getOpen(), c.getHigh(), c.getLow(), c.getClose(),
+                    java.util.Optional.ofNullable(c.getVolume()).orElse(0L), c.getTimestamp()));
+        }
+        return series;
+    }
+
+    /**
+     * TF-appropriate min-gap-bars: keeps a similar real-time span between P1 and P2
+     * across timeframes. Reference: 100 bars on 1h ≈ 16 trading days.
+     */
+    private int computeMinGapBars(Interval tf) {
+        switch (tf) {
+            case FifteenMinute: return 100;   // shorter gap permits more virgin trendlines on noisy 15m
+            case ThirtyMinute:  return 200;
+            case OneHour:       return 100;
+            case FourHours:     return 25;
+            case Day:           return 16;    // ~3 weeks
+            default:            return 100;
+        }
+    }
+
+    /**
+     * TF-aware ZigZag atrMult scale: finer TFs get coarser ZigZag (less sensitive)
+     * so virgin trendlines aren't killed by intraday noise.
+     */
+    private double computeAtrMultScale(Interval tf) {
+        switch (tf) {
+            case FiveMinute:    return 2.5;   // 5m is very noisy → 2.5× coarser
+            case FifteenMinute: return 1.8;
+            case ThirtyMinute:  return 1.3;
+            case OneHour:       return 1.0;   // baseline
+            case FourHours:     return 0.9;
+            case Day:           return 0.8;
+            default:            return 1.0;
+        }
+    }
+
+    /**
+     * TF-appropriate EMA periods for TLB. Reference: EMA100/200 on 1h.
+     * For 5m we want similar real-time spans → EMA20/50 (4h / 8h, vs 1h's 100h/200h)
+     * Actually for matched real-time on 5m: EMA = 1h period × 12 = 1200/2400 — way too long.
+     * Pragmatic: use shorter EMA on 5m so price actually touches them frequently.
+     */
+    private int[] computeEmaPeriods(Interval tf) {
+        switch (tf) {
+            case FiveMinute:    return new int[]{20, 50};   // ~100 mins / ~4 hrs — fast EMAs for intraday
+            case FifteenMinute: return new int[]{50, 100};
+            case ThirtyMinute:  return new int[]{50, 100};
+            case OneHour:       return new int[]{100, 200};  // baseline
+            case FourHours:     return new int[]{50, 100};
+            case Day:           return new int[]{50, 200};
+            default:            return new int[]{100, 200};
+        }
+    }
+
     private double[] backtestTlbForSymbol(String symbol, Interval tf, List<String> csvLines) {
         Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
         if (instrument == null) return null;
 
-        BarSeries series = zigZagService.getBarSeries(symbol, instrument, tf);
+        // Use full-history bars (2015+) instead of zigZagService's capped window
+        BarSeries series = loadFullBarSeries(instrument, tf);
         if (series == null || series.isEmpty()) return null;
 
         List<Bar> bars = toList(series);
@@ -2530,23 +2632,50 @@ public class PatternComboBacktestService {
 
         // Load daily series for daily-level indicators
         BarSeries seriesDaily = null;
-        try { seriesDaily = zigZagService.getBarSeries(symbol, instrument, Interval.Day); } catch (Exception ignored) {}
+        try { seriesDaily = loadFullBarSeries(instrument, Interval.Day); } catch (Exception ignored) {}
         DailyIndicators dailyInd = computeDailyIndicators(seriesDaily);
 
-        ZigZagParams base = zigZagService.resolveParams(symbol, tf);
-        ZigZagParams params = ZigZagParams.ofDefaults(base.getAtrLength(), base.getAtrMult(),
-                base.getPctMin(), base.getHysteresis(), base.getMinBarsBetweenPivots(),
-                base.isDynamicPctEnabled(), base.getVolMult(), base.getRvolWindow(),
-                ZigZagParams.Mode.BACKTEST);
-        List<ZigZagPoint> pivots = zigZagService.detect(series, params);
+        List<ZigZagPoint> pivots;
+        if ("ema-touch".equalsIgnoreCase(tlbPivotSource)) {
+            int[] emaPeriods = computeEmaPeriods(tf);
+            com.dtech.ta.patterns.EmaTouchPivotDetector emaPivotDetector =
+                    new com.dtech.ta.patterns.EmaTouchPivotDetector(series, atrArr,
+                            tlbEmaTouchWindow, tlbEmaTouchZoneAtr, emaPeriods[0], emaPeriods[1]);
+            pivots = emaPivotDetector.detect();
+            log.info("[TLB] {} {} ema-touch pivot mode: {} pivots (EMA{}/{}, window={}, zoneAtr={})",
+                    symbol, tf, pivots.size(), emaPeriods[0], emaPeriods[1], tlbEmaTouchWindow, tlbEmaTouchZoneAtr);
+        } else {
+            ZigZagParams base = zigZagService.resolveParams(symbol, tf);
+            double atrMultScale = computeAtrMultScale(tf);
+            double scaledAtrMult = base.getAtrMult() * atrMultScale;
+            ZigZagParams params = ZigZagParams.ofDefaults(base.getAtrLength(), scaledAtrMult,
+                    base.getPctMin(), base.getHysteresis(), base.getMinBarsBetweenPivots(),
+                    base.isDynamicPctEnabled(), base.getVolMult(), base.getRvolWindow(),
+                    ZigZagParams.Mode.BACKTEST);
+            pivots = zigZagService.detect(series, params);
+        }
 
         BarSeries detectorSeries = new BaseBarSeriesBuilder().build();
         for (Bar bar : bars) detectorSeries.addBar(bar);
 
-        com.dtech.ta.patterns.TrendlineBreakoutDetector detector =
-                new com.dtech.ta.patterns.TrendlineBreakoutDetector(detectorSeries, atrArr);
-        List<com.dtech.ta.patterns.TrendlineBreakoutPattern> patterns =
-                detector.detect(pivots, bars, tsToIdx);
+        int minGapBarsBT = computeMinGapBars(tf);
+        double targetFraction = tlbTargetFraction;
+        int[] emaPer = computeEmaPeriods(tf);
+        List<com.dtech.ta.patterns.TrendlineBreakoutPattern> patterns;
+        if ("lenient".equalsIgnoreCase(tlbPivotSource)) {
+            com.dtech.ta.patterns.LenientTrendlineDetector lenientDetector =
+                    new com.dtech.ta.patterns.LenientTrendlineDetector(detectorSeries, atrArr,
+                            tlbLenientPriorPivots, minGapBarsBT, targetFraction, emaPer[0], emaPer[1],
+                            tlbLenientMinTouches, tlbLenientTouchTolAtr);
+            patterns = lenientDetector.detect(pivots, bars, tsToIdx);
+            log.info("[TLB] {} {} lenient mode: {} patterns from {} pivots × {} prior, minTouches={}, tolAtr={}",
+                    symbol, tf, patterns.size(), pivots.size(), tlbLenientPriorPivots, tlbLenientMinTouches, tlbLenientTouchTolAtr);
+        } else {
+            com.dtech.ta.patterns.TrendlineBreakoutDetector detector =
+                    new com.dtech.ta.patterns.TrendlineBreakoutDetector(detectorSeries, atrArr, minGapBarsBT,
+                            targetFraction, emaPer[0], emaPer[1]);
+            patterns = detector.detect(pivots, bars, tsToIdx);
+        }
 
         int maxHoldBars = (int)(400L * 900 / tf.getOffset());
         int wins = 0, losses = 0, openCount = 0;

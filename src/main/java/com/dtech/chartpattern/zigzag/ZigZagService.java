@@ -186,22 +186,11 @@ public class ZigZagService {
             }
         }
 
-        // Keep only pivots within the last N bars using sequence (epoch seconds) cutoff
-        final int MAX_BARS = 1000;
-        int cutoffIdx = Math.max(0, series.getBarCount() - MAX_BARS);
-        long cutoffEpoch = series.getBar(cutoffIdx).getEndTime().getEpochSecond();
-
-        java.util.List<ZigZagPoint> trimmed = new java.util.ArrayList<>();
-        for (ZigZagPoint p : pivots) {
-            if (p.getSequence() >= cutoffEpoch) {
-                trimmed.add(p);
-            }
-        }
-
-        // Compute retracement and extension percentages on each pivot for pattern analytics
-        computePivotMetrics(trimmed);
-
-        return trimmed;
+        // Compute retracement and extension percentages on each pivot for pattern analytics.
+        // (Removed earlier MAX_BARS=1000 trim — it dropped pivots older than ~4 years for daily TF,
+        //  causing htf_pivot_dist_pct to be 0 for any sim period before that horizon.)
+        computePivotMetrics(pivots);
+        return pivots;
     }
 
     /**

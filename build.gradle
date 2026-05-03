@@ -24,6 +24,11 @@ sourceSets {
             srcDir 'strategies/impulse/src/main/java'
         }
     }
+    test {
+        java {
+            srcDir 'strategies/impulse/src/test/java'
+        }
+    }
 }
 
 group = 'com.dtech'
@@ -150,7 +155,7 @@ bootRun.dependsOn createDirectories
 
 // Default JVM heap for local bootRun
 tasks.named("bootRun") {
-    jvmArgs("-Xms1g", "-Xmx6g")
+    jvmArgs("-Xms2g", "-Xmx16g")
 }
 
 // Ensure external scripts under projectRoot/screener are NOT packaged into the boot jar
