@@ -9,6 +9,7 @@ import com.dtech.kitecon.backtest.PatternComboBacktestService;
 import com.dtech.kitecon.backtest.PatternComboBacktestService.DailyIndicators;
 import com.dtech.kitecon.patternscanner.PatternDto;
 import com.dtech.kitecon.patternscanner.TradeFilterClient;
+import com.dtech.kitecon.simulation.IncrementalZigZag;
 import com.dtech.kitecon.simulation.SimulationContext;
 import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.kitecon.trade.enums.StrategyType;
@@ -52,6 +53,10 @@ public class DtbSimulationStrategy implements SimulationStrategy {
     private final Map<String, ZigZagParams> cachedParams = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, Integer> lastZigZagBarCount = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, List<ZigZagPoint>> cachedPivots = new java.util.concurrent.ConcurrentHashMap<>();
+    /** IncrementalZigZag per symbol for trailing-extreme-based DTB/HNS detection */
+    private final Map<String, IncrementalZigZag> incrementalZigZags = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Track last processed bar count per symbol for incremental ZigZag */
+    private final Map<String, Integer> lastProcessedBarCount = new java.util.concurrent.ConcurrentHashMap<>();
     private static final int ZIGZAG_RECOMPUTE_INTERVAL = 4;
 
     @Override
@@ -65,6 +70,8 @@ public class DtbSimulationStrategy implements SimulationStrategy {
         cachedParams.clear();
         lastZigZagBarCount.clear();
         cachedPivots.clear();
+        incrementalZigZags.clear();
+        lastProcessedBarCount.clear();
     }
 
     @Override
@@ -72,33 +79,6 @@ public class DtbSimulationStrategy implements SimulationStrategy {
         try {
             int barCount = truncatedSeries.getBarCount();
             if (barCount < 30) return List.of();
-
-            // Optimization: only rerun ZigZag every N bars
-            int lastCount = lastZigZagBarCount.getOrDefault(symbol, 0);
-            if (barCount - lastCount < ZIGZAG_RECOMPUTE_INTERVAL && cachedPivots.containsKey(symbol)) {
-                return List.of();
-            }
-
-            // Compute ZigZag
-            ZigZagParams params = cachedParams.computeIfAbsent(symbol, s -> {
-                Interval interval = Interval.valueOf(ctx.getTimeframe());
-                ZigZagParams base = zigZagService.resolveParams(s, interval);
-                return ZigZagParams.ofDefaults(base.getAtrLength(), base.getAtrMult(),
-                        base.getPctMin(), base.getHysteresis(), base.getMinBarsBetweenPivots(),
-                        base.isDynamicPctEnabled(), base.getVolMult(), base.getRvolWindow(),
-                        ZigZagParams.Mode.BACKTEST);
-            });
-
-            List<ZigZagPoint> pivots = zigZagService.detect(truncatedSeries, params);
-            cachedPivots.put(symbol, pivots);
-            lastZigZagBarCount.put(symbol, barCount);
-
-            if (pivots.size() < 5) return List.of();
-
-            // Check if latest pivot already processed
-            Instant latestPivotTime = pivots.get(pivots.size() - 1).getTimestamp();
-            Set<Instant> processed = processedPivots.computeIfAbsent(symbol, s -> new HashSet<>());
-            if (processed.contains(latestPivotTime)) return List.of();
 
             // Build bars list and index map
             List<Bar> bars = new ArrayList<>();
@@ -112,15 +92,49 @@ public class DtbSimulationStrategy implements SimulationStrategy {
             double[] macdHistArr = patternService.computeMacdHistPublic(truncatedSeries);
             double[] stochRsiK = patternService.computeStochRsiKPublic(rsiValues);
 
-            // Detect ALL pattern types (same as live PatternScanService.scan)
-            List<DetectedPattern> patterns = new ArrayList<>();
-            patterns.addAll(patternService.scanDtbWatchingPublic(pivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK));
-            patterns.addAll(patternService.scanTriangleWatchingPublic(pivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK));
-            patterns.addAll(patternService.scanHnsWatchingPublic(pivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK));
-            patterns.addAll(patternService.scanTrendlineBreakoutWatchingPublic(pivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK));
+            // 1. Get or create IncrementalZigZag for this symbol
+            ZigZagParams params = cachedParams.computeIfAbsent(symbol, s -> {
+                Interval interval = Interval.valueOf(ctx.getTimeframe());
+                ZigZagParams base = zigZagService.resolveParams(s, interval);
+                return ZigZagParams.ofDefaults(base.getAtrLength(), base.getAtrMult(),
+                        base.getPctMin(), base.getHysteresis(), base.getMinBarsBetweenPivots(),
+                        base.isDynamicPctEnabled(), base.getVolMult(), base.getRvolWindow(),
+                        ZigZagParams.Mode.BACKTEST);
+            });
 
-            // Filter to patterns at the latest pivot only
+            IncrementalZigZag izz = incrementalZigZags.computeIfAbsent(symbol, s -> new IncrementalZigZag(params));
+
+            // 2. Process only NEW bars since last call
+            int lastProcessed = lastProcessedBarCount.getOrDefault(symbol, 0);
+            for (int i = lastProcessed; i < barCount; i++) {
+                izz.processBar(bars.get(i), i);
+            }
+            lastProcessedBarCount.put(symbol, barCount);
+
+            // 3. Get pivots with trailing extreme
+            Bar currentBar = bars.get(bars.size() - 1);
+            List<ZigZagPoint> pivotsWithTrailingExtreme = izz.getPivotsWithTrailingExtreme(currentBar);
+            if (pivotsWithTrailingExtreme.size() < 5) return List.of();
+
+            // Detect DTB/HNS patterns using trailing extreme (new detector)
+            List<DetectedPattern> patterns = new ArrayList<>();
+            patterns.addAll(patternService.scanDtbHnsCandidatePublic(pivotsWithTrailingExtreme, truncatedSeries,
+                    atrArr, rsiValues, macdHistArr, stochRsiK, tsToIdx));
+
+            // Keep Triangle and Trendline Breakout using confirmed pivots (old detectors)
+            List<ZigZagPoint> confirmedPivots = izz.getConfirmedPivots();
+            if (confirmedPivots.size() >= 5) {
+                patterns.addAll(patternService.scanTriangleWatchingPublic(confirmedPivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK));
+                patterns.addAll(patternService.scanTrendlineBreakoutWatchingPublic(confirmedPivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK));
+            }
+
+            // Filter Triangle/TLB patterns to recent bars only (keep DTB/HNS unfiltered — they emit at trailing extreme)
+            Instant latestPivotTime = pivotsWithTrailingExtreme.get(pivotsWithTrailingExtreme.size() - 1).getTimestamp();
             patterns.removeIf(p -> {
+                if ("DOUBLE_BOTTOM".equals(p.getPatternType()) || "DOUBLE_TOP".equals(p.getPatternType()) ||
+                    "HNS_BULL".equals(p.getPatternType()) || "HNS_BEAR".equals(p.getPatternType())) {
+                    return false; // Keep DTB/HNS (no time filter)
+                }
                 if ("TRENDLINE_BREAKOUT".equals(p.getPatternType())) {
                     int lastBarIdx = bars.size() - 1;
                     Instant recentCutoff = lastBarIdx >= 5 ? bars.get(lastBarIdx - 5).getEndTime() : bars.get(0).getEndTime();
@@ -136,6 +150,28 @@ public class DtbSimulationStrategy implements SimulationStrategy {
 
             List<TradeSignal> signals = new ArrayList<>();
             for (DetectedPattern p : patterns) {
+                // Prod-style dedup: check if existing OPEN signal has same patternType + keyLevel within 0.5%
+                List<TradeSignal> openSignals = ctx.getOpenPositions().stream()
+                        .filter(sig -> symbol.equals(sig.getSymbol()))
+                        .toList();
+                boolean isDuplicate = false;
+                for (TradeSignal existing : openSignals) {
+                    if (existing.getPatternType() != null && existing.getPatternType().equals(p.getPatternType())) {
+                        if (existing.getNeckline() != null) {
+                            double keyLevel = p.getKeyLevel();
+                            double necklineDiff = Math.abs(existing.getNeckline().doubleValue() - keyLevel) / keyLevel;
+                            if (necklineDiff < 0.005) {
+                                isDuplicate = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (isDuplicate) {
+                    log.debug("[SimDTB] Duplicate pattern detected for {} {}: skipping", symbol, p.getPatternType());
+                    continue;
+                }
+
                 // Build PatternDto for ML scoring
                 double rrRatio = p.getPatternHeight() > 0 && p.getAtr() > 0
                         ? p.getPatternHeight() / (2.0 * p.getAtr()) : 1.0;
@@ -202,10 +238,14 @@ public class DtbSimulationStrategy implements SimulationStrategy {
                         .status(TradeStatus.ACTIVE)
                         .strategyType(StrategyType.DTB)
                         .stochRsiK(BigDecimal.valueOf(p.getStochRsiK()).setScale(4, RoundingMode.HALF_UP))
+                        .breakoutLevel(BigDecimal.ZERO)
+                        .pivotP0(BigDecimal.valueOf(p.getPivotP0()))
+                        .pivotP1(BigDecimal.valueOf(p.getPivotP1()))
+                        .pivotP2(BigDecimal.valueOf(p.getPivotP2()))
+                        .pivotP3(p.getPivotP3() != null ? BigDecimal.valueOf(p.getPivotP3()) : null)
                         .build();
 
                 signals.add(signal);
-                processed.add(latestPivotTime);
                 log.info("[SimDTB] {} {} {} entry={} SL={} T={} ML={:.3f}",
                         symbol, p.getPatternType(), bullish ? "LONG" : "SHORT",
                         fillPrice, stopLoss, target, mlScore);
