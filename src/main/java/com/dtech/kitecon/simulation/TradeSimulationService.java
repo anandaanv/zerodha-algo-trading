@@ -268,7 +268,9 @@ public class TradeSimulationService {
                     for (TradeSignal sig : newSignals) {
                         sig.setSignalTime(t);
                         sig.setCandleTime(t);
-                        sig.setStatus(TradeStatus.ACTIVE);
+                        if (sig.getStatus() == null) {
+                            sig.setStatus(TradeStatus.ACTIVE);
+                        }
                         signalRepository.save(sig);
                         synchronized (ctx) {
                             ctx.getOpenPositions().add(sig);

@@ -13,6 +13,7 @@ import com.dtech.kitecon.patternscanner.TradeFilterClient;
 import com.dtech.kitecon.simulation.CandidatePivotZigZag;
 import com.dtech.kitecon.simulation.SimulationContext;
 import com.dtech.kitecon.trade.entity.TradeSignal;
+import com.dtech.kitecon.trade.repository.TradeSignalRepository;
 import com.dtech.kitecon.trade.enums.StrategyType;
 import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeStatus;
@@ -46,6 +47,7 @@ public class DtbSimulationStrategy implements SimulationStrategy {
     private final TradeFilterClient tradeFilterClient;
     private final ExitStrategyRouter exitStrategyRouter;
     private final CandlestickPatternDetector candlePatternDetector;
+    private final TradeSignalRepository signalRepository;
 
     @Value("${trade.filter.threshold:0.82}")
     private double mlThreshold;
@@ -393,6 +395,7 @@ public class DtbSimulationStrategy implements SimulationStrategy {
                         // Reversal candle found — set breakoutLevel and entryValidUntil
                         sig.setBreakoutLevel(BigDecimal.valueOf(result.breakoutLevel()));
                         sig.setEntryValidUntil(currentBar.getEndTime().plusSeconds(5 * 3600));  // ~5 bars from now
+                        signalRepository.save(sig);  // Persist Phase 1→2 transition
                         return null;  // Don't exit, wait for break
                     }
                 }
@@ -416,12 +419,14 @@ public class DtbSimulationStrategy implements SimulationStrategy {
                 sig.setEntryPrice(breakoutLevel);
                 sig.setStatus(TradeStatus.ACTIVE);
                 sig.setBarsInTrade(0);
+                signalRepository.save(sig);  // Persist Phase 2→3 transition (ACTIVE + entryPrice set)
                 return null;  // Don't exit, entry just activated
             } else if (!isBullish && close < blevel) {
                 // Entry confirmed for SHORT
                 sig.setEntryPrice(breakoutLevel);
                 sig.setStatus(TradeStatus.ACTIVE);
                 sig.setBarsInTrade(0);
+                signalRepository.save(sig);  // Persist Phase 2→3 transition (ACTIVE + entryPrice set)
                 return null;  // Don't exit, entry just activated
             }
 
