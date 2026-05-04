@@ -3,11 +3,15 @@ import {
   getTradeOrders,
   getTradeSummary,
   triggerScan,
+  getDistinctStrategyTypes,
+  getDistinctPatterns,
   TradeOrder,
   TradeSummaryDto,
   TradeOrderStatus,
 } from "../api";
 import { TradeActionTimelineDark } from "../components/TradeActionTimelineDark";
+
+const PATTERN_FILTER_KEY = "tradeOrders.filter.pattern";
 
 const TradeOrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<TradeOrder[]>([]);
@@ -17,16 +21,38 @@ const TradeOrdersPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<TradeOrderStatus | "ALL">(
     "ALL"
   );
+  const [filterStrategy, setFilterStrategy] = useState<string>("");
+  const [filterPattern, setFilterPattern] = useState<string>(
+    () => localStorage.getItem(PATTERN_FILTER_KEY) || ""
+  );
+  const [strategyOptions, setStrategyOptions] = useState<string[]>([]);
+  const [patternOptions, setPatternOptions] = useState<string[]>([]);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string>("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const fetchData = async (status?: string) => {
+  // Persist pattern filter so it survives reloads (URL doesn't carry it on this page).
+  useEffect(() => {
+    if (filterPattern) localStorage.setItem(PATTERN_FILTER_KEY, filterPattern);
+    else localStorage.removeItem(PATTERN_FILTER_KEY);
+  }, [filterPattern]);
+
+  // Load dropdown options once on mount.
+  useEffect(() => {
+    getDistinctStrategyTypes().then(setStrategyOptions).catch(() => {});
+    getDistinctPatterns().then(setPatternOptions).catch(() => {});
+  }, []);
+
+  const fetchData = async (
+    status?: string,
+    strategy?: string,
+    pattern?: string,
+  ) => {
     setLoading(true);
     setError("");
     try {
       const [ordersData, summaryData] = await Promise.all([
-        getTradeOrders(status),
+        getTradeOrders(status, strategy, pattern),
         getTradeSummary(),
       ]);
       setOrders(ordersData);
@@ -39,16 +65,25 @@ const TradeOrdersPage: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData(filterStatus === "ALL" ? undefined : filterStatus);
-  }, [filterStatus]);
+    fetchData(
+      filterStatus === "ALL" ? undefined : filterStatus,
+      filterStrategy || undefined,
+      filterPattern || undefined,
+    );
+  }, [filterStatus, filterStrategy, filterPattern]);
 
   useEffect(() => {
     const interval = setInterval(
-      () => fetchData(filterStatus === "ALL" ? undefined : filterStatus),
+      () =>
+        fetchData(
+          filterStatus === "ALL" ? undefined : filterStatus,
+          filterStrategy || undefined,
+          filterPattern || undefined,
+        ),
       30000
     );
     return () => clearInterval(interval);
-  }, [filterStatus]);
+  }, [filterStatus, filterStrategy, filterPattern]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -57,7 +92,11 @@ const TradeOrdersPage: React.FC = () => {
       const result = await triggerScan();
       setScanMessage(`Scan completed: ${result.created} new signals created`);
       setTimeout(() => setScanMessage(""), 5000);
-      fetchData(filterStatus === "ALL" ? undefined : filterStatus);
+      fetchData(
+        filterStatus === "ALL" ? undefined : filterStatus,
+        filterStrategy || undefined,
+        filterPattern || undefined,
+      );
     } catch (err) {
       setError(`Error during scan: ${err}`);
     } finally {
@@ -284,6 +323,49 @@ const TradeOrdersPage: React.FC = () => {
           >
             Failed
           </button>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <label style={{ fontSize: 12, color: "#aaa" }}>Strategy:</label>
+          <select
+            value={filterStrategy}
+            onChange={(e) => setFilterStrategy(e.target.value)}
+            style={{
+              padding: "6px 10px",
+              backgroundColor: "#2a2a2a",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: 4,
+              fontSize: 13,
+            }}
+          >
+            <option value="">All</option>
+            {strategyOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <label style={{ fontSize: 12, color: "#aaa", marginLeft: 8 }}>
+            Pattern:
+            {filterPattern && (
+              <span style={{ fontSize: 10, color: "#666", marginLeft: 4 }}>(saved)</span>
+            )}
+          </label>
+          <select
+            value={filterPattern}
+            onChange={(e) => setFilterPattern(e.target.value)}
+            style={{
+              padding: "6px 10px",
+              backgroundColor: "#2a2a2a",
+              color: "#fff",
+              border: "1px solid #444",
+              borderRadius: 4,
+              fontSize: 13,
+            }}
+          >
+            <option value="">All</option>
+            {patternOptions.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
         </div>
         <button
           style={scanButtonStyle}

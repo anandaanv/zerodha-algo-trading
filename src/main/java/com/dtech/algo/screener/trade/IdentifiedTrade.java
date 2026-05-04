@@ -42,12 +42,6 @@ public class IdentifiedTrade {
     @Column
     private String confidence;
 
-    @Column(name = "screener_type")
-    private String screenerType;
-
-    @Column(name = "pattern")
-    private String pattern;
-
     @Column
     private String status;
 

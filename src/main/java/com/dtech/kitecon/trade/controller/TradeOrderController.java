@@ -27,7 +27,10 @@ public class TradeOrderController {
     private final MarketFacadeProvider marketFacadeProvider;
 
     @GetMapping("/")
-    public ResponseEntity<List<TradeOrder>> getOrders(@RequestParam(required = false) String status) {
+    public ResponseEntity<List<TradeOrder>> getOrders(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String strategyType,
+            @RequestParam(required = false) String pattern) {
         List<TradeOrder> orders;
 
         if (status != null && !status.isEmpty()) {
@@ -41,8 +44,35 @@ public class TradeOrderController {
             orders = tradeOrderRepository.findAllByOrderByCreatedAtDesc();
         }
 
+        // In-memory filter on linked signal — straightforward since order count is bounded.
+        if (strategyType != null && !strategyType.isBlank()) {
+            String wanted = strategyType.trim();
+            orders = orders.stream()
+                    .filter(o -> o.getSignal() != null
+                            && o.getSignal().getStrategyType() != null
+                            && wanted.equalsIgnoreCase(o.getSignal().getStrategyType().name()))
+                    .toList();
+        }
+        if (pattern != null && !pattern.isBlank()) {
+            String wanted = pattern.trim();
+            orders = orders.stream()
+                    .filter(o -> o.getSignal() != null
+                            && wanted.equalsIgnoreCase(o.getSignal().getPatternType()))
+                    .toList();
+        }
+
         enrichWithLivePnl(orders);
         return ResponseEntity.ok(orders);
+    }
+
+    @GetMapping("/strategy-types")
+    public ResponseEntity<List<String>> getDistinctStrategyTypes() {
+        return ResponseEntity.ok(tradeOrderRepository.findDistinctStrategyTypes());
+    }
+
+    @GetMapping("/patterns")
+    public ResponseEntity<List<String>> getDistinctPatterns() {
+        return ResponseEntity.ok(tradeOrderRepository.findDistinctPatterns());
     }
 
     private void enrichWithLivePnl(List<TradeOrder> orders) {

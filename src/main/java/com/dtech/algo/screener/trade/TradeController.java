@@ -28,8 +28,6 @@ public class TradeController {
             @RequestParam(required = false) String timeframe,
             @RequestParam(required = false) String side,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String screenerType,
-            @RequestParam(required = false) String pattern,
             @RequestParam(required = false) String sortBy,
             @RequestParam(required = false, defaultValue = "DESC") String sortDir
     ) {
@@ -67,15 +65,6 @@ public class TradeController {
                 // unknown timeframe value; ignore filter
             }
         }
-        if (screenerType != null && !screenerType.isBlank()) {
-            final String value = screenerType.trim();
-            spec = spec.and((root, cq, cb) -> cb.equal(root.get("screenerType"), value));
-        }
-        if (pattern != null && !pattern.isBlank()) {
-            final String value = pattern.trim();
-            spec = spec.and((root, cq, cb) -> cb.equal(root.get("pattern"), value));
-        }
-
         // Sorting
         String sortField = (sortBy != null && !sortBy.isBlank()) ? sortBy : "timeTriggered";
         Sort.Direction direction = "ASC".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
@@ -87,15 +76,5 @@ public class TradeController {
     @GetMapping("/{id}")
     public IdentifiedTrade getTrade(@PathVariable Long id) {
         return repository.findById(id).orElseThrow(() -> new IllegalArgumentException("Trade not found: " + id));
-    }
-
-    @GetMapping("/screener-types")
-    public List<String> distinctScreenerTypes() {
-        return repository.findDistinctScreenerTypes();
-    }
-
-    @GetMapping("/patterns")
-    public List<String> distinctPatterns() {
-        return repository.findDistinctPatterns();
     }
 }
