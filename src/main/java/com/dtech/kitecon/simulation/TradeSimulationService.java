@@ -335,7 +335,11 @@ public class TradeSimulationService {
                 series = fullSeries.get(sig.getSymbol());
             }
 
-            if (series != null && series.getBarCount() > 0) {
+            if (entry <= 0) {
+                // Signal never entered (WATCHING_ENTRY → never confirmed). No PnL contribution.
+                pnl = 0.0;
+                pnlPct = 0.0;
+            } else if (series != null && series.getBarCount() > 0) {
                 Bar lastBar = series.getLastBar();
                 exit = lastBar.getClosePrice().doubleValue();
 

@@ -490,6 +490,7 @@ public class DtbSimulationStrategy implements SimulationStrategy {
 
     private double computePnl(TradeSignal sig, double exitPrice) {
         double entry = sig.getEntryPrice().doubleValue();
+        if (entry <= 0) return 0.0;  // not entered → no PnL contribution
         return sig.getDirection() == TradeDirection.LONG
                 ? (exitPrice - entry) / entry * 100
                 : (entry - exitPrice) / entry * 100;
