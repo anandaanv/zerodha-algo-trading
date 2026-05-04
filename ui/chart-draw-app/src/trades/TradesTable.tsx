@@ -39,6 +39,8 @@ export const TradesTable: React.FC<Props> = ({ trades, loading, error }) => {
             <th style={{ textAlign: "right", padding: "8px" }}>Target</th>
             <th style={{ textAlign: "right", padding: "8px" }}>Stoploss</th>
             <th style={{ textAlign: "left", padding: "8px" }}>Confidence</th>
+            <th style={{ textAlign: "left", padding: "8px" }}>Screener</th>
+            <th style={{ textAlign: "left", padding: "8px" }}>Pattern</th>
             <th style={{ textAlign: "left", padding: "8px" }}>Status</th>
             <th style={{ textAlign: "left", padding: "8px" }}>Open</th>
             <th style={{ textAlign: "left", padding: "8px" }}>Run ID</th>
@@ -68,6 +70,8 @@ export const TradesTable: React.FC<Props> = ({ trades, loading, error }) => {
                   <td style={{ padding: "8px", textAlign: "right" }}>{t.target ?? "-"}</td>
                   <td style={{ padding: "8px", textAlign: "right" }}>{t.stoploss ?? "-"}</td>
                   <td style={{ padding: "8px" }}>{t.confidence ?? "-"}</td>
+                  <td style={{ padding: "8px" }}>{t.screenerType ?? "-"}</td>
+                  <td style={{ padding: "8px" }}>{t.pattern ?? "-"}</td>
                   <td style={{ padding: "8px" }}>{t.status ?? "-"}</td>
                   <td style={{ padding: "8px" }}>{t.open ? "Yes" : "No"}</td>
                   <td style={{ padding: "8px" }}>{t.runId ?? "-"}</td>
@@ -80,7 +84,7 @@ export const TradesTable: React.FC<Props> = ({ trades, loading, error }) => {
                 </tr>
                 {isExpanded && (
                   <tr>
-                    <td colSpan={12} style={{ padding: 0 }}>
+                    <td colSpan={14} style={{ padding: 0 }}>
                       <TradeActionTimeline signalId={Number(t.id)} />
                     </td>
                   </tr>
