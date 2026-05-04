@@ -66,11 +66,13 @@ public class TradeOrchestrationService {
                     continue;
                 }
 
-                paperOrderExecutionService.enter(signal, config, resolved, instrumentQuote, underlyingQuote);
-                try {
-                    tradeActionLogger.log(signal, TradeActionLog.TradeAction.ENTRY_FILLED, ltp, "Order placed");
-                } catch (Exception e) {
-                    log.warn("Failed to log trade action: {}", e.getMessage());
+                TradeOrder order = paperOrderExecutionService.enter(signal, config, resolved, instrumentQuote, underlyingQuote);
+                if (order != null) {
+                    try {
+                        tradeActionLogger.log(signal, TradeActionLog.TradeAction.ENTRY_FILLED, ltp, "Order placed");
+                    } catch (Exception e) {
+                        log.warn("Failed to log trade action: {}", e.getMessage());
+                    }
                 }
 
             } catch (Exception e) {
