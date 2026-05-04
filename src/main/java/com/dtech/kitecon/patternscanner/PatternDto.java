@@ -49,4 +49,11 @@ public class PatternDto {
     double rsiSlope;         // linear regression slope of RSI over last 5 bars (watching TF)
     double macdHistSlope;    // slope of MACD histogram over last 5 bars (watching TF)
     double adxSlope;         // slope of ADX over last 5 bars (watching TF)
+
+    // Pivot fields for DTB+HNS candidate-based entry-confirmation flow
+    double pivotP0;          // Latest pivot OR trailing-extreme candidate
+    double pivotP1;          // Previous pivot
+    double pivotP2;          // Previous-previous pivot
+    Double pivotP3;          // Previous-previous-previous (HNS only, nullable)
+    double breakoutLevel;    // Entry confirmation level (populated in Phase 2)
 }

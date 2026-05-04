@@ -43,4 +43,10 @@ public class DetectedPattern {
     double  dailyAdxEma;
     double  macdHistogram;
     String  reversalPattern;
+
+    // New fields for DTB+HNS candidate-pivot entry-confirmation flow
+    double  pivotP0;       // Latest pivot OR trailing-extreme candidate
+    double  pivotP1;       // Previous pivot
+    double  pivotP2;       // Previous-previous pivot
+    Double  pivotP3;       // Previous-previous-previous (HNS only, nullable)
 }

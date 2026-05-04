@@ -1,0 +1,18 @@
+-- DTB+HNS Candidate Pivot Phase 1: New TradeSignal Storage Fields
+-- After deploying the DtbHnsCandidateDetector branch, run the following on production:
+--
+-- ALTER TABLE trade_signal ADD COLUMN breakout_level DECIMAL(14,4) NOT NULL DEFAULT 0;
+-- ALTER TABLE trade_signal ADD COLUMN pivot_p0 DECIMAL(14,4) NOT NULL DEFAULT 0;
+-- ALTER TABLE trade_signal ADD COLUMN pivot_p1 DECIMAL(14,4) NOT NULL DEFAULT 0;
+-- ALTER TABLE trade_signal ADD COLUMN pivot_p2 DECIMAL(14,4) NOT NULL DEFAULT 0;
+-- ALTER TABLE trade_signal ADD COLUMN pivot_p3 DECIMAL(14,4);
+--
+-- Note: Hibernate ddl-auto=update should create these columns automatically on deploy.
+-- This file is a record of the schema changes for manual verification and rollback purposes.
+--
+-- Field descriptions:
+--   breakout_level: Entry confirmation level set during Phase 2 (reversal-candle breakout)
+--   pivot_p0:       Latest pivot OR trailing-extreme candidate (DTB/HNS)
+--   pivot_p1:       Previous pivot (neckline/bounce for DTB, Head for HNS)
+--   pivot_p2:       Previous-previous pivot (lowest point for DTB, B/neckline for HNS)
+--   pivot_p3:       Previous-previous-previous pivot (LS for HNS_BEAR, LS for HNS_BULL) — nullable, HNS-only
