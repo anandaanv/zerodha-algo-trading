@@ -119,6 +119,9 @@ public class TradeSignal {
     @Column
     private Integer barsSinceLastSlabAdvance;
 
+    @Column
+    private boolean paperTrade;
+
     @PrePersist
     void prePersist() {
         createdAt = updatedAt = Instant.now();
