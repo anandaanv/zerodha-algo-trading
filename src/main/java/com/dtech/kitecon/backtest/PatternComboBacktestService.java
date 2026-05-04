@@ -6,6 +6,7 @@ import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import com.dtech.chartpattern.zigzag.ZigZagService;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.InstrumentRepository;
+import com.dtech.ta.patterns.DtbHnsCandidateDetector;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -58,6 +59,7 @@ public class PatternComboBacktestService {
     private final ZigZagService zigZagService;
     private final InstrumentRepository instrumentRepository;
     private final com.dtech.kitecon.repository.CandleRepository candleRepository;
+    private final DtbHnsCandidateDetector dtbHnsCandidateDetector;
     private final CandlestickPatternDetector candlestickPatternDetector = new CandlestickPatternDetector();
 
     @org.springframework.beans.factory.annotation.Value("${tlb.target.fraction:1.0}")
@@ -2342,6 +2344,17 @@ public class PatternComboBacktestService {
             Map<Instant, Integer> tsToIdxW, double[] atrArr, double[] rsiValues,
             double[] macdHistArr, double[] stochRsiK) {
         return scanHnsWatching(pivots, barsW, tsToIdxW, atrArr, rsiValues, macdHistArr, stochRsiK);
+    }
+
+    public List<DetectedPattern> scanDtbHnsCandidatePublic(
+            List<ZigZagPoint> pivotsWithTrailingExtreme,
+            BarSeries series,
+            double[] atrArr,
+            double[] rsiValues,
+            double[] macdHistArr,
+            double[] stochRsiK,
+            Map<Instant, Integer> tsToIdx) {
+        return dtbHnsCandidateDetector.detect(series, pivotsWithTrailingExtreme, atrArr, rsiValues, macdHistArr, stochRsiK, tsToIdx);
     }
 
     public List<DetectedPattern> scanFlagWatchingPublic(List<ZigZagPoint> pivots, List<Bar> barsW,

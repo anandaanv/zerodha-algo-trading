@@ -211,6 +211,11 @@ public class PatternComboScannerService {
                 .rrRatio(rrRatio)
                 .paperTrade(paperTrade)
                 .notes("Auto-scan: rsiP1=" + pattern.getRsiAtP1() + " rsiP2=" + pattern.getRsiAtP2())
+                .breakoutLevel(BigDecimal.ZERO)
+                .pivotP0(BigDecimal.valueOf(pattern.getPivotP0()))
+                .pivotP1(BigDecimal.valueOf(pattern.getPivotP1()))
+                .pivotP2(BigDecimal.valueOf(pattern.getPivotP2()))
+                .pivotP3(pattern.getPivotP3() != null ? BigDecimal.valueOf(pattern.getPivotP3()) : null)
                 .build();
 
         // ML scoring happens at entry time (TradeEntryHandler) with live indicators — not here.

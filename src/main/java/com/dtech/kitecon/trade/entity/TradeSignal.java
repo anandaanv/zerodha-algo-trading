@@ -123,6 +123,25 @@ public class TradeSignal {
     @org.hibernate.annotations.ColumnDefault("0")
     private boolean paperTrade;
 
+    @Column(nullable = false)
+    @org.hibernate.annotations.ColumnDefault("0")
+    private BigDecimal breakoutLevel;
+
+    @Column(nullable = false)
+    @org.hibernate.annotations.ColumnDefault("0")
+    private BigDecimal pivotP0;
+
+    @Column(nullable = false)
+    @org.hibernate.annotations.ColumnDefault("0")
+    private BigDecimal pivotP1;
+
+    @Column(nullable = false)
+    @org.hibernate.annotations.ColumnDefault("0")
+    private BigDecimal pivotP2;
+
+    @Column
+    private BigDecimal pivotP3;
+
     @PrePersist
     void prePersist() {
         createdAt = updatedAt = Instant.now();

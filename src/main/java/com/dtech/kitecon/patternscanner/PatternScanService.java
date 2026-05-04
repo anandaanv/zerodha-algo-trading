@@ -11,6 +11,7 @@ import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import com.dtech.chartpattern.zigzag.ZigZagService;
 import com.dtech.chartpattern.zigzag.ZigZagParams;
+import com.dtech.kitecon.simulation.IncrementalZigZag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -98,11 +99,26 @@ public class PatternScanService {
                 ZigZagParams.Mode.BACKTEST);
         List<ZigZagPoint> pivotsW = zigZagService.detect(seriesW, paramsW);
 
+        // Build pivots with trailing extreme for DTB/HNS candidate detection
+        List<ZigZagPoint> pivotsWithTrailingExtreme = pivotsW;
+        try {
+            if (!barsW.isEmpty()) {
+                IncrementalZigZag izz = new IncrementalZigZag(paramsW);
+                for (int i = 0; i < barsW.size(); i++) {
+                    izz.processBar(barsW.get(i), i);
+                }
+                Bar currentBar = barsW.get(barsW.size() - 1);
+                pivotsWithTrailingExtreme = izz.getPivotsWithTrailingExtreme(currentBar);
+            }
+        } catch (Exception e) {
+            log.warn("[Scan] Failed to compute pivots with trailing extreme for {}: {}", symbol, e.getMessage());
+            pivotsWithTrailingExtreme = pivotsW;
+        }
+
         // Detect all watching patterns
         List<DetectedPattern> watchingPatterns = new ArrayList<>();
-        watchingPatterns.addAll(patternComboBacktestService.scanDtbWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
+        watchingPatterns.addAll(patternComboBacktestService.scanDtbHnsCandidatePublic(pivotsWithTrailingExtreme, seriesW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW, tsToIdxW));
         watchingPatterns.addAll(patternComboBacktestService.scanTriangleWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
-        watchingPatterns.addAll(patternComboBacktestService.scanHnsWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(patternComboBacktestService.scanFlagWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
         watchingPatterns.addAll(patternComboBacktestService.scanTrendlineBreakoutWatchingPublic(pivotsW, barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW));
 
@@ -167,6 +183,11 @@ public class PatternScanService {
                 .rsiSlope(watchingInd.rsiSlopeAtTs(p.getKeyLevelTime(), 5))
                 .macdHistSlope(watchingInd.macdHistSlopeAtTs(p.getKeyLevelTime(), 5))
                 .adxSlope(watchingInd.adxSlopeAtTs(p.getKeyLevelTime(), 5))
+                .pivotP0(p.getPivotP0())
+                .pivotP1(p.getPivotP1())
+                .pivotP2(p.getPivotP2())
+                .pivotP3(p.getPivotP3())
+                .breakoutLevel(0.0)
                 .build()).toList();
 
         // Build overlays for watching TF
