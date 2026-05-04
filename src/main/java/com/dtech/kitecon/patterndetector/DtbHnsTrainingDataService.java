@@ -59,13 +59,14 @@ public class DtbHnsTrainingDataService {
 
     private static final String OUTPUT_DIR = "dtbhns_train_data";
     private static final int MAX_BARS_TO_ENTRY_CONFIRMATION = 20;
-    private static final int MAX_BARS_TO_EXIT = 50;
+    private static final int MAX_BARS_TO_EXIT = 10;
 
     public record ExtractResult(
             int detectionsFound,
             int entriesTriggered,
             int wins,
             int losses,
+            int timedOut,
             double winRatePct,
             Path outputFile
     ) {}
@@ -86,6 +87,7 @@ public class DtbHnsTrainingDataService {
         int totalEntriesTriggered = 0;
         int totalWins = 0;
         int totalLosses = 0;
+        int totalTimedOut = 0;
 
         List<Object[]> allRows = new ArrayList<>();
 
@@ -155,8 +157,16 @@ public class DtbHnsTrainingDataService {
                             totalEntriesTriggered++;
 
                             // Simulate exit (target vs SL)
-                            int label = simulateExit(barSeries, pattern, entryBarIdx);
-                            if (label == 1) totalWins++; else totalLosses++;
+                            Integer label = simulateExit(barSeries, pattern, entryBarIdx);
+                            if (label == null) {
+                                // Timeout: exclude from training
+                                totalTimedOut++;
+                                continue;
+                            } else if (label == 1) {
+                                totalWins++;
+                            } else {
+                                totalLosses++;
+                            }
 
                             // Build CSV row
                             Object[] row = buildCsvRow(symbol, currentBar, pattern, features, label, entryBarIdx);
@@ -180,10 +190,10 @@ public class DtbHnsTrainingDataService {
         writeCsv(outputCsv, allRows);
 
         double winRate = (totalWins + totalLosses) > 0 ? 100.0 * totalWins / (totalWins + totalLosses) : 0;
-        log.info("[DtbHnsTraining] Final stats: detections={}, entries={}, wins={}, losses={}, winRate={:.1f}%",
-                totalDetections, totalEntriesTriggered, totalWins, totalLosses, winRate);
+        log.info("[DtbHnsTraining] Final stats: detections={}, entries={}, wins={}, losses={}, timedOut={}, winRate={:.1f}%",
+                totalDetections, totalEntriesTriggered, totalWins, totalLosses, totalTimedOut, winRate);
 
-        return new ExtractResult(totalDetections, totalEntriesTriggered, totalWins, totalLosses, winRate, outputCsv);
+        return new ExtractResult(totalDetections, totalEntriesTriggered, totalWins, totalLosses, totalTimedOut, winRate, outputCsv);
     }
 
     /**
@@ -430,9 +440,9 @@ public class DtbHnsTrainingDataService {
 
     /**
      * Simulate exit: check if target or SL is hit first within MAX_BARS_TO_EXIT bars.
-     * Return 1 if target hit first (win), 0 if SL hit first or timeout (loss).
+     * Return 1 if target hit first (win), 0 if SL hit first (loss), null if timeout (exclude).
      */
-    private int simulateExit(BarSeries series, DetectedPattern pattern, int entryBarIdx) {
+    private Integer simulateExit(BarSeries series, DetectedPattern pattern, int entryBarIdx) {
         double target = pattern.getOwnTarget();
         double stopLoss = pattern.getStopLoss();
         int endIdx = Math.min(entryBarIdx + MAX_BARS_TO_EXIT, series.getBarCount() - 1);
@@ -451,14 +461,14 @@ public class DtbHnsTrainingDataService {
             }
         }
 
-        return 0;  // Timeout — loss
+        return null;  // Timeout — exclude from training
     }
 
     /**
      * Build a CSV row with all metadata and features.
      */
     private Object[] buildCsvRow(String symbol, Bar detectionBar, DetectedPattern pattern,
-                                  double[] features, int label, Integer entryBarIdx) {
+                                  double[] features, Integer label, Integer entryBarIdx) {
         Object[] row = new Object[7 + features.length + 1];
         row[0] = detectionBar.getEndTime();
         row[1] = pattern.getPivotP0();
