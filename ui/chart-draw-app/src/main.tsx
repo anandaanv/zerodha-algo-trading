@@ -26,9 +26,6 @@ import ScreenerCreatePage from "./screener/pages/ScreenerCreatePage";
 import ScreenerListPage from "./screener/pages/ScreenerListPage";
 import ScreenerDetailPage from "./screener/pages/ScreenerDetailPage";
 
-// Trades routes
-import { tradesRoutes } from "./trades";
-
 // Elliott Screener
 import ElliottScreenerPage from "./elliottScreener/pages/ElliottScreenerPage";
 import ScreenerStatusPage from "./elliottScreener/pages/ScreenerStatusPage";
@@ -132,17 +129,6 @@ root.render(
             </ProtectedRoute>
           }
         />
-
-        {/* Trades - accessible by all authenticated users */}
-        {tradesRoutes.map((r) => (
-          <Route
-            key={r.path}
-            path={r.path}
-            element={
-              <ProtectedRoute requiredRole="ADMIN">{r.element}</ProtectedRoute>
-            }
-          />
-        ))}
 
         <Route
           path="/"

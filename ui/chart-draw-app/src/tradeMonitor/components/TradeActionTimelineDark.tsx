@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { TradeAction, fetchTradeActions } from "../../trades/tradesApi";
+import { TradeAction, fetchTradeActions } from "../api";
 
 export function TradeActionTimelineDark({ signalId }: { signalId: number }) {
   const [actions, setActions] = useState<TradeAction[]>([]);
