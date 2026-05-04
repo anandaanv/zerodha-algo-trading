@@ -37,6 +37,9 @@ public class PaperOrderExecutionService {
     @Value("${impulse.live.orders:false}")
     private boolean liveOrdersEnabled;
 
+    @Value("${trade.exit.limit.slippagePct:0.5}")
+    private double exitLimitSlippagePct;
+
     public TradeOrder enter(TradeSignal signal, SegmentConfig config,
                            ResolvedInstrument resolved,
                            QuoteResult instrumentQuote,
@@ -160,13 +163,26 @@ public class PaperOrderExecutionService {
                 if (kiteInstrument != null) {
                     // Exit = reverse of entry direction
                     String exitDirection = (order.getDirection() == TradeDirection.LONG) ? "SELL" : "BUY";
+
+                    // Compute LIMIT price for exit. Use exitPrice (bid/ask from quote) +/- slippage so
+                    // the order fills quickly even if price moved between quote and submission.
+                    // Slippage direction: SELL → price below LTP (give up some), BUY → price above LTP.
+                    double limitPrice;
+                    if (exitDirection.equals("SELL")) {
+                        limitPrice = exitPrice.doubleValue() * (1.0 - exitLimitSlippagePct / 100.0);
+                    } else {
+                        limitPrice = exitPrice.doubleValue() * (1.0 + exitLimitSlippagePct / 100.0);
+                    }
+                    // Round to 2 decimals (paise) and ensure minimum tick size (0.05)
+                    limitPrice = Math.max(0.05, Math.round(limitPrice * 20.0) / 20.0);
+
                     String orderId = orderManager.placeOrder(
-                            0.0, // market order — price=0
+                            limitPrice,
                             order.getQuantity(), kiteInstrument, exitDirection,
                             "MIS");
-                    log.info("[LiveOrder] EXIT PLACED orderId={} {} {} qty={} instrument={}",
-                            orderId, order.getSymbol(), exitDirection, order.getQuantity(),
-                            kiteInstrument.getTradingsymbol());
+                    log.info("[LiveOrder] EXIT PLACED orderId={} {} {} qty={} limitPrice={} (slippage={}%) instrument={}",
+                            orderId, order.getSymbol(), exitDirection, order.getQuantity(), limitPrice,
+                            exitLimitSlippagePct, kiteInstrument.getTradingsymbol());
                 } else {
                     log.error("[LiveOrder] EXIT FAILED — instrument not found for {}", order.getSymbol());
                 }
