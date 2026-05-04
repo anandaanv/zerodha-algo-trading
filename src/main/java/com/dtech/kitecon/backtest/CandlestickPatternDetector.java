@@ -1,8 +1,10 @@
 package com.dtech.kitecon.backtest;
 
+import org.springframework.stereotype.Component;
 import org.ta4j.core.Bar;
 import java.util.List;
 
+@Component
 public class CandlestickPatternDetector {
 
     public enum CandlePattern {
