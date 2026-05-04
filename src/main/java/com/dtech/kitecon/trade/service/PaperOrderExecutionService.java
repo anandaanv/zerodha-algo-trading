@@ -78,7 +78,7 @@ public class PaperOrderExecutionService {
                 .instrumentToken(resolved.getInstrumentToken())
                 .strike(resolved.getStrike())
                 .expiry(resolved.getExpiry())
-                .paperTrade(true)
+                .paperTrade(signal.isPaperTrade())
                 .build();
 
         order = tradeOrderRepository.save(order);

@@ -2357,6 +2357,73 @@ public class PatternComboBacktestService {
         return scanTrendlineBreakoutWatching(pivots, bars, tsToIdx, atrArr, rsiValues, macdHistArr, stochRsiK);
     }
 
+    public List<DetectedPattern> scanLenientTrendlineWatchingPublic(List<Bar> bars,
+            Map<Instant, Integer> tsToIdx, double[] atrArr, double[] rsiValues,
+            double[] macdHistArr, double[] stochRsiK) {
+        List<DetectedPattern> results = new ArrayList<>();
+        if (bars.isEmpty()) return results;
+
+        org.ta4j.core.BarSeries barSeries = new org.ta4j.core.BaseBarSeriesBuilder().build();
+        for (Bar bar : bars) {
+            barSeries.addBar(bar);
+        }
+
+        com.dtech.ta.patterns.EmaTouchPivotDetector emaPivotDetector =
+                new com.dtech.ta.patterns.EmaTouchPivotDetector(barSeries, atrArr,
+                        tlbEmaTouchWindow, tlbEmaTouchZoneAtr);
+        List<ZigZagPoint> pivots = emaPivotDetector.detect();
+
+        int minGapBarsBT = computeMinGapBars(Interval.FifteenMinute);
+        double targetFraction = tlbTargetFraction;
+        int[] emaPer = computeEmaPeriods(Interval.FifteenMinute);
+        com.dtech.ta.patterns.LenientTrendlineDetector lenientDetector =
+                new com.dtech.ta.patterns.LenientTrendlineDetector(barSeries, atrArr,
+                        tlbLenientPriorPivots, minGapBarsBT, targetFraction, emaPer[0], emaPer[1],
+                        tlbLenientMinTouches, tlbLenientTouchTolAtr);
+        List<com.dtech.ta.patterns.TrendlineBreakoutPattern> patterns = lenientDetector.detect(pivots, bars, tsToIdx);
+
+        for (com.dtech.ta.patterns.TrendlineBreakoutPattern p : patterns) {
+            Integer p2Idx = tsToIdx.get(p.getPivot2().getTimestamp());
+            int breakoutIdx = p.getBreakoutBarIndex();
+            if (p2Idx == null) continue;
+
+            Instant breakoutTime = breakoutIdx < bars.size() ? bars.get(breakoutIdx).getEndTime() : p.getPivot2().getTimestamp();
+
+            double rsiAtP1 = 0, rsiAtP2 = 0, macdHistAtP1 = 0, macdHistAtP2 = 0, stochK = 0;
+            Integer p1Idx = tsToIdx.get(p.getPivot1().getTimestamp());
+            if (p1Idx != null && p1Idx < rsiValues.length) rsiAtP1 = rsiValues[p1Idx];
+            if (p2Idx < rsiValues.length) rsiAtP2 = rsiValues[p2Idx];
+            if (p1Idx != null && p1Idx < macdHistArr.length) macdHistAtP1 = macdHistArr[p1Idx];
+            if (p2Idx < macdHistArr.length) macdHistAtP2 = macdHistArr[p2Idx];
+            if (breakoutIdx < stochRsiK.length) stochK = stochRsiK[breakoutIdx];
+
+            results.add(DetectedPattern.builder()
+                    .patternType("LENIENT_TRENDLINE_BREAKOUT")
+                    .confirmationType(null)
+                    .bullish(p.isBullish())
+                    .keyLevel(p.getBreakoutLevel())
+                    .keyLevelTime(breakoutTime)
+                    .pivotBTime(p.getPivot1().getTimestamp())
+                    .pivotDTime(p.getPivot2().getTimestamp())
+                    .entryPrice(p.getBreakoutLevel())
+                    .stopLoss(p.getStopLossBreakoutCandle())
+                    .ownTarget(p.getTarget())
+                    .patternHeight(p.getAbDistance())
+                    .atr(p2Idx < atrArr.length ? atrArr[p2Idx] : 0)
+                    .rsiAtP0(0)
+                    .rsiAtP1(rsiAtP1)
+                    .rsiAtP2(rsiAtP2)
+                    .macdHistAtP1(macdHistAtP1)
+                    .macdHistAtP2(macdHistAtP2)
+                    .stochRsiK(stochK)
+                    .dailyRsi(0)
+                    .macdHistogram(macdHistAtP2)
+                    .reversalPattern(null)
+                    .build());
+        }
+        return results;
+    }
+
     private List<DetectedPattern> scanTrendlineBreakoutWatching(List<ZigZagPoint> pivots, List<Bar> bars,
             Map<Instant, Integer> tsToIdx, double[] atrArr, double[] rsiValues,
             double[] macdHistArr, double[] stochRsiK) {

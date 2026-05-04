@@ -2,6 +2,7 @@ package com.dtech.kitecon.patternscanner;
 
 import com.dtech.algo.runner.candle.KiteTickerService;
 import com.dtech.algo.series.Interval;
+import com.dtech.kitecon.backtest.PatternComboBacktestService;
 import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeStatus;
@@ -27,6 +28,7 @@ public class PatternComboScannerService {
     private final PatternScanService patternScanService;
     private final TradeSignalRepository tradeSignalRepository;
     private final KiteTickerService kiteTickerService;
+    private final PatternComboBacktestService patternComboBacktestService;
 
     @Value("${trade.monitor.entry.validity.hours:4}")
     private int entryValidityHours;
@@ -39,6 +41,12 @@ public class PatternComboScannerService {
 
     @Value("${trade.scanner.confirm.tf:15m}")
     private String confirmTfStr;
+
+    @Value("${trendline.lenient.enabled:false}")
+    private boolean lenientTrendlineEnabled;
+
+    @Value("${trendline.lenient.paper.trade:true}")
+    private boolean lenientPaperTrade;
 
     private final AtomicBoolean scanRunning = new AtomicBoolean(false);
 
@@ -73,10 +81,26 @@ public class PatternComboScannerService {
 
                 if (patterns != null) {
                     for (PatternDto pattern : patterns) {
-                        SignalCreationResult cr = createSignalForPattern(symbol, pattern, result.getWatchingTf());
+                        SignalCreationResult cr = createSignalForPattern(symbol, pattern, result.getWatchingTf(), false);
                         if (cr.outcome() == SignalOutcome.CREATED) {
                             totalCreated++;
                         }
+                    }
+                }
+
+                if (lenientTrendlineEnabled) {
+                    try {
+                        List<PatternDto> lenientPatterns = patternScanService.scanLenientTrendlinePatterns(symbol, watchingTf);
+                        if (lenientPatterns != null) {
+                            for (PatternDto pattern : lenientPatterns) {
+                                SignalCreationResult cr = createSignalForPattern(symbol, pattern, result.getWatchingTf(), lenientPaperTrade);
+                                if (cr.outcome() == SignalOutcome.CREATED) {
+                                    totalCreated++;
+                                }
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("Error scanning lenient trendlines for {}: {}", symbol, e.getMessage());
                     }
                 }
 
@@ -107,6 +131,10 @@ public class PatternComboScannerService {
     }
 
     SignalCreationResult createSignalForPattern(String symbol, PatternDto pattern, String timeframe) {
+        return createSignalForPattern(symbol, pattern, timeframe, false);
+    }
+
+    SignalCreationResult createSignalForPattern(String symbol, PatternDto pattern, String timeframe, boolean paperTrade) {
         List<TradeSignal> openSignals = tradeSignalRepository.findBySymbolAndStatusIn(
                 symbol, List.of(TradeStatus.WATCHING_ENTRY, TradeStatus.ENTRY_PENDING, TradeStatus.ACTIVE));
 
@@ -166,6 +194,7 @@ public class PatternComboScannerService {
                 .status(TradeStatus.WATCHING_ENTRY)
                 .lotSize(1)
                 .rrRatio(rrRatio)
+                .paperTrade(paperTrade)
                 .notes("Auto-scan: rsiP1=" + pattern.getRsiAtP1() + " rsiP2=" + pattern.getRsiAtP2())
                 .build();
 

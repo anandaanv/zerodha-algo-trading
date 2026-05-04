@@ -185,6 +185,79 @@ public class PatternScanService {
                 .build();
     }
 
+    public List<PatternDto> scanLenientTrendlinePatterns(String symbol, Interval watchingTf) {
+        Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
+        if (instrument == null) {
+            return new ArrayList<>();
+        }
+
+        try { dataFetchService.updateInstrumentToLatest(symbol, watchingTf, new String[]{"NSE"}); } catch (Exception e) {
+            log.warn("[ScanLenient] Data refresh failed for {} {}: {}", symbol, watchingTf, e.getMessage());
+        }
+
+        BarSeries seriesW = zigZagService.getBarSeries(symbol, instrument, watchingTf);
+        if (seriesW == null || seriesW.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Bar> barsW = new ArrayList<>();
+        for (int i = 0; i < seriesW.getBarCount(); i++) barsW.add(seriesW.getBar(i));
+
+        Map<Instant, Integer> tsToIdxW = new HashMap<>();
+        for (int i = 0; i < barsW.size(); i++) tsToIdxW.put(barsW.get(i).getEndTime(), i);
+
+        double[] atrArrW = patternComboBacktestService.computeAtrPublic(barsW, 14);
+        double[] rsiValuesW = patternComboBacktestService.computeRsiPublic(seriesW, 14);
+        double[] macdHistArrW = patternComboBacktestService.computeMacdHistPublic(seriesW);
+        double[] stochRsiKW = patternComboBacktestService.computeStochRsiKPublic(rsiValuesW);
+
+        List<DetectedPattern> lenientPatterns = patternComboBacktestService.scanLenientTrendlineWatchingPublic(
+                barsW, tsToIdxW, atrArrW, rsiValuesW, macdHistArrW, stochRsiKW);
+
+        BarSeries seriesDaily = null;
+        try { seriesDaily = zigZagService.getBarSeries(symbol, instrument, Interval.Day); } catch (Exception ignored) {}
+
+        DailyIndicators dailyInd    = patternComboBacktestService.computeDailyIndicators(seriesDaily);
+        DailyIndicators watchingInd = patternComboBacktestService.computeDailyIndicators(seriesW);
+
+        return lenientPatterns.stream().map(p -> PatternDto.builder()
+                .patternType(p.getPatternType())
+                .bullish(p.isBullish())
+                .keyLevel(p.getKeyLevel())
+                .keyLevelTime(p.getKeyLevelTime())
+                .target(p.getOwnTarget())
+                .patternHeight(p.getPatternHeight())
+                .atr(p.getAtr())
+                .rsiAtP1(p.getRsiAtP1())
+                .rsiAtP2(p.getRsiAtP2())
+                .p0Time(p.getPivotBTime())
+                .p1Time(p.getPivotDTime())
+                .macdHistAtP1(p.getMacdHistAtP1())
+                .macdHistAtP2(p.getMacdHistAtP2())
+                .stochRsiK(p.getStochRsiK())
+                .adxWatching(watchingInd.adxAtTs(p.getKeyLevelTime()))
+                .adxWatchingEma(watchingInd.adxEmaAtTs(p.getKeyLevelTime()))
+                .macdWatching(watchingInd.macdLineAtTs(p.getKeyLevelTime()))
+                .macdSignalWatching(watchingInd.macdSignalAtTs(p.getKeyLevelTime()))
+                .bbWidthWatching(watchingInd.bbWidthAtTs(p.getKeyLevelTime()))
+                .bbPctBWatching(watchingInd.bbPctBAtTs(p.getKeyLevelTime()))
+                .adxConfirm(0)
+                .adxConfirmEma(0)
+                .dailyRsi(dailyInd.rsiAtTs(p.getKeyLevelTime()))
+                .dailyAdx(dailyInd.adxAtTs(p.getKeyLevelTime()))
+                .dailyAdxEma(dailyInd.adxEmaAtTs(p.getKeyLevelTime()))
+                .macdDaily(dailyInd.macdLineAtTs(p.getKeyLevelTime()))
+                .macdSignalDaily(dailyInd.macdSignalAtTs(p.getKeyLevelTime()))
+                .bbWidthDaily(dailyInd.bbWidthAtTs(p.getKeyLevelTime()))
+                .bbPctBDaily(dailyInd.bbPctBAtTs(p.getKeyLevelTime()))
+                .bbExpanding(watchingInd.bbExpandingAtTs(p.getKeyLevelTime(), 5))
+                .bbAligned(watchingInd.bbAlignedAtTs(p.getKeyLevelTime(), 5, p.isBullish()))
+                .rsiSlope(watchingInd.rsiSlopeAtTs(p.getKeyLevelTime(), 5))
+                .macdHistSlope(watchingInd.macdHistSlopeAtTs(p.getKeyLevelTime(), 5))
+                .adxSlope(watchingInd.adxSlopeAtTs(p.getKeyLevelTime(), 5))
+                .build()).toList();
+    }
+
     /**
      * Computes live indicator values for a signal's symbol at the time of entry.
      * Used by TradeEntryHandler to score the ML filter with fresh market data.
