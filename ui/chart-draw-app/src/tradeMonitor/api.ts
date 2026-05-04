@@ -53,6 +53,8 @@ export interface TradeSummaryDto {
   openTrades: number;
   winCount: number;
   lossCount: number;
+  realisedPnlInr: number;
+  unrealisedPnlInr: number;
   totalPnlInr: number;
   avgWinInr: number;
   avgLossInr: number;

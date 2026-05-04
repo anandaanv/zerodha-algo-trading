@@ -129,13 +129,13 @@ public class TradeOrderController {
         int openTrades = openOrders.size();
         int winCount = 0;
         int lossCount = 0;
-        BigDecimal totalPnl = BigDecimal.ZERO;
+        BigDecimal realisedPnl = BigDecimal.ZERO;
         BigDecimal totalWins = BigDecimal.ZERO;
         BigDecimal totalLosses = BigDecimal.ZERO;
 
         for (TradeOrder order : closedOrders) {
             if (order.getRealisedPnl() != null) {
-                totalPnl = totalPnl.add(order.getRealisedPnl());
+                realisedPnl = realisedPnl.add(order.getRealisedPnl());
 
                 if (order.getRealisedPnl().compareTo(BigDecimal.ZERO) > 0) {
                     winCount++;
@@ -146,6 +146,17 @@ public class TradeOrderController {
                 }
             }
         }
+
+        // Unrealised PnL: enrich open orders with live LTP, then sum.
+        enrichWithLivePnl(openOrders);
+        BigDecimal unrealisedPnl = BigDecimal.ZERO;
+        for (TradeOrder order : openOrders) {
+            if (order.getUnrealisedPnl() != null) {
+                unrealisedPnl = unrealisedPnl.add(order.getUnrealisedPnl());
+            }
+        }
+
+        BigDecimal totalPnl = realisedPnl.add(unrealisedPnl);
 
         BigDecimal avgWin = winCount > 0
                 ? totalWins.divide(BigDecimal.valueOf(winCount), 2, RoundingMode.HALF_UP)
@@ -165,6 +176,8 @@ public class TradeOrderController {
                 .openTrades(openTrades)
                 .winCount(winCount)
                 .lossCount(lossCount)
+                .realisedPnlInr(realisedPnl)
+                .unrealisedPnlInr(unrealisedPnl)
                 .totalPnlInr(totalPnl)
                 .avgWinInr(avgWin)
                 .avgLossInr(avgLoss)

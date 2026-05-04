@@ -15,6 +15,11 @@ public class TradeSummaryDto {
     private int openTrades;
     private int winCount;
     private int lossCount;
+    /** Realised PnL: sum across CLOSED orders. */
+    private BigDecimal realisedPnlInr;
+    /** Unrealised PnL: sum across OPEN orders using last LTP mark (null if no LTP). */
+    private BigDecimal unrealisedPnlInr;
+    /** realisedPnlInr + unrealisedPnlInr (treats null unrealised as zero). */
     private BigDecimal totalPnlInr;
     private BigDecimal avgWinInr;
     private BigDecimal avgLossInr;

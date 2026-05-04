@@ -220,7 +220,9 @@ const TradeOrdersPage: React.FC = () => {
     );
   }
 
-  const pnlValue = summary?.totalPnlInr || 0;
+  const realisedPnl = summary?.realisedPnlInr || 0;
+  const unrealisedPnl = summary?.unrealisedPnlInr || 0;
+  const totalPnl = summary?.totalPnlInr || 0;
   const winRate = summary?.winRatePct || 0;
 
   return (
@@ -258,10 +260,24 @@ const TradeOrdersPage: React.FC = () => {
       {summary && (
         <div style={summaryBarStyle}>
           <div style={summaryItemStyle}>
+            <div style={summaryLabelStyle}>Realised P&L</div>
+            <div style={summaryValueStyle(realisedPnl)}>
+              {realisedPnl > 0 ? "+" : ""}
+              {realisedPnl.toFixed(2)}
+            </div>
+          </div>
+          <div style={summaryItemStyle}>
+            <div style={summaryLabelStyle}>Unrealised P&L</div>
+            <div style={summaryValueStyle(unrealisedPnl)}>
+              {unrealisedPnl > 0 ? "+" : ""}
+              {unrealisedPnl.toFixed(2)}
+            </div>
+          </div>
+          <div style={summaryItemStyle}>
             <div style={summaryLabelStyle}>Total P&L</div>
-            <div style={summaryValueStyle(pnlValue)}>
-              {pnlValue > 0 ? "+" : ""}
-              {pnlValue.toFixed(2)}
+            <div style={summaryValueStyle(totalPnl)}>
+              {totalPnl > 0 ? "+" : ""}
+              {totalPnl.toFixed(2)}
             </div>
           </div>
           <div style={summaryItemStyle}>
