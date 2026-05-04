@@ -148,6 +148,8 @@ public class DtbHnsCandidateDetector {
         double atrAtP0 = p0Idx < atrArr.length ? atrArr[p0Idx] : 0;
         double stochK = p0Idx < stochRsiK.length ? stochRsiK[p0Idx] : 0;
 
+        double stopLoss = Math.min(v0, v2);  // DTB: min of two lows (DOUBLE_BOTTOM/DOUBLE_TOP)
+
         results.add(DetectedPattern.builder()
                 .patternType(bullish ? "DOUBLE_BOTTOM" : "DOUBLE_TOP")
                 .confirmationType(null)
@@ -155,7 +157,7 @@ public class DtbHnsCandidateDetector {
                 .keyLevel(v1)                              // neckline = middle (bounce level)
                 .keyLevelTime(p0.getTimestamp())           // detection time
                 .entryPrice(0)                             // filled in Phase 2
-                .stopLoss(0)                               // filled in Phase 2
+                .stopLoss(stopLoss)                        // structural SL: min of P0, P2
                 .ownTarget(target)
                 .patternHeight(patternHeight)
                 .atr(atrAtP0)
@@ -227,6 +229,8 @@ public class DtbHnsCandidateDetector {
         double macdHistP2 = p2Idx < macdHistArr.length ? macdHistArr[p2Idx] : 0;
         double stochK = p0Idx < stochRsiK.length ? stochRsiK[p0Idx] : 0;
 
+        double stopLoss = head;  // HNS_BEAR: Head level invalidates pattern if breached upward
+
         results.add(DetectedPattern.builder()
                 .patternType("HNS_BEAR")
                 .confirmationType(null)
@@ -234,7 +238,7 @@ public class DtbHnsCandidateDetector {
                 .keyLevel(b)                               // neckline at B level
                 .keyLevelTime(p0.getTimestamp())           // detection time at RS
                 .entryPrice(0)                             // filled in Phase 2
-                .stopLoss(0)                               // filled in Phase 2
+                .stopLoss(stopLoss)                        // structural SL: Head level (P1)
                 .ownTarget(target)
                 .patternHeight(patternHeight)
                 .atr(atrAtP0)
@@ -306,6 +310,8 @@ public class DtbHnsCandidateDetector {
         double macdHistP2 = p2Idx < macdHistArr.length ? macdHistArr[p2Idx] : 0;
         double stochK = p0Idx < stochRsiK.length ? stochRsiK[p0Idx] : 0;
 
+        double stopLoss = head;  // HNS_BULL: Head level invalidates pattern if breached downward
+
         results.add(DetectedPattern.builder()
                 .patternType("HNS_BULL")
                 .confirmationType(null)
@@ -313,7 +319,7 @@ public class DtbHnsCandidateDetector {
                 .keyLevel(b)                               // neckline at B level
                 .keyLevelTime(p0.getTimestamp())           // detection time at RS
                 .entryPrice(0)                             // filled in Phase 2
-                .stopLoss(0)                               // filled in Phase 2
+                .stopLoss(stopLoss)                        // structural SL: Head level (P1)
                 .ownTarget(target)
                 .patternHeight(patternHeight)
                 .atr(atrAtP0)

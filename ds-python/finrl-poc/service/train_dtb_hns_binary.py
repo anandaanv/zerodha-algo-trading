@@ -80,8 +80,8 @@ def main():
         raise ValueError("CSV must contain 'timestamp' column")
 
     # Train/test split by date: train < 2022-01-01, test >= 2024-01-01 (gap in between)
-    train_cutoff = pd.Timestamp("2022-01-01")
-    test_start = pd.Timestamp("2024-01-01")
+    train_cutoff = pd.Timestamp("2022-01-01", tz="UTC")
+    test_start = pd.Timestamp("2024-01-01", tz="UTC")
 
     df_train = df[df['ts_dt'] < train_cutoff].reset_index(drop=True)
     df_test = df[df['ts_dt'] >= test_start].reset_index(drop=True)
