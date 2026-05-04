@@ -48,10 +48,10 @@ public class DtbSimulationStrategy implements SimulationStrategy {
     private double mlThreshold;
 
     /** Track processed pivot timestamps per symbol to avoid duplicate signals */
-    private final Map<String, Set<Instant>> processedPivots = new HashMap<>();
-    private final Map<String, ZigZagParams> cachedParams = new HashMap<>();
-    private final Map<String, Integer> lastZigZagBarCount = new HashMap<>();
-    private final Map<String, List<ZigZagPoint>> cachedPivots = new HashMap<>();
+    private final Map<String, Set<Instant>> processedPivots = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, ZigZagParams> cachedParams = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Integer> lastZigZagBarCount = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, List<ZigZagPoint>> cachedPivots = new java.util.concurrent.ConcurrentHashMap<>();
     private static final int ZIGZAG_RECOMPUTE_INTERVAL = 4;
 
     @Override
@@ -213,7 +213,7 @@ public class DtbSimulationStrategy implements SimulationStrategy {
             return signals;
 
         } catch (Exception e) {
-            log.warn("[SimDTB] scan error for {}: {}", symbol, e.getMessage());
+            log.warn("[SimDTB] scan error for {}: {}", symbol, e.toString(), e);
             return List.of();
         }
     }
@@ -239,7 +239,7 @@ public class DtbSimulationStrategy implements SimulationStrategy {
                     exits.add(new ExitResult(sig, decision.exitReason().name(), exitPrice, pnlPct));
                 }
             } catch (Exception e) {
-                log.warn("[SimDTB] checkExits error for {}: {}", symbol, e.getMessage());
+                log.warn("[SimDTB] checkExits error for {}: {}", symbol, e.toString(), e);
             }
         }
         return exits;
