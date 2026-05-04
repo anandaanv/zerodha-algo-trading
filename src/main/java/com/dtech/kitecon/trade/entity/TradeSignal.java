@@ -119,7 +119,8 @@ public class TradeSignal {
     @Column
     private Integer barsSinceLastSlabAdvance;
 
-    @Column
+    @Column(nullable = false)
+    @org.hibernate.annotations.ColumnDefault("0")
     private boolean paperTrade;
 
     @PrePersist
