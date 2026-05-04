@@ -6,7 +6,7 @@ import com.dtech.kitecon.trade.entity.TradeOrder;
 import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeOrderStatus;
 import com.dtech.kitecon.trade.repository.TradeOrderRepository;
-import com.zerodhatech.models.LTPQuote;
+import com.zerodhatech.models.Quote;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -92,31 +92,46 @@ public class TradeOrderController {
                 .toArray(String[]::new);
 
         try {
-            Map<String, LTPQuote> ltpMap = marketFacadeProvider.getFacade().getLTP(instruments);
+            Map<String, Quote> quoteMap = marketFacadeProvider.getFacade().getQuote(instruments);
 
             for (TradeOrder order : openOrders) {
                 String exchange = order.getSegment().name().equals("EQ") ? "NSE" : "NFO";
                 String key = exchange + ":" + order.getSymbol();
-                LTPQuote quote = ltpMap.get(key);
+                Quote quote = quoteMap.get(key);
                 if (quote == null) continue;
 
-                BigDecimal ltp = BigDecimal.valueOf(quote.lastPrice);
-                order.setLtp(ltp);
+                // Mark-to-market using bid/ask: LONG uses bid (exit price), SHORT uses ask (buy-back price)
+                BigDecimal markPrice = null;
+                if (quote.depth != null) {
+                    if (order.getDirection() == TradeDirection.LONG && quote.depth.buy != null && !quote.depth.buy.isEmpty()) {
+                        markPrice = BigDecimal.valueOf(quote.depth.buy.get(0).getPrice());
+                    } else if (order.getDirection() != TradeDirection.LONG && quote.depth.sell != null && !quote.depth.sell.isEmpty()) {
+                        markPrice = BigDecimal.valueOf(quote.depth.sell.get(0).getPrice());
+                    }
+                }
+
+                // Fallback to LTP if bid/ask unavailable (truly illiquid)
+                if (markPrice == null || markPrice.compareTo(BigDecimal.ZERO) <= 0) {
+                    markPrice = BigDecimal.valueOf(quote.lastPrice);
+                    log.debug("No bid/ask for {} using fallback LTP {}", order.getSymbol(), markPrice);
+                }
+
+                order.setLtp(markPrice);
 
                 if (order.getEntryPrice() != null && order.getQuantity() != null) {
                     BigDecimal pnl;
                     if (order.getDirection() == TradeDirection.LONG) {
-                        pnl = ltp.subtract(order.getEntryPrice())
+                        pnl = markPrice.subtract(order.getEntryPrice())
                                 .multiply(BigDecimal.valueOf(order.getQuantity()));
                     } else {
-                        pnl = order.getEntryPrice().subtract(ltp)
+                        pnl = order.getEntryPrice().subtract(markPrice)
                                 .multiply(BigDecimal.valueOf(order.getQuantity()));
                     }
                     order.setUnrealisedPnl(pnl.setScale(2, RoundingMode.HALF_UP));
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch live LTP for open orders: {}", e.getMessage());
+            log.warn("Failed to fetch live quotes for open orders: {}", e.getMessage());
         }
     }
 
