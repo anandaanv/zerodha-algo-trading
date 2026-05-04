@@ -6,7 +6,7 @@ import java.util.*;
 
 @Data
 public class SimulationContext {
-    private final SimulationClock clock;
+    private SimulationClock clock;
     private final String strategyType;  // "IMPULSE", "DTB", etc.
     private final List<String> symbols;
     private final String timeframe;     // "FifteenMinute", "OneHour", etc.
