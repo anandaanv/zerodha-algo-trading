@@ -4,10 +4,17 @@ import java.time.LocalDateTime;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 
 import lombok.*;
 
 @Entity
+@Table(indexes = {
+    @Index(name = "idx_tradingsymbol", columnList = "tradingsymbol"),
+    @Index(name = "idx_tradingsymbol_exchange", columnList = "tradingsymbol,exchange"),
+    @Index(name = "idx_tradingsymbol_expiry", columnList = "tradingsymbol,expiry")
+})
 @Data
 @Builder
 @AllArgsConstructor
