@@ -91,29 +91,50 @@ public class TradeOrderController {
                 .distinct()
                 .toArray(String[]::new);
 
+        // Try batch getQuote first (full bid/ask depth). If it throws (Kite SDK occasionally
+        // returns malformed numeric strings on certain quotes), fall back to getLTP for the
+        // whole batch so the page still gets some marks rather than none.
+        Map<String, Quote> quoteMap = null;
+        Map<String, com.zerodhatech.models.LTPQuote> ltpMap = null;
         try {
-            Map<String, Quote> quoteMap = marketFacadeProvider.getFacade().getQuote(instruments);
+            quoteMap = marketFacadeProvider.getFacade().getQuote(instruments);
+        } catch (Exception e) {
+            log.warn("Batch getQuote failed, falling back to getLTP: {}", e.getMessage());
+            try {
+                ltpMap = marketFacadeProvider.getFacade().getLTP(instruments);
+            } catch (Exception e2) {
+                log.warn("Batch getLTP also failed: {}", e2.getMessage());
+                return;
+            }
+        }
 
-            for (TradeOrder order : openOrders) {
+        for (TradeOrder order : openOrders) {
+            try {
                 String exchange = order.getSegment().name().equals("EQ") ? "NSE" : "NFO";
                 String key = exchange + ":" + order.getSymbol();
-                Quote quote = quoteMap.get(key);
-                if (quote == null) continue;
 
-                // Mark-to-market using bid/ask: LONG uses bid (exit price), SHORT uses ask (buy-back price)
                 BigDecimal markPrice = null;
-                if (quote.depth != null) {
-                    if (order.getDirection() == TradeDirection.LONG && quote.depth.buy != null && !quote.depth.buy.isEmpty()) {
-                        markPrice = BigDecimal.valueOf(quote.depth.buy.get(0).getPrice());
-                    } else if (order.getDirection() != TradeDirection.LONG && quote.depth.sell != null && !quote.depth.sell.isEmpty()) {
-                        markPrice = BigDecimal.valueOf(quote.depth.sell.get(0).getPrice());
+                double ltpValue = 0;
+                if (quoteMap != null) {
+                    Quote quote = quoteMap.get(key);
+                    if (quote == null) continue;
+                    ltpValue = quote.lastPrice;
+                    if (quote.depth != null) {
+                        if (order.getDirection() == TradeDirection.LONG && quote.depth.buy != null && !quote.depth.buy.isEmpty()) {
+                            markPrice = BigDecimal.valueOf(quote.depth.buy.get(0).getPrice());
+                        } else if (order.getDirection() != TradeDirection.LONG && quote.depth.sell != null && !quote.depth.sell.isEmpty()) {
+                            markPrice = BigDecimal.valueOf(quote.depth.sell.get(0).getPrice());
+                        }
                     }
+                } else {
+                    com.zerodhatech.models.LTPQuote ltpQuote = ltpMap.get(key);
+                    if (ltpQuote == null) continue;
+                    ltpValue = ltpQuote.lastPrice;
                 }
 
-                // Fallback to LTP if bid/ask unavailable (truly illiquid)
                 if (markPrice == null || markPrice.compareTo(BigDecimal.ZERO) <= 0) {
-                    markPrice = BigDecimal.valueOf(quote.lastPrice);
-                    log.debug("No bid/ask for {} using fallback LTP {}", order.getSymbol(), markPrice);
+                    if (ltpValue <= 0) continue;
+                    markPrice = BigDecimal.valueOf(ltpValue);
                 }
 
                 order.setLtp(markPrice);
@@ -129,9 +150,10 @@ public class TradeOrderController {
                     }
                     order.setUnrealisedPnl(pnl.setScale(2, RoundingMode.HALF_UP));
                 }
+            } catch (Exception e) {
+                log.debug("Skipping enrichment for order {} {}: {}",
+                        order.getId(), order.getSymbol(), e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("Failed to fetch live quotes for open orders: {}", e.getMessage());
         }
     }
 
