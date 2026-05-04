@@ -55,6 +55,15 @@ public class PaperOrderExecutionService {
                 ? instrumentQuote.getAskPrice()
                 : instrumentQuote.getBidPrice();
 
+        // Guard against illiquid quotes with zero/null prices
+        if (entryPrice == null || entryPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            log.warn("[PaperOrder] SKIP signal={} {} — illiquid quote bid={} ask={} resolved={}",
+                    signal.getId(), signal.getSymbol(),
+                    instrumentQuote.getBidPrice(), instrumentQuote.getAskPrice(),
+                    resolved.getTradingSymbol());
+            return null;
+        }
+
         int qty = capitalAllocationService.computeQuantity(
                 config.getCapitalPct(), entryPrice, resolved.getLotSize());
 
