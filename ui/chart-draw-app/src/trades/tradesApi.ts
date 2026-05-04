@@ -16,6 +16,8 @@ export async function fetchTrades(params: {
   timeframe?: string;
   side?: string;
   open?: boolean;
+  screenerType?: string;
+  pattern?: string;
 }): Promise<Trade[]> {
   const q = new URLSearchParams();
   if (params.from) q.set("from", toIsoDate(params.from)!);
@@ -27,6 +29,8 @@ export async function fetchTrades(params: {
   if (params.open !== undefined) q.set("open", String(params.open));
   if (params.page != null) q.set("page", String(params.page));
   if (params.size != null) q.set("size", String(params.size));
+  if (params.screenerType) q.set("screenerType", params.screenerType);
+  if (params.pattern) q.set("pattern", params.pattern);
 
   const url = `/api/trades${q.toString() ? `?${q.toString()}` : ""}`;
   const res = await apiFetch(url, withAuth({ headers: { Accept: "application/json" } }));
@@ -64,4 +68,18 @@ export async function fetchTradeActions(signalId: number): Promise<TradeAction[]
   );
   if (!res.ok) return [];
   return res.json();
+}
+
+export async function fetchScreenerTypes(): Promise<string[]> {
+  const url = `/api/trades/screener-types`;
+  const res = await apiFetch(url, withAuth({ headers: { Accept: "application/json" } }));
+  if (!res.ok) return [];
+  return (await res.json()) as string[];
+}
+
+export async function fetchPatterns(): Promise<string[]> {
+  const url = `/api/trades/patterns`;
+  const res = await apiFetch(url, withAuth({ headers: { Accept: "application/json" } }));
+  if (!res.ok) return [];
+  return (await res.json()) as string[];
 }

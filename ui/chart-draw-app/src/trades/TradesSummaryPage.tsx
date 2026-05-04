@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { fetchTrades } from "./tradesApi";
+import { fetchTrades, fetchScreenerTypes, fetchPatterns } from "./tradesApi";
 import type { Trade } from "./types";
 import { TradesTable } from "./TradesTable";
+
+const PATTERN_FILTER_KEY = "trades.filter.pattern";
 
 function toInputDate(d: Date) {
   // yyyy-MM-dd
@@ -33,10 +35,18 @@ export const TradesSummaryPage: React.FC = () => {
   const [script, setScript] = useState<string>(searchParams.get("script") || "");
   const [side, setSide] = useState<string>(searchParams.get("side") || "ALL");
   const [timeframe, setTimeframe] = useState<string>(searchParams.get("timeframe") || "");
+  const [screenerType, setScreenerType] = useState<string>(searchParams.get("screenerType") || "");
+  const [pattern, setPattern] = useState<string>(() => {
+    const fromUrl = searchParams.get("pattern");
+    if (fromUrl) return fromUrl;
+    return localStorage.getItem(PATTERN_FILTER_KEY) || "";
+  });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [screenerTypeOptions, setScreenerTypeOptions] = useState<string[]>([]);
+  const [patternOptions, setPatternOptions] = useState<string[]>([]);
 
   const queryFrom = useMemo(() => fromInputDate(from), [from]);
   const queryTo = useMemo(() => {
@@ -46,6 +56,18 @@ export const TradesSummaryPage: React.FC = () => {
     return new Date(d.getTime() + 24 * 60 * 60 * 1000 - 1);
   }, [to]);
 
+  // Persist pattern filter to localStorage
+  useEffect(() => {
+    if (pattern) localStorage.setItem(PATTERN_FILTER_KEY, pattern);
+    else localStorage.removeItem(PATTERN_FILTER_KEY);
+  }, [pattern]);
+
+  // Fetch dropdown options on mount
+  useEffect(() => {
+    fetchScreenerTypes().then(setScreenerTypeOptions).catch(() => {});
+    fetchPatterns().then(setPatternOptions).catch(() => {});
+  }, []);
+
   useEffect(() => {
     const params: Record<string, string> = {};
     if (from) params.from = from;
@@ -54,8 +76,10 @@ export const TradesSummaryPage: React.FC = () => {
     if (script) params.script = script;
     if (timeframe) params.timeframe = timeframe;
     if (side && side !== "ALL") params.side = side;
+    if (screenerType) params.screenerType = screenerType;
+    if (pattern) params.pattern = pattern;
     setSearchParams(params, { replace: true });
-  }, [from, to, openOnly, script, side, timeframe, setSearchParams]);
+  }, [from, to, openOnly, script, side, timeframe, screenerType, pattern, setSearchParams]);
 
   useEffect(() => {
     let aborted = false;
@@ -71,6 +95,8 @@ export const TradesSummaryPage: React.FC = () => {
           script: script || undefined,
           timeframe: timeframe || undefined,
           side: side && side !== "ALL" ? side : undefined,
+          screenerType: screenerType || undefined,
+          pattern: pattern || undefined,
         });
         if (!aborted) setTrades(data);
       } catch (e: any) {
@@ -83,7 +109,7 @@ export const TradesSummaryPage: React.FC = () => {
     return () => {
       aborted = true;
     };
-  }, [queryFrom, queryTo, openOnly, script, side, timeframe]);
+  }, [queryFrom, queryTo, openOnly, script, side, timeframe, screenerType, pattern]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -146,6 +172,37 @@ export const TradesSummaryPage: React.FC = () => {
             <option value="ALL">All</option>
             <option value="BUY">BUY</option>
             <option value="SELL">SELL</option>
+          </select>
+        </div>
+        <div>
+          <label style={{ display: "block", marginBottom: 4 }}>Screener</label>
+          <select
+            value={screenerType}
+            onChange={(e) => setScreenerType(e.target.value)}
+            style={{ width: "100%", padding: 8 }}
+          >
+            <option value="">All</option>
+            {screenerTypeOptions.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={{ display: "block", marginBottom: 4 }}>
+            Pattern{" "}
+            {pattern && (
+              <span style={{ fontSize: 11, color: "#666", marginLeft: 4 }}>(saved)</span>
+            )}
+          </label>
+          <select
+            value={pattern}
+            onChange={(e) => setPattern(e.target.value)}
+            style={{ width: "100%", padding: 8 }}
+          >
+            <option value="">All</option>
+            {patternOptions.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
           </select>
         </div>
         <div>

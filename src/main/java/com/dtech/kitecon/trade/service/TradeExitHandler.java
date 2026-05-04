@@ -205,8 +205,10 @@ public class TradeExitHandler {
             execution.setExitOrderId("DRY-RUN-EXIT-" + signal.getId());
             calculateAndSetPnl(signal, execution, ltp);
             executionRepository.save(execution);
-            finalise(signal, execution);
+            // Place broker exit (and close TradeOrder DB records) BEFORE finalising signal.
+            // If onExitTriggered throws, signal stays ACTIVE and the next tick retries.
             tradeOrchestrationService.onExitTriggered(signal, reason);
+            finalise(signal, execution);
             writeLog(signal, ltp, execution.getNetPnlInr(), execution.getNetPnlPct(),
                     MonitorAction.EXIT_ORDER_PLACED,
                     String.format("[DRY RUN] Exit at %.4f reason=%s netPnL=%.2f",
@@ -224,14 +226,14 @@ public class TradeExitHandler {
                 log.warn("Failed to log trade action: {}", e.getMessage());
             }
         } else {
-            String orderId = brokerOrderService.placeExitOrder(signal, execution);
-            execution.setExitOrderId(orderId);
+            // Live: orchestration handles broker exit + DB close
+            tradeOrchestrationService.onExitTriggered(signal, reason);
             execution.setExitReason(reason);
             executionRepository.save(execution);
             signal.setStatus(TradeStatus.EXIT_PENDING);
             signalRepository.save(signal);
             writeLog(signal, ltp, null, null, MonitorAction.EXIT_ORDER_PLACED,
-                    "Exit order placed: " + orderId + " reason=" + reason, dryRun);
+                    "Exit orders placed via orchestration reason=" + reason, dryRun);
         }
     }
 

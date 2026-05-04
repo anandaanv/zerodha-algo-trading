@@ -9,6 +9,8 @@ export type Trade = {
   confidence?: string | null;
   status?: string | null;
   timeTriggered?: string; // ISO
+  screenerType?: string | null;
+  pattern?: string | null;
   open: boolean;
   logs?: string | null;
   runId?: number | null;

@@ -29,6 +29,7 @@ public class TradeOrchestrationService {
     private final PaperOrderExecutionService paperOrderExecutionService;
     private final TradeOrderRepository tradeOrderRepository;
     private final TradeActionLogger tradeActionLogger;
+    private final BrokerOrderService brokerOrderService;
 
     public void onEntryTriggered(TradeSignal signal) {
         List<SegmentConfig> configs = segmentConfigRepository.findBySymbolAndEnabledTrue(signal.getSymbol());
@@ -86,14 +87,21 @@ public class TradeOrchestrationService {
             try {
                 QuoteResult quote = marketQuoteService.getQuote(order.getSymbol(), order.getInstrumentToken());
 
+                // If quote fetch failed, fall back to broker LTP. If still null, last-ditch use entry price.
+                // Don't silent-skip — the goal is to ALWAYS place an exit (limit) order on the broker.
                 if (quote == null) {
-                    // No silent fallback: leave order OPEN so the next exit-handler poll retries.
-                    // Using entry price as a fake exit price (the previous behaviour) produced
-                    // bogus zero-P&L closes and was indistinguishable from a genuine flat trade.
-                    log.warn("No quote for order {} symbol {} (token={}). " +
-                            "Leaving OPEN for next poll retry.",
-                            order.getId(), order.getSymbol(), order.getInstrumentToken());
-                    continue;
+                    BigDecimal fallbackLtp = brokerOrderService.fetchLtp(order.getSymbol(), order.getInstrumentToken());
+                    if (fallbackLtp == null) {
+                        fallbackLtp = order.getEntryPrice();
+                        log.warn("No quote AND no LTP for order {} {} — using entry price {} as fallback for exit limit",
+                                order.getId(), order.getSymbol(), fallbackLtp);
+                    }
+                    // Build a synthetic QuoteResult with bid=ask=ltp so PaperOrderExecutionService.exit can compute exit price
+                    quote = QuoteResult.builder()
+                            .ltp(fallbackLtp)
+                            .bidPrice(fallbackLtp)
+                            .askPrice(fallbackLtp)
+                            .build();
                 }
 
                 // Best-effort capture of underlying spot for audit.
