@@ -48,6 +48,12 @@ public class PatternComboScannerService {
     @Value("${trendline.lenient.paper.trade:true}")
     private boolean lenientPaperTrade;
 
+    @Value("${pattern.dtb.enabled:true}")
+    private boolean dtbEnabled;
+
+    @Value("${pattern.hns.enabled:true}")
+    private boolean hnsEnabled;
+
     private final AtomicBoolean scanRunning = new AtomicBoolean(false);
 
     @Scheduled(cron = "0 0/15 9-15 * * MON-FRI", zone = "Asia/Kolkata")
@@ -135,6 +141,15 @@ public class PatternComboScannerService {
     }
 
     SignalCreationResult createSignalForPattern(String symbol, PatternDto pattern, String timeframe, boolean paperTrade) {
+        // Gate disabled pattern families — skip signal creation without removing detection code.
+        String pt = pattern.getPatternType();
+        if (!dtbEnabled && ("DOUBLE_BOTTOM".equals(pt) || "DOUBLE_TOP".equals(pt))) {
+            return SignalCreationResult.duplicate();
+        }
+        if (!hnsEnabled && ("HNS_BULL".equals(pt) || "HNS_BEAR".equals(pt))) {
+            return SignalCreationResult.duplicate();
+        }
+
         List<TradeSignal> openSignals = tradeSignalRepository.findBySymbolAndStatusIn(
                 symbol, List.of(TradeStatus.WATCHING_ENTRY, TradeStatus.ENTRY_PENDING, TradeStatus.ACTIVE));
 
