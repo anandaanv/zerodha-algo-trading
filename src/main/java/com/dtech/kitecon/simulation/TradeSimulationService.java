@@ -82,9 +82,11 @@ public class TradeSimulationService {
         for (List<String> waveSymbols : waves) {
             waveIdx++;
             log.info("[Simulation] Wave {}/{}: starting {} symbols", waveIdx, waves.size(), waveSymbols.size());
-            runWave(strategy, waveSymbols, timeframe, from, to, stepMinutes, ctx);
+            Map<String, BarSeries> waveGrowingSeries = new HashMap<>();
+            Map<String, BarSeries> waveFullSeries = new HashMap<>();
+            runWave(strategy, waveSymbols, timeframe, from, to, stepMinutes, ctx, waveGrowingSeries, waveFullSeries);
             // Force-close any positions still open for this wave's symbols (wave-boundary timeout)
-            forceCloseWavePositions(ctx, waveSymbols);
+            forceCloseWavePositions(ctx, waveSymbols, waveGrowingSeries, waveFullSeries);
             // Drop strategy/indicator caches before loading next wave
             strategy.reset();
             System.gc();
@@ -105,16 +107,18 @@ public class TradeSimulationService {
      * builds growing series, advances the clock, scans/exits per-tick.
      * Per-wave clock reuses the same from/to/stepMinutes — the time axis
      * is the same across waves; only the universe of stocks differs.
+     * Output maps (growingSeries, fullSeries) are populated for MTM at wave boundary.
      */
     private void runWave(SimulationStrategy strategy, List<String> symbols, String timeframe,
-                          Instant from, Instant to, int stepMinutes, SimulationContext ctx) {
+                          Instant from, Instant to, int stepMinutes, SimulationContext ctx,
+                          Map<String, BarSeries> growingSeries, Map<String, BarSeries> fullSeries) {
         SimulationClock clock = new SimulationClock(from, to, stepMinutes);
         ctx.setClock(clock);
         clock.start();
 
         // Preload full bar series per symbol from DB
         Interval interval = Interval.valueOf(timeframe);
-        Map<String, BarSeries> fullSeries = new HashMap<>();
+        Map<String, BarSeries> localFullSeries = new HashMap<>();
         for (String symbol : symbols) {
             try {
                 Instrument inst = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
@@ -126,17 +130,19 @@ public class TradeSimulationService {
                 Instant lookbackFrom = Instant.parse("2015-01-01T00:00:00Z");
                 BarSeries series = loadBarSeries(inst, interval, lookbackFrom, to);
                 if (series != null && series.getBarCount() > 0) {
-                    fullSeries.put(symbol, series);
+                    localFullSeries.put(symbol, series);
                 }
             } catch (Exception e) {
                 log.warn("[Simulation] Failed to load series for {}: {}", symbol, e.getMessage());
             }
         }
+        // Populate output parameter for wave-boundary MTM
+        fullSeries.putAll(localFullSeries);
         // Preload exit-granularity bar series (e.g. 5m bars for 15m scan)
         Interval exitInterval = getExitInterval(interval);
         Map<String, BarSeries> exitSeries = new HashMap<>();
         if (exitInterval != interval) {
-            for (String symbol : fullSeries.keySet()) {
+            for (String symbol : localFullSeries.keySet()) {
                 try {
                     Instrument inst = instrumentRepository.findByTradingsymbolAndExchangeIn(symbol, new String[]{"NSE"});
                     Instant lookbackFrom = from.minus(30, java.time.temporal.ChronoUnit.DAYS);
@@ -151,15 +157,15 @@ public class TradeSimulationService {
         }
         int exitStepMinutes = exitInterval != interval ? 5 : stepMinutes;
         log.info("[Simulation] Loaded {} symbols, stepping {}m (exits {}m) from {} to {}",
-                fullSeries.size(), stepMinutes, exitStepMinutes, from, to);
+                localFullSeries.size(), stepMinutes, exitStepMinutes, from, to);
 
         // Build growing series per symbol — add bars incrementally instead of truncating
         // This enables OnChange listeners (ZigZag, indicators) to auto-update
-        Map<String, BarSeries> growingSeries = new HashMap<>();
+        Map<String, BarSeries> localGrowingSeries = new HashMap<>();
         Map<String, List<Bar>> sortedBars = new HashMap<>();
         Map<String, Integer> nextBarIndex = new HashMap<>();
 
-        for (Map.Entry<String, BarSeries> entry : fullSeries.entrySet()) {
+        for (Map.Entry<String, BarSeries> entry : localFullSeries.entrySet()) {
             String symbol = entry.getKey();
             BarSeries full = entry.getValue();
 
@@ -183,12 +189,15 @@ public class TradeSimulationService {
                 }
             }
 
-            growingSeries.put(symbol, growing);
+            localGrowingSeries.put(symbol, growing);
             sortedBars.put(symbol, bars);
             nextBarIndex.put(symbol, preAddCount);
             log.debug("[Simulation] {} pre-added {} lookback bars, {} total available",
                     symbol, preAddCount, bars.size());
         }
+
+        // Populate output parameter for wave-boundary MTM
+        growingSeries.putAll(localGrowingSeries);
 
         // Step through time. Per-tick, process stocks in parallel so the prediction
         // batcher receives concurrent submissions and can dispatch in batches.
@@ -196,7 +205,7 @@ public class TradeSimulationService {
             final Instant t = clock.getCurrentTime();
             ctx.setTotalSteps(ctx.getTotalSteps() + 1);
 
-            growingSeries.entrySet().parallelStream().forEach(entry -> {
+            localGrowingSeries.entrySet().parallelStream().forEach(entry -> {
                 String symbol = entry.getKey();
                 BarSeries growing = entry.getValue();
 
@@ -302,7 +311,8 @@ public class TradeSimulationService {
     }
 
     /** Close any positions still open for symbols in this wave at the last available close. */
-    private void forceCloseWavePositions(SimulationContext ctx, List<String> waveSymbols) {
+    private void forceCloseWavePositions(SimulationContext ctx, List<String> waveSymbols,
+                                         Map<String, BarSeries> growingSeries, Map<String, BarSeries> fullSeries) {
         java.util.Set<String> waveSet = new java.util.HashSet<>(waveSymbols);
         List<TradeSignal> toClose;
         synchronized (ctx) {
@@ -313,17 +323,46 @@ public class TradeSimulationService {
         }
         for (TradeSignal sig : toClose) {
             double entry = sig.getEntryPrice().doubleValue();
-            double exit = entry; // wave timeout: flat
+            double exit = entry;
             double pnl = 0.0;
+            double pnlPct = 0.0;
+
+            // Try to mark-to-market against the last available bar close
+            BarSeries series = growingSeries.get(sig.getSymbol());
+            if (series == null || series.getBarCount() == 0) {
+                series = fullSeries.get(sig.getSymbol());
+            }
+
+            if (series != null && series.getBarCount() > 0) {
+                Bar lastBar = series.getLastBar();
+                exit = lastBar.getClosePrice().doubleValue();
+
+                // Compute PnL respecting direction
+                if (sig.getDirection().equals(com.dtech.kitecon.trade.enums.TradeDirection.LONG)) {
+                    pnl = exit - entry;
+                } else {
+                    pnl = entry - exit;
+                }
+                pnlPct = (pnl / entry) * 100;
+            } else {
+                log.warn("[Simulation] No bar series available for wave-boundary MTM of {}", sig.getSymbol());
+            }
+
             sig.setStatus(TradeStatus.COMPLETED);
             signalRepository.save(sig);
             synchronized (ctx) {
                 ctx.getOpenPositions().remove(sig);
                 ctx.getClosedPositions().add(sig);
+                ctx.setTotalPnlPct(ctx.getTotalPnlPct() + pnlPct);
+                if (pnlPct > 0) {
+                    ctx.setWins(ctx.getWins() + 1);
+                } else {
+                    ctx.setLosses(ctx.getLosses() + 1);
+                }
             }
             try {
                 actionLogger.logWithPnl(sig, TradeActionLog.TradeAction.TIMEOUT_EXIT,
-                        BigDecimal.valueOf(exit), BigDecimal.valueOf(pnl),
+                        BigDecimal.valueOf(exit), BigDecimal.valueOf(pnlPct),
                         "Wave boundary close", clockNow(ctx));
             } catch (Exception ignored) {}
         }
