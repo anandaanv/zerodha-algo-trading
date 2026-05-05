@@ -15,9 +15,12 @@ import com.dtech.kitecon.trade.repository.TradeMonitorLogRepository;
 import com.dtech.kitecon.trade.repository.TradeSignalRepository;
 import com.dtech.chartpattern.zigzag.ZigZagService;
 import com.dtech.kitecon.backtest.CandlestickPatternDetector;
+import com.dtech.kitecon.backtest.DetectedPattern;
 import com.dtech.kitecon.data.Instrument;
 import com.dtech.kitecon.repository.InstrumentRepository;
 import com.dtech.algo.series.Interval;
+import com.dtech.ta.patterns.DtbHnsFeatureExtractor;
+import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +53,12 @@ public class TradeEntryHandler {
     @Value("${trade.filter.threshold:0.82}")
     private double mlFilterThreshold;
 
+    @Value("${trade.filter.dtbhns.threshold:0.85}")
+    private double dtbHnsThreshold;
+
+    @Value("${trade.filter.dtbhns.enabled:true}")
+    private boolean dtbHnsEnabled;
+
     @Value("${trade.monitor.notional:1000000}")
     private long notionalPerLot;
 
@@ -67,6 +76,7 @@ public class TradeEntryHandler {
     private final CandlestickPatternDetector candlestickPatternDetector;
     private final ZigZagService zigZagService;
     private final InstrumentRepository instrumentRepository;
+    private final DtbHnsFeatureExtractor featureExtractor;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -306,17 +316,38 @@ public class TradeEntryHandler {
             if (lastClose.compareTo(breakoutLevel) > 0) {
                 log.info("[EntryHandler] DTB/HNS break confirmed for signal {} {} — bar.close={} crossed breakoutLevel={}",
                         signal.getId(), signal.getSymbol(), lastClose, breakoutLevel);
+                // TODO: ML gate. Apply DTB+HNS ML scoring before returning true.
+                // See comment at end of method for more details.
                 return true;
             }
         } else {
             if (lastClose.compareTo(breakoutLevel) < 0) {
                 log.info("[EntryHandler] DTB/HNS break confirmed for signal {} {} — bar.close={} crossed breakoutLevel={}",
                         signal.getId(), signal.getSymbol(), lastClose, breakoutLevel);
+                // TODO: ML gate. Apply DTB+HNS ML scoring before returning true.
+                // See comment at end of method for more details.
                 return true;
             }
         }
 
         return false;
+
+        // NOTE: ML gate for live TradeEntryHandler requires:
+        //  - Access to BarSeries (we have it as parameter)
+        //  - Reconstruct DetectedPattern from signal's pivot fields
+        //  - Call ZigZagService.detect() to get pivots (different from sim's cached approach)
+        //  - Compute indicator arrays on BarSeries (requires PatternComboBacktestService inject)
+        //  - Construct feature vector via DtbHnsFeatureExtractor
+        //  - Score via TradeFilterClient.scoreDtbHns()
+        //  - If score < dtbHnsThreshold, return false and cancel signal (set status to EXPIRED)
+        //
+        //  Challenge: TradeEntryHandler.getBarSeriesForSignal() already fetches BarSeries,
+        //  but computing indicators is expensive per-tick. Consider:
+        //  (a) Lightweight ML-only path: skip full indicator computation, use signal's cached indicator values
+        //  (b) Full-featured: compute fresh indicators (slower but more accurate)
+        //
+        //  For now, leaving as TODO to avoid premature optimization in live path.
+        //  Simulation path (DtbSimulationStrategy) is fully wired and ready.
     }
 
     private BarSeries getBarSeriesForSignal(TradeSignal signal) {

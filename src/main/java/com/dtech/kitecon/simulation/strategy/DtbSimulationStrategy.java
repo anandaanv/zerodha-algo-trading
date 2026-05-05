@@ -20,6 +20,7 @@ import com.dtech.kitecon.trade.enums.TradeStatus;
 import com.dtech.kitecon.trade.strategy.ExitDecision;
 import com.dtech.kitecon.trade.strategy.ExitStrategy;
 import com.dtech.kitecon.trade.strategy.ExitStrategyRouter;
+import com.dtech.ta.patterns.DtbHnsFeatureExtractor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,9 +49,16 @@ public class DtbSimulationStrategy implements SimulationStrategy {
     private final ExitStrategyRouter exitStrategyRouter;
     private final CandlestickPatternDetector candlePatternDetector;
     private final TradeSignalRepository signalRepository;
+    private final DtbHnsFeatureExtractor featureExtractor;
 
     @Value("${trade.filter.threshold:0.82}")
     private double mlThreshold;
+
+    @Value("${trade.filter.dtbhns.threshold:0.85}")
+    private double dtbHnsThreshold;
+
+    @Value("${trade.filter.dtbhns.enabled:true}")
+    private boolean dtbHnsEnabled;
 
     private static final int MAX_BARS_TO_ENTRY_CONFIRMATION = 20;
     private static final int MAX_BARS_TO_EXIT = 10;
@@ -278,6 +286,44 @@ public class DtbSimulationStrategy implements SimulationStrategy {
             bars.add(truncatedSeries.getBar(i));
         }
 
+        // Pre-compute indicators if there are DTB/HNS signals waiting for entry confirmation
+        boolean hasDtbHnsWatching = openPositions.stream()
+                .filter(s -> symbol.equals(s.getSymbol()) && s.getStrategyType() == StrategyType.DTB)
+                .anyMatch(s -> {
+                    String pt = s.getPatternType();
+                    return "DOUBLE_BOTTOM".equals(pt) || "DOUBLE_TOP".equals(pt)
+                        || "HNS_BULL".equals(pt) || "HNS_BEAR".equals(pt);
+                });
+
+        double[] atrArr = null;
+        double[] rsiValues = null;
+        double[] macdHistArr = null;
+        double[] stochRsiK = null;
+        ZigZagParams zigZagParams = null;
+        CandidatePivotZigZag cpzz = null;
+        Map<Instant, Integer> tsToIdx = null;
+
+        if (hasDtbHnsWatching && dtbHnsEnabled) {
+            try {
+                atrArr = patternService.computeAtrPublic(bars, 14);
+                rsiValues = patternService.computeRsiPublic(truncatedSeries, 14);
+                macdHistArr = patternService.computeMacdHistPublic(truncatedSeries);
+                stochRsiK = patternService.computeStochRsiKPublic(rsiValues);
+
+                tsToIdx = new HashMap<>();
+                for (int i = 0; i < bars.size(); i++) {
+                    tsToIdx.put(bars.get(i).getEndTime(), i);
+                }
+
+                // Get CandidatePivotZigZag for this symbol
+                zigZagParams = cachedParams.get(symbol);
+                cpzz = candidatePivotZigZags.get(symbol);
+            } catch (Exception e) {
+                log.warn("[SimDTB] Failed to precompute indicators for DTB/HNS ML gate: {}", e.toString());
+                atrArr = null;
+            }
+        }
+
         for (TradeSignal sig : openPositions) {
             if (!symbol.equals(sig.getSymbol())) continue;
             if (sig.getStrategyType() != StrategyType.DTB) continue;
@@ -303,7 +349,7 @@ public class DtbSimulationStrategy implements SimulationStrategy {
 
                 // DTB/HNS entry confirmation and exit logic
                 if (sig.getStatus() == TradeStatus.WATCHING_ENTRY) {
-                    ExitResult entryResult = confirmDtbHnsEntry(sig, bars, currentBar, close);
+                    ExitResult entryResult = confirmDtbHnsEntry(sig, bars, currentBar, close, atrArr, rsiValues, macdHistArr, stochRsiK, cpzz, tsToIdx);
                     if (entryResult != null) {
                         exits.add(entryResult);
                     }
@@ -323,9 +369,12 @@ public class DtbSimulationStrategy implements SimulationStrategy {
 
     /**
      * Confirm DTB/HNS entry by finding reversal candle in retrace zone and subsequent break.
-     * Returns an ExitResult if entry times out, null otherwise (signal will be updated in ctx).
+     * At breakout confirmation, runs ML gate via DtbHnsFeatureExtractor + TradeFilterClient.
+     * Returns an ExitResult if entry times out or ML rejected, null otherwise (signal will be updated in ctx).
      */
-    private ExitResult confirmDtbHnsEntry(TradeSignal sig, List<Bar> bars, Bar currentBar, double close) {
+    private ExitResult confirmDtbHnsEntry(TradeSignal sig, List<Bar> bars, Bar currentBar, double close,
+                                          double[] atrArr, double[] rsiValues, double[] macdHistArr, double[] stochRsiK,
+                                          CandidatePivotZigZag cpzz, Map<Instant, Integer> tsToIdx) {
         BigDecimal breakoutLevel = sig.getBreakoutLevel();
         boolean isBullish = sig.getDirection() == TradeDirection.LONG;
 
@@ -415,18 +464,28 @@ public class DtbSimulationStrategy implements SimulationStrategy {
 
             // Check if current bar breaks the level
             if (isBullish && close > blevel) {
-                // Entry confirmed for LONG
-                // TODO: ML gate. Reconstruct ~400 features from signal+bars and score via TradeFilterClient.scoreDtbHns().
-                //       If score < threshold (0.85), return ExitResult with reason "ML_REJECTED" and pnl=0.
-                //       Feature extraction requires: recompute indicators on bar series + synthetic DetectedPattern from pivot values.
+                // Entry confirmed for LONG — apply ML gate
+                if (dtbHnsEnabled && atrArr != null && rsiValues != null && macdHistArr != null && stochRsiK != null
+                    && cpzz != null && tsToIdx != null) {
+                    ExitResult mlResult = applyDtbHnsMLGate(sig, bars, atrArr, rsiValues, macdHistArr, stochRsiK, cpzz, tsToIdx);
+                    if (mlResult != null) {
+                        return mlResult;  // ML rejected this entry
+                    }
+                }
                 sig.setEntryPrice(breakoutLevel);
                 sig.setStatus(TradeStatus.ACTIVE);
                 sig.setBarsInTrade(0);
                 signalRepository.save(sig);  // Persist Phase 2→3 transition (ACTIVE + entryPrice set)
                 return null;  // Don't exit, entry just activated
             } else if (!isBullish && close < blevel) {
-                // Entry confirmed for SHORT
-                // TODO: ML gate. Same as above for SHORT direction.
+                // Entry confirmed for SHORT — apply ML gate
+                if (dtbHnsEnabled && atrArr != null && rsiValues != null && macdHistArr != null && stochRsiK != null
+                    && cpzz != null && tsToIdx != null) {
+                    ExitResult mlResult = applyDtbHnsMLGate(sig, bars, atrArr, rsiValues, macdHistArr, stochRsiK, cpzz, tsToIdx);
+                    if (mlResult != null) {
+                        return mlResult;  // ML rejected this entry
+                    }
+                }
                 sig.setEntryPrice(breakoutLevel);
                 sig.setStatus(TradeStatus.ACTIVE);
                 sig.setBarsInTrade(0);
@@ -490,6 +549,91 @@ public class DtbSimulationStrategy implements SimulationStrategy {
         }
 
         return null;  // Still in trade
+    }
+
+    /**
+     * Apply ML gate for DTB/HNS entry confirmation.
+     * Reconstructs DetectedPattern from signal, extracts features, scores via TradeFilterClient.
+     * @return ExitResult if ML rejected, null if accepted or service unavailable (fail-open).
+     */
+    private ExitResult applyDtbHnsMLGate(TradeSignal sig, List<Bar> bars,
+                                         double[] atrArr, double[] rsiValues, double[] macdHistArr, double[] stochRsiK,
+                                         CandidatePivotZigZag cpzz, Map<Instant, Integer> tsToIdx) {
+        try {
+            // Reconstruct DetectedPattern from signal data
+            DetectedPattern reconstructed = DetectedPattern.builder()
+                    .patternType(sig.getPatternType())
+                    .bullish(sig.getDirection() == TradeDirection.LONG)
+                    .keyLevel(sig.getNeckline().doubleValue())
+                    .keyLevelTime(sig.getSignalTime())
+                    .ownTarget(sig.getTarget().doubleValue())
+                    .stopLoss(sig.getStopLoss().doubleValue())
+                    .pivotP0(sig.getPivotP0() != null ? sig.getPivotP0().doubleValue() : 0)
+                    .pivotP1(sig.getPivotP1() != null ? sig.getPivotP1().doubleValue() : 0)
+                    .pivotP2(sig.getPivotP2() != null ? sig.getPivotP2().doubleValue() : 0)
+                    .pivotP3(sig.getPivotP3() != null ? sig.getPivotP3().doubleValue() : null)
+                    .patternHeight(sig.getPatternHeight().doubleValue())
+                    .atr(0.0)  // Will be computed from indicators
+                    .rsiAtP0(0.0)
+                    .rsiAtP1(0.0)
+                    .rsiAtP2(0.0)
+                    .macdHistAtP1(0.0)
+                    .macdHistAtP2(0.0)
+                    .stochRsiK(0.0)
+                    .dailyRsi(0.0)
+                    .build();
+
+            // Find the detection bar index (closest to signal time)
+            int detectionBarIdx = bars.size() - 1;
+            if (tsToIdx != null) {
+                Integer idx = tsToIdx.get(sig.getSignalTime());
+                if (idx != null) {
+                    detectionBarIdx = idx;
+                }
+            }
+
+            // Get pivots from CandidatePivotZigZag
+            List<ZigZagPoint> pivots = cpzz != null ? cpzz.getConfirmedPivots() : new ArrayList<>();
+
+            // Build BarSeries-like view for feature extractor
+            // Create a minimal BarSeries wrapper if needed
+            org.ta4j.core.BaseBarSeries series = new org.ta4j.core.BaseBarSeries("sim", bars);
+
+            // Extract features
+            double[] features;
+            try {
+                features = featureExtractor.extract(series, reconstructed, pivots, detectionBarIdx,
+                        atrArr, rsiValues, macdHistArr, stochRsiK);
+            } catch (Exception ex) {
+                log.warn("[SimDTB] Feature extraction failed for {} at entry confirmation: {}", sig.getSymbol(), ex.toString());
+                features = null;
+            }
+
+            // Score with TradeFilterClient
+            java.util.OptionalDouble mlScoreOpt = (features != null)
+                    ? tradeFilterClient.scoreDtbHns(features)
+                    : java.util.OptionalDouble.empty();
+
+            if (mlScoreOpt.isPresent()) {
+                double mlScore = mlScoreOpt.getAsDouble();
+                if (mlScore < dtbHnsThreshold) {
+                    log.info("[SimDTB] ML rejected {} {} at entry confirmation: score={:.4f} < threshold={}",
+                            sig.getSymbol(), sig.getPatternType(), mlScore, dtbHnsThreshold);
+                    return new ExitResult(sig, "ML_REJECTED", sig.getBreakoutLevel().doubleValue(), 0.0);
+                }
+                // Update signal with ML score
+                sig.setMlScore(BigDecimal.valueOf(mlScore).setScale(4, RoundingMode.HALF_UP));
+            } else {
+                // Service unavailable — fail-open (pass through, log warning)
+                log.warn("[SimDTB] DTB+HNS ML service unavailable for {}, allowing entry", sig.getSymbol());
+            }
+
+            return null;  // ML accepted or service down (fail-open)
+
+        } catch (Exception e) {
+            log.warn("[SimDTB] ML gate error at entry confirmation for {}: {}", sig.getSymbol(), e.toString());
+            return null;  // Fail-open on unexpected error
+        }
     }
 
     private double computePnl(TradeSignal sig, double exitPrice) {
