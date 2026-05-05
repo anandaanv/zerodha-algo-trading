@@ -77,6 +77,7 @@ public class TradeEntryHandler {
     private final ZigZagService zigZagService;
     private final InstrumentRepository instrumentRepository;
     private final DtbHnsFeatureExtractor featureExtractor;
+    private final com.dtech.kitecon.backtest.PatternComboBacktestService patternComboBacktestService;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -312,42 +313,92 @@ public class TradeEntryHandler {
         BigDecimal lastClose = BigDecimal.valueOf(lastBar.getClosePrice().doubleValue());
         BigDecimal breakoutLevel = signal.getBreakoutLevel();
 
+        boolean broken;
         if (signal.getDirection() == TradeDirection.LONG) {
-            if (lastClose.compareTo(breakoutLevel) > 0) {
-                log.info("[EntryHandler] DTB/HNS break confirmed for signal {} {} — bar.close={} crossed breakoutLevel={}",
-                        signal.getId(), signal.getSymbol(), lastClose, breakoutLevel);
-                // TODO: ML gate. Apply DTB+HNS ML scoring before returning true.
-                // See comment at end of method for more details.
-                return true;
-            }
+            broken = lastClose.compareTo(breakoutLevel) > 0;
         } else {
-            if (lastClose.compareTo(breakoutLevel) < 0) {
-                log.info("[EntryHandler] DTB/HNS break confirmed for signal {} {} — bar.close={} crossed breakoutLevel={}",
-                        signal.getId(), signal.getSymbol(), lastClose, breakoutLevel);
-                // TODO: ML gate. Apply DTB+HNS ML scoring before returning true.
-                // See comment at end of method for more details.
+            broken = lastClose.compareTo(breakoutLevel) < 0;
+        }
+        if (!broken) return false;
+
+        log.info("[EntryHandler] DTB/HNS break confirmed for signal {} {} — bar.close={} crossed breakoutLevel={}",
+                signal.getId(), signal.getSymbol(), lastClose, breakoutLevel);
+
+        // ML gate: score the entry, reject if below threshold
+        if (dtbHnsEnabled && applyDtbHnsMLGate(signal, series)) {
+            return true;  // ML approved (or service down → fail-open)
+        }
+        if (!dtbHnsEnabled) return true;  // ML disabled — pass-through
+
+        // ML rejected: cancel signal so monitor stops watching
+        signal.setStatus(TradeStatus.EXPIRED);
+        signalRepository.save(signal);
+        log.info("[EntryHandler] DTB/HNS ML gate REJECTED signal {} {}", signal.getId(), signal.getSymbol());
+        return false;
+    }
+
+    /**
+     * Reconstructs DetectedPattern + pivots + indicator arrays from signal state,
+     * runs feature extraction, scores via the DTB+HNS XGBoost service.
+     * Returns true if score >= threshold OR service unavailable (fail-open).
+     * Returns false only if score is present and below threshold.
+     */
+    private boolean applyDtbHnsMLGate(TradeSignal signal, BarSeries series) {
+        try {
+            // Compute indicator arrays on the series
+            java.util.List<Bar> bars = new java.util.ArrayList<>();
+            for (int i = 0; i < series.getBarCount(); i++) bars.add(series.getBar(i));
+            double[] atrArr = patternComboBacktestService.computeAtrPublic(bars, 14);
+            double[] rsiValues = patternComboBacktestService.computeRsiPublic(series, 14);
+            double[] macdHistArr = patternComboBacktestService.computeMacdHistPublic(series);
+            double[] stochRsiK = patternComboBacktestService.computeStochRsiKPublic(rsiValues);
+
+            // Pivots from confirmed-only ZigZag (live doesn't carry IncrementalZigZag state per symbol).
+            // For DTB/HNS scoring at entry-confirm, the structural pivots are what matters; trailing extreme not needed here.
+            com.dtech.chartpattern.zigzag.ZigZagParams params = zigZagService.resolveParams(signal.getSymbol(), Interval.OneHour);
+            java.util.List<ZigZagPoint> pivots = zigZagService.detect(series, params);
+
+            // Reconstruct DetectedPattern from signal's stored pivot fields
+            DetectedPattern reconstructed = DetectedPattern.builder()
+                    .patternType(signal.getPatternType())
+                    .bullish(signal.getDirection() == TradeDirection.LONG)
+                    .keyLevel(signal.getNeckline() != null ? signal.getNeckline().doubleValue() : 0)
+                    .keyLevelTime(signal.getSignalTime())
+                    .ownTarget(signal.getTarget() != null ? signal.getTarget().doubleValue() : 0)
+                    .stopLoss(signal.getStopLoss() != null ? signal.getStopLoss().doubleValue() : 0)
+                    .pivotP0(signal.getPivotP0() != null ? signal.getPivotP0().doubleValue() : 0)
+                    .pivotP1(signal.getPivotP1() != null ? signal.getPivotP1().doubleValue() : 0)
+                    .pivotP2(signal.getPivotP2() != null ? signal.getPivotP2().doubleValue() : 0)
+                    .pivotP3(signal.getPivotP3() != null ? signal.getPivotP3().doubleValue() : null)
+                    .build();
+
+            int currentBarIdx = series.getBarCount() - 1;
+
+            double[] features = featureExtractor.extract(
+                    series, reconstructed, pivots, currentBarIdx,
+                    atrArr, rsiValues, macdHistArr, stochRsiK);
+
+            java.util.OptionalDouble scoreOpt = tradeFilterClient.scoreDtbHns(features);
+            if (scoreOpt.isEmpty()) {
+                log.warn("[EntryHandler] DTB/HNS ML service unreachable for signal {} {} — failing open",
+                        signal.getId(), signal.getSymbol());
                 return true;
             }
+            double score = scoreOpt.getAsDouble();
+            signal.setMlScore(BigDecimal.valueOf(score));
+            if (score < dtbHnsThreshold) {
+                log.info("[EntryHandler] DTB/HNS ML score below threshold for signal {} {} — score={} threshold={}",
+                        signal.getId(), signal.getSymbol(), score, dtbHnsThreshold);
+                return false;
+            }
+            log.info("[EntryHandler] DTB/HNS ML score above threshold for signal {} {} — score={} threshold={}",
+                    signal.getId(), signal.getSymbol(), score, dtbHnsThreshold);
+            return true;
+        } catch (Exception e) {
+            log.warn("[EntryHandler] DTB/HNS ML gate failed for signal {} {}: {} — failing open",
+                    signal.getId(), signal.getSymbol(), e.toString());
+            return true;
         }
-
-        return false;
-
-        // NOTE: ML gate for live TradeEntryHandler requires:
-        //  - Access to BarSeries (we have it as parameter)
-        //  - Reconstruct DetectedPattern from signal's pivot fields
-        //  - Call ZigZagService.detect() to get pivots (different from sim's cached approach)
-        //  - Compute indicator arrays on BarSeries (requires PatternComboBacktestService inject)
-        //  - Construct feature vector via DtbHnsFeatureExtractor
-        //  - Score via TradeFilterClient.scoreDtbHns()
-        //  - If score < dtbHnsThreshold, return false and cancel signal (set status to EXPIRED)
-        //
-        //  Challenge: TradeEntryHandler.getBarSeriesForSignal() already fetches BarSeries,
-        //  but computing indicators is expensive per-tick. Consider:
-        //  (a) Lightweight ML-only path: skip full indicator computation, use signal's cached indicator values
-        //  (b) Full-featured: compute fresh indicators (slower but more accurate)
-        //
-        //  For now, leaving as TODO to avoid premature optimization in live path.
-        //  Simulation path (DtbSimulationStrategy) is fully wired and ready.
     }
 
     private BarSeries getBarSeriesForSignal(TradeSignal signal) {
