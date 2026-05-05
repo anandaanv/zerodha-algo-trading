@@ -14,6 +14,7 @@ public class PatternDto {
     double target;            // measured-move target
     double patternHeight;
     double atr;
+    double stopLoss;          // structural stop loss (for DTB/HNS patterns)
     double rsiAtP1;
     double rsiAtP2;
     double rrRatio;
