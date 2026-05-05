@@ -54,7 +54,9 @@ public class DtbSimulationStrategy implements SimulationStrategy {
     private final DtbHnsFeatureExtractor featureExtractor;
     private final DtbHnsCandidateDetector dtbHnsCandidateDetector;
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @Value("${trade.filter.threshold:0.82}")
     private double mlThreshold;
