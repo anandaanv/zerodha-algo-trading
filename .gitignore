@@ -171,3 +171,10 @@ hs_err_pid*.log
 
 # Kotlin compiler temp
 .kotlin/
+
+# Local training data outputs (regenerated; never commit)
+candidate_pivot_train_data/
+clean_impulse_train_data/
+zigzag_pivots/
+elliott_train_data.tar.xz
+deploy_artifacts/
