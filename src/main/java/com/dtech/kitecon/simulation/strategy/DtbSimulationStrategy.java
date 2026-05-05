@@ -21,6 +21,8 @@ import com.dtech.kitecon.trade.strategy.ExitDecision;
 import com.dtech.kitecon.trade.strategy.ExitStrategy;
 import com.dtech.kitecon.trade.strategy.ExitStrategyRouter;
 import com.dtech.ta.patterns.DtbHnsFeatureExtractor;
+import com.dtech.ta.patterns.DtbHnsCandidateDetector;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +52,9 @@ public class DtbSimulationStrategy implements SimulationStrategy {
     private final CandlestickPatternDetector candlePatternDetector;
     private final TradeSignalRepository signalRepository;
     private final DtbHnsFeatureExtractor featureExtractor;
+    private final DtbHnsCandidateDetector dtbHnsCandidateDetector;
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     @Value("${trade.filter.threshold:0.82}")
     private double mlThreshold;
@@ -235,6 +240,9 @@ public class DtbSimulationStrategy implements SimulationStrategy {
                 Bar lastBar = bars.get(bars.size() - 1);
                 Instant now = lastBar.getEndTime();
 
+                // Serialize DetectedPattern to JSON for audit trail
+                String featureSnapshotJson = serializeDetectedPattern(p);
+
                 TradeSignal signal = TradeSignal.builder()
                         .symbol(symbol)
                         .direction(bullish ? TradeDirection.LONG : TradeDirection.SHORT)
@@ -255,6 +263,7 @@ public class DtbSimulationStrategy implements SimulationStrategy {
                         .pivotP1(BigDecimal.valueOf(p.getPivotP1()))
                         .pivotP2(BigDecimal.valueOf(p.getPivotP2()))
                         .pivotP3(p.getPivotP3() != null ? BigDecimal.valueOf(p.getPivotP3()) : null)
+                        .featureSnapshotJson(featureSnapshotJson)
                         .signalTime(now)
                         .barsInTrade(0)
                         .build();
@@ -553,56 +562,49 @@ public class DtbSimulationStrategy implements SimulationStrategy {
 
     /**
      * Apply ML gate for DTB/HNS entry confirmation.
-     * Reconstructs DetectedPattern from signal, extracts features, scores via TradeFilterClient.
+     * Re-detects the pattern to populate all indicator-derived fields for feature extraction.
      * @return ExitResult if ML rejected, null if accepted or service unavailable (fail-open).
      */
     private ExitResult applyDtbHnsMLGate(TradeSignal sig, List<Bar> bars,
                                          double[] atrArr, double[] rsiValues, double[] macdHistArr, double[] stochRsiK,
                                          CandidatePivotZigZag cpzz, Map<Instant, Integer> tsToIdx) {
         try {
-            // Reconstruct DetectedPattern from signal data
-            DetectedPattern reconstructed = DetectedPattern.builder()
-                    .patternType(sig.getPatternType())
-                    .bullish(sig.getDirection() == TradeDirection.LONG)
-                    .keyLevel(sig.getNeckline().doubleValue())
-                    .keyLevelTime(sig.getSignalTime())
-                    .ownTarget(sig.getTarget().doubleValue())
-                    .stopLoss(sig.getStopLoss().doubleValue())
-                    .pivotP0(sig.getPivotP0() != null ? sig.getPivotP0().doubleValue() : 0)
-                    .pivotP1(sig.getPivotP1() != null ? sig.getPivotP1().doubleValue() : 0)
-                    .pivotP2(sig.getPivotP2() != null ? sig.getPivotP2().doubleValue() : 0)
-                    .pivotP3(sig.getPivotP3() != null ? sig.getPivotP3().doubleValue() : null)
-                    .patternHeight(sig.getPatternHeight().doubleValue())
-                    .atr(0.0)  // Will be computed from indicators
-                    .rsiAtP0(0.0)
-                    .rsiAtP1(0.0)
-                    .rsiAtP2(0.0)
-                    .macdHistAtP1(0.0)
-                    .macdHistAtP2(0.0)
-                    .stochRsiK(0.0)
-                    .dailyRsi(0.0)
-                    .build();
-
-            // Find the detection bar index (closest to signal time)
-            int detectionBarIdx = bars.size() - 1;
-            if (tsToIdx != null) {
-                Integer idx = tsToIdx.get(sig.getSignalTime());
-                if (idx != null) {
-                    detectionBarIdx = idx;
-                }
-            }
-
-            // Get pivots from CandidatePivotZigZag
-            List<ZigZagPoint> pivots = cpzz != null ? cpzz.getConfirmedPivots() : new ArrayList<>();
-
-            // Build BarSeries-like view for feature extractor
-            // Create a minimal BarSeries wrapper if needed
+            // Build BarSeries-like view for feature extractor and re-detection
             org.ta4j.core.BaseBarSeries series = new org.ta4j.core.BaseBarSeries("sim", bars);
 
-            // Extract features
+            // Get pivots with trailing extreme for re-detection
+            List<ZigZagPoint> pivotsWithTrailingExtreme = cpzz != null
+                ? cpzz.getPivotsWithTrailingExtreme(bars.get(bars.size() - 1))
+                : new ArrayList<>();
+
+            // Find the matching pattern from re-detection
+            java.util.Optional<DetectedPattern> matched = dtbHnsCandidateDetector.findMatchingPattern(
+                    series, pivotsWithTrailingExtreme, atrArr, rsiValues, macdHistArr, stochRsiK, tsToIdx,
+                    sig.getPatternType(),
+                    sig.getDirection() == TradeDirection.LONG,
+                    sig.getPivotP0() != null ? sig.getPivotP0().doubleValue() : 0,
+                    sig.getPivotP1() != null ? sig.getPivotP1().doubleValue() : 0,
+                    sig.getPivotP2() != null ? sig.getPivotP2().doubleValue() : 0,
+                    sig.getPivotP3() != null ? sig.getPivotP3().doubleValue() : null);
+
+            if (matched.isEmpty()) {
+                log.warn("[SimDTB] Pattern re-detect failed for {} {} at entry confirmation — failing open",
+                        sig.getSymbol(), sig.getPatternType());
+                return null;  // Can't score, allow entry (fail-open)
+            }
+
+            DetectedPattern reDetected = matched.get();
+            int detectionBarIdx = tsToIdx != null
+                ? tsToIdx.getOrDefault(reDetected.getKeyLevelTime(), bars.size() - 1)
+                : bars.size() - 1;
+
+            // Get confirmed pivots for feature extraction
+            List<ZigZagPoint> confirmedPivots = cpzz != null ? cpzz.getConfirmedPivots() : new ArrayList<>();
+
+            // Extract features from re-detected pattern
             double[] features;
             try {
-                features = featureExtractor.extract(series, reconstructed, pivots, detectionBarIdx,
+                features = featureExtractor.extract(series, reDetected, confirmedPivots, detectionBarIdx,
                         atrArr, rsiValues, macdHistArr, stochRsiK);
             } catch (Exception ex) {
                 log.warn("[SimDTB] Feature extraction failed for {} at entry confirmation: {}", sig.getSymbol(), ex.toString());
@@ -642,5 +644,18 @@ public class DtbSimulationStrategy implements SimulationStrategy {
         return sig.getDirection() == TradeDirection.LONG
                 ? (exitPrice - entry) / entry * 100
                 : (entry - exitPrice) / entry * 100;
+    }
+
+    /**
+     * Serialize DetectedPattern to JSON for audit trail storage.
+     * Logs a warning and returns null on serialization failure — does not fail the signal.
+     */
+    private String serializeDetectedPattern(DetectedPattern pattern) {
+        try {
+            return objectMapper.writeValueAsString(pattern);
+        } catch (Exception e) {
+            log.warn("[SimDTB] Failed to serialize DetectedPattern to JSON: {}", e.getMessage());
+            return null;
+        }
     }
 }

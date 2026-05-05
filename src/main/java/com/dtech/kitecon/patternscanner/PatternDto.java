@@ -56,4 +56,7 @@ public class PatternDto {
     double pivotP2;          // Previous-previous pivot
     Double pivotP3;          // Previous-previous-previous (HNS only, nullable)
     double breakoutLevel;    // Entry confirmation level (populated in Phase 2)
+
+    // Feature snapshot from DetectedPattern at signal creation time (for audit trail)
+    String featureSnapshotJson;  // JSON serialization of DetectedPattern
 }

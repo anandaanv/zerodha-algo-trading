@@ -216,6 +216,7 @@ public class PatternComboScannerService {
                 .pivotP1(BigDecimal.valueOf(pattern.getPivotP1()))
                 .pivotP2(BigDecimal.valueOf(pattern.getPivotP2()))
                 .pivotP3(pattern.getPivotP3() != null ? BigDecimal.valueOf(pattern.getPivotP3()) : null)
+                .featureSnapshotJson(pattern.getFeatureSnapshotJson())
                 .build();
 
         // ML scoring happens at entry time (TradeEntryHandler) with live indicators — not here.

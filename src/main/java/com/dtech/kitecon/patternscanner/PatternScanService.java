@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.ta4j.core.Bar;
 import org.ta4j.core.BarSeries;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -32,6 +33,8 @@ public class PatternScanService {
     private final ZigZagService zigZagService;
     private final InstrumentRepository instrumentRepository;
     private final DataFetchService dataFetchService;
+
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final List<String> NIFTY50 = List.of(
         "RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK",
@@ -147,8 +150,10 @@ public class PatternScanService {
         DailyIndicators watchingInd = patternComboBacktestService.computeDailyIndicators(seriesW);
         DailyIndicators confirmInd  = patternComboBacktestService.computeDailyIndicators(seriesC);
 
-        // Build pattern DTOs
-        List<PatternDto> patternDtos = watchingPatterns.stream().map(p -> PatternDto.builder()
+        // Build pattern DTOs with feature snapshots
+        List<PatternDto> patternDtos = watchingPatterns.stream().map(p -> {
+            String featureJson = serializeDetectedPattern(p);
+            return PatternDto.builder()
                 .patternType(p.getPatternType())
                 .bullish(p.isBullish())
                 .keyLevel(p.getKeyLevel())
@@ -188,7 +193,9 @@ public class PatternScanService {
                 .pivotP2(p.getPivotP2())
                 .pivotP3(p.getPivotP3())
                 .breakoutLevel(0.0)
-                .build()).toList();
+                .featureSnapshotJson(featureJson)
+                .build();
+        }).toList();
 
         // Build overlays for watching TF
         Map<String, Object> watchingOverlays = buildOverlays(watchingPatterns, barsW, tsToIdxW);
@@ -241,7 +248,9 @@ public class PatternScanService {
         DailyIndicators dailyInd    = patternComboBacktestService.computeDailyIndicators(seriesDaily);
         DailyIndicators watchingInd = patternComboBacktestService.computeDailyIndicators(seriesW);
 
-        return lenientPatterns.stream().map(p -> PatternDto.builder()
+        return lenientPatterns.stream().map(p -> {
+            String featureJson = serializeDetectedPattern(p);
+            return PatternDto.builder()
                 .patternType(p.getPatternType())
                 .bullish(p.isBullish())
                 .keyLevel(p.getKeyLevel())
@@ -276,7 +285,9 @@ public class PatternScanService {
                 .rsiSlope(watchingInd.rsiSlopeAtTs(p.getKeyLevelTime(), 5))
                 .macdHistSlope(watchingInd.macdHistSlopeAtTs(p.getKeyLevelTime(), 5))
                 .adxSlope(watchingInd.adxSlopeAtTs(p.getKeyLevelTime(), 5))
-                .build()).toList();
+                .featureSnapshotJson(featureJson)
+                .build();
+        }).toList();
     }
 
     /**
@@ -457,5 +468,18 @@ public class PatternScanService {
         pt.put("time", time.getEpochSecond());
         pt.put("price", price);
         return pt;
+    }
+
+    /**
+     * Serialize a DetectedPattern to JSON for audit trail / re-extraction.
+     * Returns null-safe string; if serialization fails, logs warning and returns null.
+     */
+    private String serializeDetectedPattern(DetectedPattern pattern) {
+        try {
+            return objectMapper.writeValueAsString(pattern);
+        } catch (Exception e) {
+            log.warn("Failed to serialize DetectedPattern to JSON: {}", e.getMessage());
+            return null;
+        }
     }
 }
