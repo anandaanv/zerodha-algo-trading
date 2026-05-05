@@ -171,7 +171,11 @@ public class PatternComboScannerService {
         double atr = pattern.getAtr();
 
         BigDecimal stopLoss;
-        if (pattern.isBullish()) {
+        boolean isDtbOrHns = "DOUBLE_BOTTOM".equals(pt) || "DOUBLE_TOP".equals(pt)
+                || "HNS_BULL".equals(pt) || "HNS_BEAR".equals(pt);
+        if (isDtbOrHns) {
+            stopLoss = BigDecimal.valueOf(pattern.getStopLoss());
+        } else if (pattern.isBullish()) {
             stopLoss = keyLevel.subtract(BigDecimal.valueOf(2.0 * atr));
         } else {
             stopLoss = keyLevel.add(BigDecimal.valueOf(2.0 * atr));
