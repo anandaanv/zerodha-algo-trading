@@ -11,7 +11,7 @@ import java.util.Map;
 
 /**
  * HTTP client for the Python XGBoost trade-filter service.
- * Fail-open: if the service is unreachable, returns 1.0 (pass-through).
+ * Fail-safe: if the service is unreachable, returns 0.0 (block trade).
  */
 @Component
 @Slf4j
@@ -27,7 +27,7 @@ public class TradeFilterClient {
 
     /**
      * Score a pattern using the ML model.
-     * @return P(WIN) probability [0,1], or 1.0 on service unavailability (fail-open)
+     * @return P(WIN) probability [0,1], or 0.0 on service unavailability (fail-safe)
      */
     public double score(PatternDto pattern, String watchingPattern,
                         double dailyRsi, double dailyAdx, double dailyAdxEma,
@@ -82,10 +82,10 @@ public class TradeFilterClient {
                 return ((Number) response.get("prob")).doubleValue();
             }
         } catch (ResourceAccessException e) {
-            log.warn("[TradeFilter] Service unavailable — failing open: {}", e.getMessage());
+            log.warn("[TradeFilter] Service unavailable — failing safe: {}", e.getMessage());
         } catch (Exception e) {
-            log.warn("[TradeFilter] Scoring failed — failing open: {}", e.getMessage());
+            log.warn("[TradeFilter] Scoring failed — failing safe: {}", e.getMessage());
         }
-        return 0.9999;
+        return 0.0;
     }
 }
