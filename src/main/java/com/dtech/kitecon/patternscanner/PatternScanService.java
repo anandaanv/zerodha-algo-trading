@@ -34,7 +34,9 @@ public class PatternScanService {
     private final InstrumentRepository instrumentRepository;
     private final DataFetchService dataFetchService;
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private static final List<String> NIFTY50 = List.of(
         "RELIANCE", "TCS", "HDFCBANK", "BHARTIARTL", "ICICIBANK",
