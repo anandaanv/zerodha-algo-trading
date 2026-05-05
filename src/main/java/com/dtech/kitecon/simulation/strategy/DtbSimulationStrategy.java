@@ -416,6 +416,9 @@ public class DtbSimulationStrategy implements SimulationStrategy {
             // Check if current bar breaks the level
             if (isBullish && close > blevel) {
                 // Entry confirmed for LONG
+                // TODO: ML gate. Reconstruct ~400 features from signal+bars and score via TradeFilterClient.scoreDtbHns().
+                //       If score < threshold (0.85), return ExitResult with reason "ML_REJECTED" and pnl=0.
+                //       Feature extraction requires: recompute indicators on bar series + synthetic DetectedPattern from pivot values.
                 sig.setEntryPrice(breakoutLevel);
                 sig.setStatus(TradeStatus.ACTIVE);
                 sig.setBarsInTrade(0);
@@ -423,6 +426,7 @@ public class DtbSimulationStrategy implements SimulationStrategy {
                 return null;  // Don't exit, entry just activated
             } else if (!isBullish && close < blevel) {
                 // Entry confirmed for SHORT
+                // TODO: ML gate. Same as above for SHORT direction.
                 sig.setEntryPrice(breakoutLevel);
                 sig.setStatus(TradeStatus.ACTIVE);
                 sig.setBarsInTrade(0);
