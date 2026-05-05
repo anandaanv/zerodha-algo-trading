@@ -101,7 +101,11 @@ public class TradeEntryHandler {
         BarSeries series = getBarSeriesForSignal(signal);
         boolean entryTriggered = isEntryTriggered(signal, ltp, series);
 
-        if (entryTriggered) {
+        String pt = signal.getPatternType();
+        boolean isDtbOrHns = "DOUBLE_BOTTOM".equals(pt) || "DOUBLE_TOP".equals(pt)
+                         || "HNS_BULL".equals(pt) || "HNS_BEAR".equals(pt);
+
+        if (entryTriggered && !isDtbOrHns) {
             double score = scoreMlAtEntry(signal);
             signal.setMlScore(BigDecimal.valueOf(score).setScale(4, java.math.RoundingMode.HALF_UP));
             if (score < mlFilterThreshold) {
