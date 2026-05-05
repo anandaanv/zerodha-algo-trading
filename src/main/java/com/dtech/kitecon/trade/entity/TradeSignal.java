@@ -142,6 +142,9 @@ public class TradeSignal {
     @Column
     private BigDecimal pivotP3;
 
+    @Column(columnDefinition = "TEXT")
+    private String featureSnapshotJson;
+
     @PrePersist
     void prePersist() {
         createdAt = updatedAt = Instant.now();

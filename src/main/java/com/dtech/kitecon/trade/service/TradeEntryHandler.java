@@ -78,6 +78,7 @@ public class TradeEntryHandler {
     private final InstrumentRepository instrumentRepository;
     private final DtbHnsFeatureExtractor featureExtractor;
     private final com.dtech.kitecon.backtest.PatternComboBacktestService patternComboBacktestService;
+    private final com.dtech.ta.patterns.DtbHnsCandidateDetector dtbHnsCandidateDetector;
 
     @Transactional
     public void handle(TradeSignal signal, boolean dryRun) {
@@ -338,8 +339,8 @@ public class TradeEntryHandler {
     }
 
     /**
-     * Reconstructs DetectedPattern + pivots + indicator arrays from signal state,
-     * runs feature extraction, scores via the DTB+HNS XGBoost service.
+     * Re-detects the DTB/HNS pattern at inference time to populate all indicator-derived fields,
+     * then extracts features and scores via the DTB+HNS XGBoost service.
      * Returns true if score >= threshold OR service unavailable (fail-open).
      * Returns false only if score is present and below threshold.
      */
@@ -353,29 +354,43 @@ public class TradeEntryHandler {
             double[] macdHistArr = patternComboBacktestService.computeMacdHistPublic(series);
             double[] stochRsiK = patternComboBacktestService.computeStochRsiKPublic(rsiValues);
 
-            // Pivots from confirmed-only ZigZag (live doesn't carry IncrementalZigZag state per symbol).
-            // For DTB/HNS scoring at entry-confirm, the structural pivots are what matters; trailing extreme not needed here.
+            // Build timestamp-to-index map for re-detection
+            java.util.Map<Instant, Integer> tsToIdx = new java.util.HashMap<>();
+            for (int i = 0; i < bars.size(); i++) {
+                tsToIdx.put(bars.get(i).getEndTime(), i);
+            }
+
+            // Build CandidatePivotZigZag for trailing-extreme parity with training/sim
             com.dtech.chartpattern.zigzag.ZigZagParams params = zigZagService.resolveParams(signal.getSymbol(), Interval.OneHour);
-            java.util.List<ZigZagPoint> pivots = zigZagService.detect(series, params);
+            com.dtech.kitecon.simulation.CandidatePivotZigZag cpzz =
+                    new com.dtech.kitecon.simulation.CandidatePivotZigZag(params);
+            for (int i = 0; i < series.getBarCount(); i++) {
+                cpzz.processBar(series, i);
+            }
+            Bar latest = series.getBar(series.getBarCount() - 1);
+            java.util.List<ZigZagPoint> pivots = cpzz.getPivotsWithTrailingExtreme(latest);
 
-            // Reconstruct DetectedPattern from signal's stored pivot fields
-            DetectedPattern reconstructed = DetectedPattern.builder()
-                    .patternType(signal.getPatternType())
-                    .bullish(signal.getDirection() == TradeDirection.LONG)
-                    .keyLevel(signal.getNeckline() != null ? signal.getNeckline().doubleValue() : 0)
-                    .keyLevelTime(signal.getSignalTime())
-                    .ownTarget(signal.getTarget() != null ? signal.getTarget().doubleValue() : 0)
-                    .stopLoss(signal.getStopLoss() != null ? signal.getStopLoss().doubleValue() : 0)
-                    .pivotP0(signal.getPivotP0() != null ? signal.getPivotP0().doubleValue() : 0)
-                    .pivotP1(signal.getPivotP1() != null ? signal.getPivotP1().doubleValue() : 0)
-                    .pivotP2(signal.getPivotP2() != null ? signal.getPivotP2().doubleValue() : 0)
-                    .pivotP3(signal.getPivotP3() != null ? signal.getPivotP3().doubleValue() : null)
-                    .build();
+            // Find the matching pattern from live re-detection
+            java.util.Optional<DetectedPattern> matched = dtbHnsCandidateDetector.findMatchingPattern(
+                    series, pivots, atrArr, rsiValues, macdHistArr, stochRsiK, tsToIdx,
+                    signal.getPatternType(),
+                    signal.getDirection() == TradeDirection.LONG,
+                    signal.getPivotP0() != null ? signal.getPivotP0().doubleValue() : 0,
+                    signal.getPivotP1() != null ? signal.getPivotP1().doubleValue() : 0,
+                    signal.getPivotP2() != null ? signal.getPivotP2().doubleValue() : 0,
+                    signal.getPivotP3() != null ? signal.getPivotP3().doubleValue() : null);
 
-            int currentBarIdx = series.getBarCount() - 1;
+            if (matched.isEmpty()) {
+                log.warn("[EntryHandler] DTB/HNS pattern re-detect failed for signal {} {} — failing open",
+                        signal.getId(), signal.getSymbol());
+                return true;  // can't score, allow entry
+            }
+
+            DetectedPattern reDetected = matched.get();
+            int currentBarIdx = tsToIdx.getOrDefault(reDetected.getKeyLevelTime(), series.getBarCount() - 1);
 
             double[] features = featureExtractor.extract(
-                    series, reconstructed, pivots, currentBarIdx,
+                    series, reDetected, pivots, currentBarIdx,
                     atrArr, rsiValues, macdHistArr, stochRsiK);
 
             java.util.OptionalDouble scoreOpt = tradeFilterClient.scoreDtbHns(features);

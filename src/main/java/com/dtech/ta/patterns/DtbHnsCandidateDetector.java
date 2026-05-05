@@ -103,6 +103,55 @@ public class DtbHnsCandidateDetector {
         return results;
     }
 
+    /**
+     * Helper method to find a matching pattern that corresponds to a trade signal.
+     * Used during inference to re-detect the pattern with full indicator context.
+     *
+     * @param series BarSeries for context
+     * @param pivotsWithTrailingExtreme confirmed pivots + trailing extreme candidate
+     * @param atrArr array of ATR values indexed by bar
+     * @param rsiValues array of RSI values indexed by bar
+     * @param macdHistArr array of MACD histogram values indexed by bar
+     * @param stochRsiK array of Stoch RSI K values indexed by bar
+     * @param tsToIdx map from bar timestamp to bar index
+     * @param patternType expected pattern type (e.g., "DOUBLE_BOTTOM")
+     * @param bullish expected direction (true for LONG, false for SHORT)
+     * @param pivotP0 expected P0 price (tolerance: 0.5%)
+     * @param pivotP1 expected P1 price (tolerance: 0.5%)
+     * @param pivotP2 expected P2 price (tolerance: 0.5%)
+     * @param pivotP3 expected P3 price for HNS (tolerance: 0.5%), nullable
+     * @return Optional containing the matching DetectedPattern with all indicator fields populated
+     */
+    public java.util.Optional<DetectedPattern> findMatchingPattern(
+            BarSeries series,
+            java.util.List<ZigZagPoint> pivotsWithTrailingExtreme,
+            double[] atrArr, double[] rsiValues, double[] macdHistArr, double[] stochRsiK,
+            java.util.Map<java.time.Instant, Integer> tsToIdx,
+            String patternType, boolean bullish,
+            double pivotP0, double pivotP1, double pivotP2, Double pivotP3) {
+
+        java.util.List<DetectedPattern> all = detect(series, pivotsWithTrailingExtreme,
+                atrArr, rsiValues, macdHistArr, stochRsiK, tsToIdx);
+
+        return all.stream()
+            .filter(p -> patternType.equals(p.getPatternType()))
+            .filter(p -> p.isBullish() == bullish)
+            .filter(p -> matchesPivot(p.getPivotP0(), pivotP0)
+                      && matchesPivot(p.getPivotP1(), pivotP1)
+                      && matchesPivot(p.getPivotP2(), pivotP2)
+                      && (pivotP3 == null || (p.getPivotP3() != null && matchesPivot(p.getPivotP3(), pivotP3))))
+            .findFirst();
+    }
+
+    /**
+     * Check if two pivot prices match within 0.5% tolerance.
+     * Handles both zero and non-zero values.
+     */
+    private static boolean matchesPivot(double a, double b) {
+        if (b == 0) return Math.abs(a) < 1e-9;  // both zero
+        return Math.abs(a - b) / Math.abs(b) < 0.005;  // 0.5% tolerance
+    }
+
     // ────────────────────────────────────────────────────────────────
     // DOUBLE_BOTTOM / DOUBLE_TOP
     // ────────────────────────────────────────────────────────────────
