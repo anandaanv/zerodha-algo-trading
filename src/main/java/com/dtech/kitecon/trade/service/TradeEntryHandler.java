@@ -8,6 +8,7 @@ import com.dtech.kitecon.trade.entity.TradeExecution;
 import com.dtech.kitecon.trade.entity.TradeMonitorLog;
 import com.dtech.kitecon.trade.entity.TradeSignal;
 import com.dtech.kitecon.trade.enums.MonitorAction;
+import com.dtech.kitecon.trade.enums.StrategyType;
 import com.dtech.kitecon.trade.enums.TradeDirection;
 import com.dtech.kitecon.trade.enums.TradeStatus;
 import com.dtech.kitecon.trade.repository.TradeExecutionRepository;
@@ -101,11 +102,9 @@ public class TradeEntryHandler {
         BarSeries series = getBarSeriesForSignal(signal);
         boolean entryTriggered = isEntryTriggered(signal, ltp, series);
 
-        String pt = signal.getPatternType();
-        boolean isDtbOrHns = "DOUBLE_BOTTOM".equals(pt) || "DOUBLE_TOP".equals(pt)
-                         || "HNS_BULL".equals(pt) || "HNS_BEAR".equals(pt);
+        boolean isImpulse = signal.getStrategyType() == StrategyType.IMPULSE;
 
-        if (entryTriggered && !isDtbOrHns) {
+        if (entryTriggered && isImpulse) {
             double score = scoreMlAtEntry(signal);
             signal.setMlScore(BigDecimal.valueOf(score).setScale(4, java.math.RoundingMode.HALF_UP));
             if (score < mlFilterThreshold) {
