@@ -294,6 +294,8 @@ const TradeOrdersPage: React.FC = () => {
         </button>
       </div>
 
+      const showRealisedPnl = filterStatus !== "OPEN";
+
       <table style={tableStyle}>
         <thead>
           <tr>
@@ -307,7 +309,7 @@ const TradeOrdersPage: React.FC = () => {
             <th style={thStyle}>Exit</th>
             <th style={thStyle}>Stop</th>
             <th style={thStyle}>Target</th>
-            <th style={thStyle}>P&L</th>
+            {showRealisedPnl && <th style={thStyle}>P&L</th>}
             <th style={thStyle}>LTP</th>
             <th style={thStyle}>Unreal P&L</th>
             <th style={thStyle}>Status</th>
@@ -319,7 +321,7 @@ const TradeOrdersPage: React.FC = () => {
           {orders.length === 0 ? (
             <tr>
               <td
-                colSpan={16}
+                colSpan={showRealisedPnl ? 16 : 15}
                 style={{
                   ...tdStyle,
                   textAlign: "center",
@@ -381,18 +383,20 @@ const TradeOrdersPage: React.FC = () => {
                 <td style={tdStyle}>
                   {order.target != null ? order.target.toFixed(2) : "-"}
                 </td>
-                <td style={pnlStyle(order.realisedPnl)}>
-                  {order.realisedPnl != null ? (
-                    <>
-                      {order.realisedPnl > 0 ? "+" : ""}
-                      {order.realisedPnl.toFixed(2)}
-                    </>
-                  ) : order.status === "OPEN" ? (
-                    "~"
-                  ) : (
-                    "-"
-                  )}
-                </td>
+                {showRealisedPnl && (
+                  <td style={pnlStyle(order.realisedPnl)}>
+                    {order.realisedPnl != null ? (
+                      <>
+                        {order.realisedPnl > 0 ? "+" : ""}
+                        {order.realisedPnl.toFixed(2)}
+                      </>
+                    ) : order.status === "OPEN" ? (
+                      "~"
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                )}
                 <td style={tdStyle}>
                   {order.ltp != null ? order.ltp.toFixed(2) : "-"}
                 </td>
