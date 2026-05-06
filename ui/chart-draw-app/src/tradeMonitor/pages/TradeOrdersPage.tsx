@@ -224,6 +224,7 @@ const TradeOrdersPage: React.FC = () => {
   const unrealisedPnl = summary?.unrealisedPnlInr || 0;
   const totalPnl = summary?.totalPnlInr || 0;
   const winRate = summary?.winRatePct || 0;
+  const showRealisedPnl = filterStatus !== "OPEN";
 
   return (
     <div style={containerStyle}>
@@ -391,8 +392,6 @@ const TradeOrdersPage: React.FC = () => {
           {scanning ? "Scanning..." : "Scan Now"}
         </button>
       </div>
-
-      const showRealisedPnl = filterStatus !== "OPEN";
 
       <table style={tableStyle}>
         <thead>
