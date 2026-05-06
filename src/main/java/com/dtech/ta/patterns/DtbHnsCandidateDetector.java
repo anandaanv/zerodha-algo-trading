@@ -188,7 +188,11 @@ public class DtbHnsCandidateDetector {
         Integer p1Idx = tsToIdx.get(p1.getTimestamp());
         if (p1Idx == null || p1Idx >= rsiValues.length) p1Idx = p0Idx;
 
-        double patternHeight = Math.abs(v1 - Math.min(v0, v2));
+        // Structural extreme that invalidates the pattern:
+        //   DOUBLE_BOTTOM (bullish): the LOWER of the two bottoms — SL placed below it.
+        //   DOUBLE_TOP    (bearish): the HIGHER of the two tops    — SL placed above it.
+        double structuralExtreme = bullish ? Math.min(v0, v2) : Math.max(v0, v2);
+        double patternHeight = Math.abs(v1 - structuralExtreme);
         double target = bullish ? v1 + patternHeight : v1 - patternHeight;
 
         double rsiP1 = p1Idx < rsiValues.length ? rsiValues[p1Idx] : 0;
@@ -197,7 +201,7 @@ public class DtbHnsCandidateDetector {
         double atrAtP0 = p0Idx < atrArr.length ? atrArr[p0Idx] : 0;
         double stochK = p0Idx < stochRsiK.length ? stochRsiK[p0Idx] : 0;
 
-        double stopLoss = Math.min(v0, v2);  // DTB: min of two lows (DOUBLE_BOTTOM/DOUBLE_TOP)
+        double stopLoss = structuralExtreme;
 
         results.add(DetectedPattern.builder()
                 .patternType(bullish ? "DOUBLE_BOTTOM" : "DOUBLE_TOP")
