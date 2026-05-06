@@ -174,7 +174,16 @@ public class PatternComboScannerService {
         boolean isDtbOrHns = "DOUBLE_BOTTOM".equals(pt) || "DOUBLE_TOP".equals(pt)
                 || "HNS_BULL".equals(pt) || "HNS_BEAR".equals(pt);
         if (isDtbOrHns) {
-            stopLoss = BigDecimal.valueOf(pattern.getStopLoss());
+            double ph = pattern.getPatternHeight();
+            if ("HNS_BULL".equals(pt)) {
+                stopLoss = keyLevel.subtract(BigDecimal.valueOf(ph * 0.5));
+            } else if ("HNS_BEAR".equals(pt)) {
+                stopLoss = keyLevel.add(BigDecimal.valueOf(ph * 0.5));
+            } else if (pattern.isBullish()) {
+                stopLoss = keyLevel.subtract(BigDecimal.valueOf(ph));
+            } else {
+                stopLoss = keyLevel.add(BigDecimal.valueOf(ph));
+            }
         } else if (pattern.isBullish()) {
             stopLoss = keyLevel.subtract(BigDecimal.valueOf(2.0 * atr));
         } else {
