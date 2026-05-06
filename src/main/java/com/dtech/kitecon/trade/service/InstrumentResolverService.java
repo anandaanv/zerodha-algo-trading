@@ -128,19 +128,29 @@ public class InstrumentResolverService {
             log.info("[InstrumentResolver] {} expiry week ({}) — using ATM instead of {}% OTM",
                     symbol, nearestExpiry.toLocalDate(), otmPct * 100);
         }
-        // For OTM: offset the target strike from LTP
-        double targetStrike = ltp;
-        if (effectiveOtmPct > 0) {
-            targetStrike = direction == TradeDirection.LONG
-                    ? ltp * (1 + effectiveOtmPct)   // CE strike above LTP
-                    : ltp * (1 - effectiveOtmPct);  // PE strike below LTP
-        }
-        final double ts = targetStrike;
+
+        // Default to 1-OTM strike (the nearest strike on the OTM side of LTP):
+        //   LONG  / CE → first strike >= LTP
+        //   SHORT / PE → first strike <= LTP
+        // Picking the absolute-closest strike can land ITM and load the option with
+        // intrinsic value that destroys risk:reward.
+        final boolean otmHigher = direction == TradeDirection.LONG;
         Instrument atm = options.stream()
                 .filter(i -> nearestExpiry.equals(i.getExpiry()))
                 .filter(i -> i.getStrike() != null)
-                .min(Comparator.comparingDouble(i -> Math.abs(Double.parseDouble(i.getStrike()) - ts)))
-                .orElseThrow(() -> new RuntimeException("No option found for: " + symbol + " near strike " + ts));
+                .filter(i -> {
+                    double s = Double.parseDouble(i.getStrike());
+                    if (effectiveOtmPct > 0) {
+                        // Caller asked for explicit OTM offset — strike must be at least that far OTM
+                        double minOffset = ltp * effectiveOtmPct;
+                        return otmHigher ? s >= ltp + minOffset : s <= ltp - minOffset;
+                    }
+                    // Default 1-OTM: strike strictly on the OTM side of LTP
+                    return otmHigher ? s >= ltp : s <= ltp;
+                })
+                .min(Comparator.comparingDouble(i -> Math.abs(Double.parseDouble(i.getStrike()) - ltp)))
+                .orElseThrow(() -> new RuntimeException("No OTM " + optionType + " option found for: " + symbol
+                        + " near LTP " + ltp + " (otmPct=" + effectiveOtmPct + ")"));
 
         return ResolvedInstrument.builder()
                 .tradingSymbol(atm.getTradingsymbol())
