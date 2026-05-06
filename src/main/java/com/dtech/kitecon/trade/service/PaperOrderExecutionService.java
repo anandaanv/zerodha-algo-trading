@@ -126,6 +126,10 @@ public class PaperOrderExecutionService {
                         resolved.getTradingSymbol(), e.getMessage(), e);
                 // Order stays as paper trade — don't crash the flow
             }
+        } else {
+            // Not a live order — explicitly mark as paper so exit doesn't fire real orders
+            order.setPaperTrade(true);
+            tradeOrderRepository.save(order);
         }
 
         return order;
