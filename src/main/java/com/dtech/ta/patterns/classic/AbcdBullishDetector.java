@@ -147,6 +147,9 @@ public class AbcdBullishDetector implements ClassicPatternDetector<AbcdPattern> 
             patternPivots.add(aPivot);
             patternPivots.add(bPivot);
             patternPivots.add(cPivot);
+            // Add synthetic D pivot at current bar
+            PivotPoint dPivot = new PivotPoint(dBarIndex, series.getBar(dBarIndex).getEndTime(), dPrice, PivotType.LOW);
+            patternPivots.add(dPivot);
 
             AbcdPattern pattern = new AbcdPattern(
                 Direction.BULLISH,

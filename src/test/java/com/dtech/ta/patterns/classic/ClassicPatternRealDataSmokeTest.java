@@ -60,15 +60,7 @@ class ClassicPatternRealDataSmokeTest {
                         series,
                         new ClassicPivotExtractor()
                 );
-                List<ClassicPattern> patterns;
-                try {
-                    patterns = scanner.scanAll(LOOKBACK_BARS);
-                } catch (IllegalArgumentException e) {
-                    // Known issue: some detectors may create invalid patterns (e.g., BAT with < 5 pivots)
-                    // Capture the error but don't fail the test; report it
-                    System.err.println("Warning: Scanner validation error for " + symbol + ": " + e.getMessage());
-                    patterns = new ArrayList<>();
-                }
+                List<ClassicPattern> patterns = scanner.scanAll(LOOKBACK_BARS);
                 assertNotNull(patterns, "Scanner returned null for " + symbol);
 
                 // Collect metrics

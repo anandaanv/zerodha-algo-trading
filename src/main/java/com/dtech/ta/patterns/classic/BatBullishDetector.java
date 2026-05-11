@@ -171,6 +171,9 @@ public class BatBullishDetector implements ClassicPatternDetector<BatPattern> {
             patternPivots.add(aPivot);
             patternPivots.add(bPivot);
             patternPivots.add(cPivot);
+            // Add synthetic D pivot at current bar
+            PivotPoint dPivot = new PivotPoint(dBarIndex, series.getBar(dBarIndex).getEndTime(), dPrice, PivotType.LOW);
+            patternPivots.add(dPivot);
 
             BatPattern pattern = new BatPattern(
                 Direction.BULLISH,
