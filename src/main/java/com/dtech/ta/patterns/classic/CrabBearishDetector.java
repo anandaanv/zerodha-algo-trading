@@ -140,6 +140,9 @@ public class CrabBearishDetector implements ClassicPatternDetector<CrabPattern> 
             patternPivots.add(aPivot);
             patternPivots.add(bPivot);
             patternPivots.add(cPivot);
+            // Add synthetic D pivot at current bar
+            PivotPoint dPivot = new PivotPoint(dBarIndex, series.getBar(dBarIndex).getEndTime(), dPrice, PivotType.HIGH);
+            patternPivots.add(dPivot);
 
             CrabPattern pattern = new CrabPattern(
                 Direction.BEARISH,

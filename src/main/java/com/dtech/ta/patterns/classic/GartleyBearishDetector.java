@@ -166,6 +166,9 @@ public class GartleyBearishDetector implements ClassicPatternDetector<GartleyPat
             patternPivots.add(aPivot);
             patternPivots.add(bPivot);
             patternPivots.add(cPivot);
+            // Add synthetic D pivot at current bar
+            PivotPoint dPivot = new PivotPoint(dBarIndex, series.getBar(dBarIndex).getEndTime(), dPrice, PivotType.HIGH);
+            patternPivots.add(dPivot);
 
             GartleyPattern pattern = new GartleyPattern(
                 Direction.BEARISH,
