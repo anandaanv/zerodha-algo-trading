@@ -90,6 +90,7 @@ export default function SimulationViewer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const patternLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
   // Fetch runs index on mount
   useEffect(() => {
@@ -175,6 +176,11 @@ export default function SimulationViewer() {
     if (!selectedTrade || !containerRef.current) return;
 
     if (chartRef.current) {
+      // Clean up previous line series if it exists
+      if (patternLineSeriesRef.current) {
+        chartRef.current.removeSeries(patternLineSeriesRef.current);
+        patternLineSeriesRef.current = null;
+      }
       chartRef.current.remove();
     }
 
@@ -205,6 +211,26 @@ export default function SimulationViewer() {
 
     candleSeries.setData(candleData);
     candleSeriesRef.current = candleSeries;
+
+    // Create pattern line series connecting pivots
+    if (selectedTrade.pattern_pivots.length > 1) {
+      const patternLineSeries = chart.addLineSeries({
+        color: "#ff9800",
+        lineWidth: 2,
+        crosshairMarkerVisible: true,
+      });
+
+      // Convert pattern pivots to line series format
+      const patternLineData = selectedTrade.pattern_pivots.map((pivot) => ({
+        time: Math.floor(
+          new Date(pivot.timestamp).getTime() / 1000
+        ) as Time,
+        value: pivot.price,
+      }));
+
+      patternLineSeries.setData(patternLineData);
+      patternLineSeriesRef.current = patternLineSeries;
+    }
 
     // Add markers
     const markers: SeriesMarker<Time>[] = [];
