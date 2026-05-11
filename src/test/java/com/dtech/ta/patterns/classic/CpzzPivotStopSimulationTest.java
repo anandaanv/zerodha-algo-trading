@@ -61,6 +61,8 @@ class CpzzPivotStopSimulationTest {
         Arm pivotClose = new Arm("C: CPZZ-pivot SL + close trigger");
         Arm headClose = new Arm("D: Head SL + close trigger");
         Arm pivotCloseScaledTarget = new Arm("E: CPZZ-pivot SL + close trigger + 2x-stop target");
+        Arm rsClose = new Arm("F: Right-shoulder SL + close trigger");
+        Arm rsCloseScaledTarget = new Arm("G: Right-shoulder SL + close + 2x-stop target");
 
         try (var stream = Files.newDirectoryStream(DATA_DIR, "*.csv")) {
             for (Path csv : stream) {
@@ -72,23 +74,27 @@ class CpzzPivotStopSimulationTest {
 
                 for (HnsPattern p : new HnsClassicDetector().findAll(series, pivots, series.getBarCount())) {
                     simulate(sym, p, pivots, series, false,
-                            headIntrabar, pivotIntrabar, pivotClose, headClose, pivotCloseScaledTarget);
+                            headIntrabar, pivotIntrabar, pivotClose, headClose, pivotCloseScaledTarget,
+                            rsClose, rsCloseScaledTarget);
                 }
                 for (ReverseHnsPattern p : new ReverseHnsClassicDetector().findAll(series, pivots, series.getBarCount())) {
                     simulate(sym, p, pivots, series, true,
-                            headIntrabar, pivotIntrabar, pivotClose, headClose, pivotCloseScaledTarget);
+                            headIntrabar, pivotIntrabar, pivotClose, headClose, pivotCloseScaledTarget,
+                            rsClose, rsCloseScaledTarget);
                 }
             }
         }
 
         print(headIntrabar); print(pivotIntrabar); print(pivotClose);
         print(headClose); print(pivotCloseScaledTarget);
+        print(rsClose); print(rsCloseScaledTarget);
         System.out.println("\n========== COMPARISON ==========");
-        System.out.printf("  %-44s %10s %10s %10s%n", "arm", "trades", "win%", "total P/L");
-        for (Arm a : new Arm[]{headIntrabar, pivotIntrabar, pivotClose, headClose, pivotCloseScaledTarget}) {
+        System.out.printf("  %-50s %10s %10s %10s%n", "arm", "trades", "win%", "total P/L");
+        for (Arm a : new Arm[]{headIntrabar, pivotIntrabar, pivotClose, headClose,
+                pivotCloseScaledTarget, rsClose, rsCloseScaledTarget}) {
             if (a.trades == 0) continue;
-            System.out.printf("  %-44s %10d %9.0f%% %+9.2f%%%n",
-                    truncate(a.name, 44), a.trades, 100.0 * a.wins / a.trades, a.pnlSum);
+            System.out.printf("  %-50s %10d %9.0f%% %+9.2f%%%n",
+                    truncate(a.name, 50), a.trades, 100.0 * a.wins / a.trades, a.pnlSum);
         }
 
         assertFalse(pivotClose.trades == 0, "Pivot-close arm produced no trades");
@@ -96,7 +102,8 @@ class CpzzPivotStopSimulationTest {
 
     private void simulate(String sym, ClassicPattern p, List<PivotPoint> pivots, BarSeries full,
                           boolean bullishPattern, Arm headIntrabar, Arm pivotIntrabar, Arm pivotClose,
-                          Arm headClose, Arm pivotCloseScaledTarget) {
+                          Arm headClose, Arm pivotCloseScaledTarget,
+                          Arm rsClose, Arm rsCloseScaledTarget) {
         int eBar = p.pivots().get(4).barIndex();
         if (eBar + 5 >= full.getBarCount()) return;
 
@@ -145,16 +152,26 @@ class CpzzPivotStopSimulationTest {
         }
         if (pivotStop == null) return;
 
-        // Run five simulations
+        // Right shoulder price — the structural invalidation level. For HNS short, this is
+        // the right-shoulder HIGH (E pivot); for REV_HNS long, the right-shoulder LOW.
+        double rsPrice = p.pivots().get(4).price();
+
+        // Run all simulations
         simulateTrade(headIntrabar, retestBar, entry, bullishPattern, headPrice, target, full, /*onClose*/ false);
         simulateTrade(pivotIntrabar, retestBar, entry, bullishPattern, pivotStop, target, full, /*onClose*/ false);
         simulateTrade(pivotClose, retestBar, entry, bullishPattern, pivotStop, target, full, /*onClose*/ true);
         simulateTrade(headClose, retestBar, entry, bullishPattern, headPrice, target, full, /*onClose*/ true);
 
-        // Arm E: pivot SL + close trigger + target scaled to 2x stop distance for proper R:R
+        // Arm E: pivot SL + close trigger + target scaled to 2x stop distance
         double stopDist = Math.abs(entry - pivotStop);
         double scaledTarget = bullishPattern ? entry + 2.0 * stopDist : entry - 2.0 * stopDist;
         simulateTrade(pivotCloseScaledTarget, retestBar, entry, bullishPattern, pivotStop, scaledTarget, full, /*onClose*/ true);
+
+        // Arms F and G: right-shoulder SL (the structurally correct invalidation level)
+        simulateTrade(rsClose, retestBar, entry, bullishPattern, rsPrice, target, full, /*onClose*/ true);
+        double rsStopDist = Math.abs(entry - rsPrice);
+        double rsScaledTarget = bullishPattern ? entry + 2.0 * rsStopDist : entry - 2.0 * rsStopDist;
+        simulateTrade(rsCloseScaledTarget, retestBar, entry, bullishPattern, rsPrice, rsScaledTarget, full, /*onClose*/ true);
     }
 
     private void simulateTrade(Arm arm, int entryBar, double entry, boolean longSide,
