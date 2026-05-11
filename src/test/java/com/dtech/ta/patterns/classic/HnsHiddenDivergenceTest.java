@@ -27,15 +27,18 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * Reverse-HNS pattern, if RSI shows a "hidden divergence" pattern relative to
  * the right shoulder, the retest is fake and we should take the REVERSE trade.
  *
- * Divergence definitions used here (Bulkowski/standard convention):
+ * Divergence is measured between the LEFT SHOULDER pivot (A) and the
+ * RIGHT SHOULDER pivot (E) — i.e., across the full pattern formation.
  *
- *   HIDDEN BEARISH at HNS retest (price LH + RSI HH between E and retest peak):
- *     Standard interpretation: confirms downtrend continuation (HNS works).
- *     The trader's interpretation: signals fake retest → LONG reverse trade.
+ *   HNS (bearish): A and E are both HIGH pivots at roughly equal price.
+ *     If RSI at E is meaningfully HIGHER than RSI at A while price is
+ *     similar or lower, momentum is increasing despite the bearish
+ *     pattern shape → hidden bearish per Bulkowski but the trader reads
+ *     it as "pattern won't follow through" → reverse to LONG.
  *
- *   HIDDEN BULLISH at REV_HNS retest (price HL + RSI LL between E and retest trough):
- *     Standard interpretation: confirms uptrend continuation (REV_HNS works).
- *     The trader's interpretation: signals fake retest → SHORT reverse trade.
+ *   REV_HNS (bullish): A and E are both LOW pivots.
+ *     If RSI at E is meaningfully LOWER than RSI at A, momentum is
+ *     decreasing despite the bullish pattern → reverse to SHORT.
  *
  * We measure BOTH interpretations as separate arms.
  *
@@ -131,22 +134,23 @@ class HnsHiddenDivergenceTest {
         }
         if (retestBar < 0) return;
 
-        // RSI at right shoulder vs at retest
+        // RSI at left shoulder (A = pivots[0]) vs at right shoulder (E = pivots[4])
+        int aBar = pattern.pivots().get(0).barIndex();
+        double rsiAtA = rsi.getValue(aBar).doubleValue();
         double rsiAtE = rsi.getValue(eBar).doubleValue();
-        double rsiAtRetest = rsi.getValue(retestBar).doubleValue();
 
-        // Divergence detection:
-        //   HNS (price LH at retest vs E):
-        //     hidden bearish: rsi_retest > rsi_E (RSI HH while price LH)
-        //   REV_HNS (price HL at retest vs E):
-        //     hidden bullish: rsi_retest < rsi_E (RSI LL while price HL)
+        // Divergence detection between A and E (start of LS to end of RS):
+        //   HNS (price LS and RS both HIGH, comparable price):
+        //     trader's reverse-trigger: RSI_E > RSI_A by threshold
+        //     (momentum rising across pattern — bullish underneath)
+        //   REV_HNS (price LS and RS both LOW, comparable price):
+        //     trader's reverse-trigger: RSI_A > RSI_E by threshold
+        //     (momentum falling across pattern — bearish underneath)
         boolean divergencePresent;
         if (bullishPattern) {
-            // REV_HNS: hidden bullish if RSI made lower low while price made higher low
-            divergencePresent = (rsiAtE - rsiAtRetest) > DIVERGENCE_THRESHOLD_RSI;
+            divergencePresent = (rsiAtA - rsiAtE) > DIVERGENCE_THRESHOLD_RSI;
         } else {
-            // HNS: hidden bearish if RSI made higher high while price made lower high
-            divergencePresent = (rsiAtRetest - rsiAtE) > DIVERGENCE_THRESHOLD_RSI;
+            divergencePresent = (rsiAtE - rsiAtA) > DIVERGENCE_THRESHOLD_RSI;
         }
 
         double entry = full.getBar(retestBar).getClosePrice().doubleValue();
