@@ -79,6 +79,10 @@ public abstract class BarsLoader {
   }
 
     public static Bar getBar(double open, double high, double low, double close, double volume, Instant timestamp) {
+        return getBar(open, high, low, close, volume, timestamp, Duration.ofDays(1));
+    }
+
+    public static Bar getBar(double open, double high, double low, double close, double volume, Instant timestamp, Duration period) {
         return new TimeBarBuilder(DecimalNumFactory.getInstance())
                 .openPrice(open)
                 .closePrice(close)
@@ -86,7 +90,7 @@ public abstract class BarsLoader {
                 .lowPrice(low)
                 .volume(volume)
                 .endTime(timestamp)
-                .timePeriod(Duration.ofDays(1))
+                .timePeriod(period)
                 .build();
     }
 
