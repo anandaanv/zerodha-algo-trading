@@ -178,3 +178,6 @@ clean_impulse_train_data/
 zigzag_pivots/
 elliott_train_data.tar.xz
 deploy_artifacts/
+
+# TradingView charting library (licensed; not redistributable)
+ui/chart-draw-app/charting_library/
