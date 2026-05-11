@@ -55,6 +55,11 @@ public class GartleyBullishDetector implements ClassicPatternDetector<GartleyPat
         }
 
         PivotPoint xPivot = pivots.get(xIdx);
+        if (xPivot.type() != PivotType.LOW) {
+            xIdx = findLowestPivotIndexAfter(pivots, xIdx + 1);
+            if (xIdx < 0) return patterns;
+            xPivot = pivots.get(xIdx);
+        }
         double xPrice = xPivot.price();
 
         while (true) {

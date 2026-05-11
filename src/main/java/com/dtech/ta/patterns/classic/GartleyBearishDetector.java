@@ -55,6 +55,11 @@ public class GartleyBearishDetector implements ClassicPatternDetector<GartleyPat
         }
 
         PivotPoint xPivot = pivots.get(xIdx);
+        if (xPivot.type() != PivotType.HIGH) {
+            xIdx = findHighestPivotIndexAfter(pivots, xIdx + 1);
+            if (xIdx < 0) return patterns;
+            xPivot = pivots.get(xIdx);
+        }
         double xPrice = xPivot.price();
 
         while (true) {

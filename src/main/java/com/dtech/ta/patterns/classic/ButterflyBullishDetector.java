@@ -52,6 +52,7 @@ public class ButterflyBullishDetector implements ClassicPatternDetector<Butterfl
 
         for (int xIdx = 0; xIdx < pivots.size(); xIdx++) {
             PivotPoint xPivot = pivots.get(xIdx);
+            if (xPivot.type() != PivotType.LOW) continue;
             double xPrice = xPivot.price();
 
             int posAfterX = xIdx + 1;

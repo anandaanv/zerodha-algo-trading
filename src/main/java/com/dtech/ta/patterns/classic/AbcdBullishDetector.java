@@ -55,6 +55,11 @@ public class AbcdBullishDetector implements ClassicPatternDetector<AbcdPattern> 
         }
 
         PivotPoint aPivot = pivots.get(aIdx);
+        if (aPivot.type() != PivotType.HIGH) {
+            aIdx = findHighestPivotIndexAfter(pivots, aIdx + 1);
+            if (aIdx < 0) return patterns;
+            aPivot = pivots.get(aIdx);
+        }
         double aPrice = aPivot.price();
 
         while (true) {

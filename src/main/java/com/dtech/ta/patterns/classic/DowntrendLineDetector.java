@@ -17,7 +17,8 @@ public class DowntrendLineDetector implements ClassicPatternDetector<TrendlinePa
 
     private static final double TOUCHPOINT_TOLERANCE_RATIO = 0.3;
     private static final double BREACH_TOLERANCE_RATIO = 0.5;
-    private static final int MIN_TOUCHPOINT_COUNT = 2;
+    private static final int MIN_TOUCHPOINT_COUNT = 3;
+    private static final int MIN_SPAN_BARS = 20;
 
     @Override
     public Optional<TrendlinePattern> findLatest(BarSeries series, List<PivotPoint> pivots, int lookbackBars) {
@@ -61,6 +62,11 @@ public class DowntrendLineDetector implements ClassicPatternDetector<TrendlinePa
 
                 // Downtrend: second pivot must be lower than first
                 if (b.price() >= a.price()) {
+                    continue;
+                }
+
+                // Require minimum span between anchors
+                if (b.barIndex() - a.barIndex() < MIN_SPAN_BARS) {
                     continue;
                 }
 
