@@ -13,6 +13,7 @@ public sealed interface ClassicPattern
     permits TrianglePattern, HnsPattern, ReverseHnsPattern, DoubleTopPattern, DoubleBottomPattern,
         BullishVcpPattern, BearishVcpPattern,
         BullishFlagPattern, BearishFlagPattern, TrendlinePattern,
+        CupAndHandlePattern,
         AbcdPattern, BatPattern,
         GartleyPattern, CrabPattern, ButterflyPattern {
 

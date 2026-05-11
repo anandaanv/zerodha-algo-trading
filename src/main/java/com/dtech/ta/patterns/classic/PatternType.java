@@ -16,6 +16,7 @@ public enum PatternType {
     BEARISH_FLAG,
     UPTREND_LINE,
     DOWNTREND_LINE,
+    CUP_AND_HANDLE,
     BULLISH_ABCD,
     BEARISH_ABCD,
     BULLISH_BAT,

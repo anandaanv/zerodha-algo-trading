@@ -533,4 +533,27 @@ public class ClassicPatternTestData {
         }
         return buildSeries(highs, lows, closes, volumes);
     }
+
+    /**
+     * Build a Cup and Handle series with clear pattern formation.
+     * Extended to 35+ bars for better pivot extraction.
+     * Expected pivots:
+     * A (LEFT RIM, HIGH) ~ bar 5-8: 100
+     * B (CUP BOTTOM, LOW) ~ bar 12-14: 60
+     * C (RIGHT RIM, HIGH) ~ bar 20: 98 (roughly equal to A)
+     * D (HANDLE BOTTOM, LOW) ~ bar 25: 82 (shallower than cup)
+     */
+    public static BarSeries buildCupAndHandleSeries() {
+        double[] highs = {90, 92, 94, 96, 98, 100, 99, 98, 96, 85, 75, 65, 60, 62, 65, 75, 85, 92, 97, 98, 97, 96,
+                          94, 92, 90, 82, 85, 88, 90, 92, 94};
+        double[] lows = {80, 82, 84, 86, 88, 90, 89, 88, 86, 75, 65, 55, 50, 52, 55, 65, 75, 82, 87, 88, 87, 86,
+                         84, 82, 80, 72, 75, 78, 80, 82, 84};
+        double[] closes = {85, 87, 89, 91, 93, 96, 95, 94, 92, 81, 71, 61, 56, 59, 62, 72, 82, 89, 94, 96, 95, 94,
+                           92, 90, 88, 80, 83, 86, 88, 90, 92};
+        double[] volumes = new double[closes.length];
+        for (int i = 0; i < volumes.length; i++) {
+            volumes[i] = 1000.0;
+        }
+        return buildSeries(highs, lows, closes, volumes);
+    }
 }

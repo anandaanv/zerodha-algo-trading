@@ -141,6 +141,15 @@ public class ClassicPatternScanner {
             }
         }
 
+        if (include.contains(PatternType.CUP_AND_HANDLE)) {
+            try {
+                CupAndHandleDetector cupAndHandleDetector = new CupAndHandleDetector();
+                results.addAll(cupAndHandleDetector.findAll(series, pivots, lookbackBars));
+            } catch (Exception e) {
+                System.err.println("Detector CUP_AND_HANDLE failed for " + series.getName() + ": " + e.getMessage());
+            }
+        }
+
         if (include.contains(PatternType.BULLISH_ABCD)) {
             try {
                 AbcdBullishDetector abcdBullishDetector = new AbcdBullishDetector();
