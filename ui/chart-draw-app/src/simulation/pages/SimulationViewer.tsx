@@ -1,26 +1,28 @@
-import React, { useState, useEffect, useRef } from "react";
-import {
-  createChart,
-  type IChartApi,
-  type ISeriesApi,
-  type SeriesMarker,
-  type Time,
-} from "lightweight-charts";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { getApiUrl } from "../../config/api";
 import { withAuth } from "../../utils/apiHelper";
+import TVChartContainer from "../../tradingview/TVChartContainer";
+// Daily MACD HTF approach: now using native MACD with 6× periods (72/156/54) instead of
+// the custom-indicator route. Keeping the imports commented for reference.
+// import { createDailyMacdIndicator, DailyMacdMap } from "../../tradingview/dailyMacdIndicator";
+// import { fetchOHLC } from "../../tradingview/tvApi";
+// import { macd } from "../indicators";
 
 interface RunSummary {
   run_id: string;
+  strategy_name: string;
+  timeframe: string;
   stocks_count: number;
   total_trades: number;
   wins: number;
   losses: number;
   total_pnl_pct: number;
-  win_rate_pct: number;
+  win_rate_pct?: number;
   created_at: string;
 }
 
 interface IndexData {
+  source: string;
   runs: RunSummary[];
 }
 
@@ -42,7 +44,15 @@ interface BarData {
   volume: number;
 }
 
+interface TriggerMeta {
+  trigger_macd_cross_date_daily?: string;
+  trigger_stochrsi_sat_time_hourly?: string;
+  hourly_bars_from_trigger_to_candle?: number;
+  hourly_bars_from_candle_to_entry?: number;
+}
+
 interface Trade {
+  id?: string;
   symbol: string;
   pattern_type: "HNS" | "REV_HNS";
   direction: "LONG" | "SHORT";
@@ -59,6 +69,7 @@ interface Trade {
   was_winner: boolean;
   holding_bars: number;
   pattern_pivots: PivotData[];
+  trigger_meta?: TriggerMeta;
   bars_around: BarData[];
 }
 
@@ -71,7 +82,14 @@ interface RunData {
   wins: number;
   losses: number;
   total_pnl_pct: number;
-  trades: Trade[];
+}
+
+interface TradesPage {
+  content: Trade[];
+  number: number;
+  size: number;
+  totalPages: number;
+  source: string;
 }
 
 type FilterType = "all" | "winners" | "losers" | "stop" | "target" | "timeout";
@@ -82,15 +100,20 @@ export default function SimulationViewer() {
   const [selectedRun, setSelectedRun] = useState<RunData | null>(null);
   const [filteredTrades, setFilteredTrades] = useState<Trade[]>([]);
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
+  const [selectedTradeLoading, setSelectedTradeLoading] = useState(false);
 
   const [filterType, setFilterType] = useState<FilterType>("all");
   const [selectedSymbol, setSelectedSymbol] = useState<string>("");
   const [sortType, setSortType] = useState<SortType>("pnl");
 
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const patternLineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pageSize] = useState(100);
+  const [tradesLoading, setTradesLoading] = useState(false);
+
+  // (Daily MACD HTF state removed — using native MACD(84,182,63) on hourly chart)
+
 
   // Fetch runs index on mount
   useEffect(() => {
@@ -112,7 +135,7 @@ export default function SimulationViewer() {
     fetchIndex();
   }, []);
 
-  // Fetch selected run data
+  // Fetch selected run metadata
   const handleSelectRun = async (run: RunSummary) => {
     try {
       const res = await fetch(
@@ -123,203 +146,119 @@ export default function SimulationViewer() {
         const data: RunData = await res.json();
         setSelectedRun(data);
         setSelectedTrade(null);
-        applyFiltersAndSort(data.trades);
+        setPage(0);
+        setTotalPages(0);
+        setFilteredTrades([]);
+        // Fetch first page of trades
+        fetchTradesPage(run.run_id, 0);
       }
     } catch (e) {
-      console.error("Failed to fetch run data:", e);
+      console.error("Failed to fetch run metadata:", e);
     }
   };
 
-  // Apply filters and sorting
-  const applyFiltersAndSort = (trades: Trade[]) => {
-    let filtered = trades;
-
-    // Apply exit reason filter
-    if (filterType !== "all") {
-      filtered = filtered.filter((t) => {
-        if (filterType === "winners") return t.was_winner;
-        if (filterType === "losers") return !t.was_winner;
-        if (filterType === "stop") return t.exit_reason === "STOP";
-        if (filterType === "target") return t.exit_reason === "TARGET";
-        if (filterType === "timeout") return t.exit_reason === "TIMEOUT";
-        return true;
-      });
-    }
-
-    // Apply symbol filter
-    if (selectedSymbol) {
-      filtered = filtered.filter((t) => t.symbol === selectedSymbol);
-    }
-
-    // Apply sorting
-    if (sortType === "pnl") {
-      filtered.sort((a, b) => b.pnl_pct - a.pnl_pct);
-    } else {
-      filtered.sort(
-        (a, b) =>
-          new Date(a.entry_time).getTime() -
-          new Date(b.entry_time).getTime()
+  // Fetch paginated trades for the selected run
+  const fetchTradesPage = async (runId: string, pageNum: number) => {
+    setTradesLoading(true);
+    try {
+      const res = await fetch(
+        getApiUrl(`/api/simulation-results/${runId}/trades?page=${pageNum}&size=${pageSize}`).toString(),
+        withAuth()
       );
+      if (res.ok) {
+        const data: TradesPage = await res.json();
+        setFilteredTrades(data.content);
+        setTotalPages(data.totalPages);
+        setPage(pageNum);
+      }
+    } catch (e) {
+      console.error("Failed to fetch trades page:", e);
+    } finally {
+      setTradesLoading(false);
     }
-
-    setFilteredTrades(filtered);
   };
 
-  useEffect(() => {
-    if (selectedRun) {
-      applyFiltersAndSort(selectedRun.trades);
-    }
-  }, [filterType, selectedSymbol, sortType, selectedRun]);
-
-  // Render chart when trade is selected
-  useEffect(() => {
-    if (!selectedTrade || !containerRef.current) return;
-
-    if (chartRef.current) {
-      // Clean up previous line series if it exists
-      if (patternLineSeriesRef.current) {
-        chartRef.current.removeSeries(patternLineSeriesRef.current);
-        patternLineSeriesRef.current = null;
+  // Fetch full trade with bars_around when clicked
+  const handleSelectTrade = async (trade: Trade) => {
+    if (!selectedRun) return;
+    setSelectedTradeLoading(true);
+    try {
+      const res = await fetch(
+        getApiUrl(`/api/simulation-results/${selectedRun.run_id}/trades/${trade.id}`).toString(),
+        withAuth()
+      );
+      if (res.ok) {
+        const fullTrade: Trade = await res.json();
+        setSelectedTrade(fullTrade);
       }
-      chartRef.current.remove();
+    } catch (e) {
+      console.error("Failed to fetch trade details:", e);
+    } finally {
+      setSelectedTradeLoading(false);
     }
-
-    const chart = createChart(containerRef.current, {
-      layout: { background: { color: "#fff" } },
-      width: containerRef.current.clientWidth,
-      height: 500,
-      timeScale: { timeVisible: true, secondsVisible: false },
-    });
-
-    const candleSeries = chart.addCandlestickSeries({
-      upColor: "#26a69a",
-      downColor: "#ef5350",
-      borderUpColor: "#26a69a",
-      borderDownColor: "#ef5350",
-      wickUpColor: "#26a69a",
-      wickDownColor: "#ef5350",
-    });
-
-    // Convert bars to chart format
-    const candleData = selectedTrade.bars_around.map((bar) => ({
-      time: Math.floor(new Date(bar.timestamp).getTime() / 1000) as Time,
-      open: bar.open,
-      high: bar.high,
-      low: bar.low,
-      close: bar.close,
-    }));
-
-    candleSeries.setData(candleData);
-    candleSeriesRef.current = candleSeries;
-
-    // Create pattern line series connecting pivots
-    if (selectedTrade.pattern_pivots.length > 1) {
-      const patternLineSeries = chart.addLineSeries({
-        color: "#ff9800",
-        lineWidth: 2,
-        crosshairMarkerVisible: true,
-      });
-
-      // Convert pattern pivots to line series format
-      const patternLineData = selectedTrade.pattern_pivots.map((pivot) => ({
-        time: Math.floor(
-          new Date(pivot.timestamp).getTime() / 1000
-        ) as Time,
-        value: pivot.price,
-      }));
-
-      patternLineSeries.setData(patternLineData);
-      patternLineSeriesRef.current = patternLineSeries;
-    }
-
-    // Add markers
-    const markers: SeriesMarker<Time>[] = [];
-
-    // Add pattern pivots
-    selectedTrade.pattern_pivots.forEach((pivot) => {
-      const time = Math.floor(
-        new Date(pivot.timestamp).getTime() / 1000
-      ) as Time;
-      markers.push({
-        time,
-        position: pivot.type === "HIGH" ? "aboveBar" : "belowBar",
-        color: pivot.type === "HIGH" ? "#ff6b6b" : "#4ecdc4",
-        shape: "circle",
-        text: pivot.label,
-      });
-    });
-
-    // Add entry marker
-    const entryTime = Math.floor(
-      new Date(selectedTrade.entry_time).getTime() / 1000
-    ) as Time;
-    markers.push({
-      time: entryTime,
-      position: selectedTrade.direction === "LONG" ? "belowBar" : "aboveBar",
-      color: "#0084ff",
-      shape: "arrowUp",
-      text: "Entry",
-    });
-
-    // Add exit marker
-    const exitTime = Math.floor(
-      new Date(selectedTrade.exit_time).getTime() / 1000
-    ) as Time;
-    const exitColor =
-      selectedTrade.exit_reason === "TARGET"
-        ? "#52c41a"
-        : selectedTrade.exit_reason === "STOP"
-          ? "#ff4d4f"
-          : "#9ca3af";
-    markers.push({
-      time: exitTime,
-      position: "inBar",
-      color: exitColor,
-      shape: "circle",
-      text: selectedTrade.exit_reason,
-    });
-
-    candleSeries.setMarkers(markers);
-
-    // Add price lines for stop and target
-    candleSeries.createPriceLine({
-      price: selectedTrade.stop_initial,
-      color: "#ff4d4f",
-      lineWidth: 2,
-      lineStyle: 2,
-      title: "Stop",
-    });
-
-    candleSeries.createPriceLine({
-      price: selectedTrade.target_initial,
-      color: "#52c41a",
-      lineWidth: 2,
-      lineStyle: 2,
-      title: "Target",
-    });
-
-    chart.timeScale().fitContent();
-    chartRef.current = chart;
-
-    const handleResize = () => {
-      if (containerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: containerRef.current.clientWidth,
-        });
-      }
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [selectedTrade]);
-
-  const getUniqueSymbols = (): string[] => {
-    if (!selectedRun) return [];
-    return Array.from(new Set(selectedRun.trades.map((t) => t.symbol))).sort();
   };
+
+  // Handle pagination changes
+  const handlePageChange = (newPage: number) => {
+    if (selectedRun && newPage >= 0 && newPage < totalPages) {
+      fetchTradesPage(selectedRun.run_id, newPage);
+    }
+  };
+
+  // Daily-equivalent MACD now uses native MACD(72, 156, 54) on hourly chart
+  // (= 12/26/9 × 6 hourly bars per trading day). No daily fetch / custom indicator needed.
+  const customIndicators = useMemo(() => [], []);
+
+  // Compute chart props when trade is selected
+  const getChartProps = () => {
+    if (!selectedTrade) {
+      return { tradeMarkers: undefined, visibleRange: undefined, autoStudies: [] };
+    }
+
+    const entrySec = Math.floor(new Date(selectedTrade.entry_time).getTime() / 1000);
+    const exitSec = Math.floor(new Date(selectedTrade.exit_time).getTime() / 1000);
+
+    const tradeMarkers = {
+      entryTime: entrySec,
+      entryPrice: selectedTrade.entry_price,
+      direction: selectedTrade.direction,
+      stopPrice: selectedTrade.stop_initial,
+      targetPrice: selectedTrade.target_initial,
+      exitTime: exitSec,
+      exitProfitable: selectedTrade.pnl_pct > 0,
+    };
+
+    // Place entry at ~25% from left with 100 prior hourly bars visible (~14 trading days).
+    // Window total ≈ 56 calendar days so post-trade context is also generous.
+    // TradingView's datafeed lazy-loads beyond this range as the user scrolls.
+    const DAY_SEC = 24 * 60 * 60;
+    const visibleRange = {
+      from: entrySec - 14 * DAY_SEC,
+      to: entrySec + 42 * DAY_SEC,
+    };
+
+    // Use default inputs (just length where needed). Passing wrong input format
+    // makes TradingView silently reject the study — defaults always work.
+    const autoStudies = [
+      // EMA's length input is keyed as "length" (per discovery log)
+      { name: "Moving Average Exponential", inputs: { length: 10 } as any },
+      { name: "Moving Average Exponential", inputs: { length: 50 } as any },
+      { name: "Moving Average Exponential", inputs: { length: 100 } as any },
+      { name: "Bollinger Bands" },
+      { name: "MACD" },
+      // Daily-equivalent MACD (84/182/63). TradingView input IDs:
+      //   in_0 = Fast Length, in_1 = Slow Length, in_2 = Signal Smoothing,
+      //   in_3 = Source, oscillatorMAType/signalLineMAType for MA types.
+      { name: "MACD", inputs: { in_0: 84, in_1: 182, in_2: 63 } as any },
+      { name: "Relative Strength Index" },
+      { name: "Stochastic RSI" },
+    ];
+
+    return { tradeMarkers, visibleRange, autoStudies };
+  };
+
+  const { tradeMarkers, visibleRange, autoStudies } = getChartProps();
+
 
   return (
     <div style={{ display: "flex", height: "100vh", background: "#f5f5f5" }}>
@@ -358,7 +297,7 @@ export default function SimulationViewer() {
                 <div style={{ color: run.total_pnl_pct > 0 ? "#52c41a" : "#ff4d4f" }}>
                   P/L: {run.total_pnl_pct.toFixed(2)}%
                 </div>
-                <div>Win Rate: {run.win_rate_pct.toFixed(1)}%</div>
+                <div>Win Rate: {(run.total_trades > 0 ? (run.wins / run.total_trades) * 100 : 0).toFixed(1)}%</div>
               </div>
             ))}
           </div>
@@ -366,212 +305,215 @@ export default function SimulationViewer() {
 
         {selectedRun && (
           <div style={{ marginTop: "2rem" }}>
-            <h3>Filters</h3>
-            <div style={{ marginBottom: "1rem" }}>
-              <label style={{ display: "block", marginBottom: "0.5rem" }}>
-                Exit Reason:
-              </label>
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value as FilterType)}
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  borderRadius: "4px",
-                  border: "1px solid #ddd",
-                }}
-              >
-                <option value="all">All</option>
-                <option value="winners">Winners</option>
-                <option value="losers">Losers</option>
-                <option value="target">Target Hit</option>
-                <option value="stop">Stop Hit</option>
-                <option value="timeout">Timeout</option>
-              </select>
-            </div>
+            <h3>Trades (Page {page + 1} of {totalPages})</h3>
 
-            <div style={{ marginBottom: "1rem" }}>
-              <label style={{ display: "block", marginBottom: "0.5rem" }}>
-                Symbol:
-              </label>
-              <select
-                value={selectedSymbol}
-                onChange={(e) => setSelectedSymbol(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  borderRadius: "4px",
-                  border: "1px solid #ddd",
-                }}
-              >
-                <option value="">All Symbols</option>
-                {getUniqueSymbols().map((sym) => (
-                  <option key={sym} value={sym}>
-                    {sym}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {tradesLoading ? (
+              <p style={{ color: "#999" }}>Loading trades...</p>
+            ) : (
+              <>
+                <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                  {filteredTrades.map((trade) => (
+                    <div
+                      key={trade.id}
+                      onClick={() => handleSelectTrade(trade)}
+                      style={{
+                        padding: "0.75rem",
+                        margin: "0.5rem 0",
+                        background:
+                          selectedTrade?.id === trade.id ? "#fff3cd" : "#f9f9f9",
+                        border: "1px solid #ddd",
+                        borderRadius: "4px",
+                        cursor: selectedTradeLoading ? "wait" : "pointer",
+                        fontSize: "0.8rem",
+                        opacity: selectedTradeLoading && selectedTrade?.id === trade.id ? 0.6 : 1,
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{trade.symbol}</div>
+                      <div>
+                        {trade.pattern_type} {trade.direction}
+                      </div>
+                      <div
+                        style={{
+                          color: trade.pnl_pct > 0 ? "#52c41a" : "#ff4d4f",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {trade.pnl_pct > 0 ? "+" : ""}
+                        {trade.pnl_pct.toFixed(2)}%
+                      </div>
+                      <div style={{ color: "#666" }}>
+                        {trade.exit_reason} ({trade.holding_bars} bars)
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-            <div style={{ marginBottom: "1rem" }}>
-              <label style={{ display: "block", marginBottom: "0.5rem" }}>
-                Sort By:
-              </label>
-              <select
-                value={sortType}
-                onChange={(e) => setSortType(e.target.value as SortType)}
-                style={{
-                  width: "100%",
-                  padding: "0.5rem",
-                  borderRadius: "4px",
-                  border: "1px solid #ddd",
-                }}
-              >
-                <option value="pnl">P/L (Highest First)</option>
-                <option value="chronological">Chronological</option>
-              </select>
-            </div>
-
-            <h3>Trades ({filteredTrades.length})</h3>
-            <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-              {filteredTrades.map((trade, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => setSelectedTrade(trade)}
-                  style={{
-                    padding: "0.75rem",
-                    margin: "0.5rem 0",
-                    background:
-                      selectedTrade === trade ? "#fff3cd" : "#f9f9f9",
-                    border: "1px solid #ddd",
-                    borderRadius: "4px",
-                    cursor: "pointer",
-                    fontSize: "0.8rem",
-                  }}
-                >
-                  <div style={{ fontWeight: 600 }}>{trade.symbol}</div>
-                  <div>
-                    {trade.pattern_type} {trade.direction}
-                  </div>
-                  <div
+                {/* Pagination controls */}
+                <div style={{ marginTop: "1rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <button
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page === 0}
                     style={{
-                      color: trade.pnl_pct > 0 ? "#52c41a" : "#ff4d4f",
-                      fontWeight: 600,
+                      padding: "0.5rem 1rem",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      background: page === 0 ? "#f0f0f0" : "#fff",
+                      cursor: page === 0 ? "default" : "pointer",
+                      color: page === 0 ? "#999" : "#000",
                     }}
                   >
-                    {trade.pnl_pct > 0 ? "+" : ""}
-                    {trade.pnl_pct.toFixed(2)}%
-                  </div>
-                  <div style={{ color: "#666" }}>
-                    {trade.exit_reason} ({trade.holding_bars} bars)
-                  </div>
+                    Prev
+                  </button>
+                  <span style={{ fontSize: "0.9rem", color: "#666" }}>
+                    Page {page + 1} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages - 1}
+                    style={{
+                      padding: "0.5rem 1rem",
+                      borderRadius: "4px",
+                      border: "1px solid #ddd",
+                      background: page >= totalPages - 1 ? "#f0f0f0" : "#fff",
+                      cursor: page >= totalPages - 1 ? "default" : "pointer",
+                      color: page >= totalPages - 1 ? "#999" : "#000",
+                    }}
+                  >
+                    Next
+                  </button>
                 </div>
-              ))}
-            </div>
+              </>
+            )}
           </div>
         )}
       </div>
 
       {/* Right Panel - Trade Detail & Chart */}
       <div style={{ width: "75%", padding: "1.5rem", overflowY: "auto" }}>
-        {selectedTrade ? (
-          <div>
-            <h2 style={{ marginTop: 0 }}>{selectedTrade.symbol}</h2>
+        {selectedTradeLoading ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              height: "100%",
+              color: "#999",
+            }}
+          >
+            Loading trade details...
+          </div>
+        ) : selectedTrade ? (
+          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            {/* Single-line header: symbol + summary inline so chart owns the remaining height */}
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
-                gap: "1rem",
-                marginBottom: "1.5rem",
+                display: "flex",
+                alignItems: "baseline",
+                gap: "0.75rem",
+                flexWrap: "wrap",
+                padding: "0.4rem 0.6rem",
+                background: "#f9f9f9",
+                borderRadius: "4px",
+                marginBottom: "0.4rem",
+                fontSize: "0.85rem",
               }}
             >
-              <div style={{ background: "#f9f9f9", padding: "1rem", borderRadius: "4px" }}>
-                <div style={{ fontSize: "0.85rem", color: "#666" }}>Pattern</div>
-                <div style={{ fontWeight: 600, fontSize: "1.1rem" }}>
-                  {selectedTrade.pattern_type}
-                </div>
-                <div style={{ fontSize: "0.9rem", marginTop: "0.5rem" }}>
-                  {selectedTrade.direction}
-                </div>
-              </div>
-
-              <div style={{ background: "#f9f9f9", padding: "1rem", borderRadius: "4px" }}>
-                <div style={{ fontSize: "0.85rem", color: "#666" }}>Entry</div>
-                <div style={{ fontWeight: 600, fontSize: "1.1rem" }}>
-                  {selectedTrade.entry_price.toFixed(2)}
-                </div>
-                <div style={{ fontSize: "0.85rem", marginTop: "0.5rem", color: "#999" }}>
-                  {new Date(selectedTrade.entry_time).toLocaleString()}
-                </div>
-              </div>
-
-              <div style={{ background: "#f9f9f9", padding: "1rem", borderRadius: "4px" }}>
-                <div style={{ fontSize: "0.85rem", color: "#666" }}>Exit</div>
-                <div style={{ fontWeight: 600, fontSize: "1.1rem" }}>
-                  {selectedTrade.exit_price.toFixed(2)}
-                </div>
-                <div style={{ fontSize: "0.85rem", marginTop: "0.5rem", color: "#999" }}>
-                  {new Date(selectedTrade.exit_time).toLocaleString()}
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
-                gap: "1rem",
-                marginBottom: "1.5rem",
-              }}
-            >
-              <div style={{ background: "#f0f5ff", padding: "1rem", borderRadius: "4px" }}>
-                <div style={{ fontSize: "0.85rem", color: "#0050b3" }}>Stop Level</div>
-                <div style={{ fontWeight: 600, fontSize: "1rem" }}>
-                  {selectedTrade.stop_initial.toFixed(2)}
-                </div>
-              </div>
-
-              <div style={{ background: "#f6ffed", padding: "1rem", borderRadius: "4px" }}>
-                <div style={{ fontSize: "0.85rem", color: "#274000" }}>Target Level</div>
-                <div style={{ fontWeight: 600, fontSize: "1rem" }}>
-                  {selectedTrade.target_initial.toFixed(2)}
-                </div>
-              </div>
-
-              <div
+              <span style={{ fontWeight: 700, fontSize: "1.05rem" }}>{selectedTrade.symbol}</span>
+              <span style={{ color: "#666" }}>{selectedTrade.pattern_type} · {selectedTrade.direction}</span>
+              <span>
+                <strong>Entry</strong> {selectedTrade.entry_price.toFixed(2)}
+                <span style={{ color: "#666", fontSize: "0.78rem", marginLeft: 4 }}>
+                  ({new Date(selectedTrade.entry_time).toLocaleString("en-IN", {
+                    year: "numeric", month: "short", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit", hour12: false
+                  })})
+                </span>
+              </span>
+              <span>
+                <strong>Exit</strong> {selectedTrade.exit_price.toFixed(2)}
+                <span style={{ color: "#666", fontSize: "0.78rem", marginLeft: 4 }}>
+                  ({new Date(selectedTrade.exit_time).toLocaleString("en-IN", {
+                    year: "numeric", month: "short", day: "2-digit",
+                    hour: "2-digit", minute: "2-digit", hour12: false
+                  })})
+                </span>
+              </span>
+              <span style={{ color: "#e53935" }}><strong>SL</strong> {selectedTrade.stop_initial.toFixed(2)}</span>
+              <span style={{ color: "#43a047" }}><strong>TP</strong> {selectedTrade.target_initial.toFixed(2)}</span>
+              <span
                 style={{
-                  background:
-                    selectedTrade.pnl_pct > 0 ? "#f6ffed" : "#fff1f0",
-                  padding: "1rem",
-                  borderRadius: "4px",
+                  fontWeight: 700,
+                  color: selectedTrade.pnl_pct > 0 ? "#43a047" : "#e53935",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "0.85rem",
-                    color: selectedTrade.pnl_pct > 0 ? "#274000" : "#5c0a0a",
-                  }}
-                >
-                  P/L
-                </div>
-                <div
-                  style={{
-                    fontWeight: 600,
-                    fontSize: "1.2rem",
-                    color: selectedTrade.pnl_pct > 0 ? "#52c41a" : "#ff4d4f",
-                  }}
-                >
-                  {selectedTrade.pnl_pct > 0 ? "+" : ""}
-                  {selectedTrade.pnl_pct.toFixed(2)}%
-                </div>
-                <div style={{ fontSize: "0.85rem", marginTop: "0.5rem", color: "#666" }}>
-                  Exit: {selectedTrade.exit_reason} ({selectedTrade.holding_bars} bars)
-                </div>
-              </div>
+                {selectedTrade.pnl_pct > 0 ? "+" : ""}{selectedTrade.pnl_pct.toFixed(2)}%
+              </span>
+              <span style={{ color: "#666", fontSize: "0.78rem" }}>
+                {selectedTrade.exit_reason} · {selectedTrade.holding_bars}b
+              </span>
+              {(() => {
+                // Build a TradingView URL with as many time hints as possible.
+                // None of these are officially documented but they're commonly attempted:
+                //   `time` (unix seconds), `goto` (yyyy-mm-dd), `date` (yyyy-mm-dd).
+                // If TradingView ignores them, the user can still Alt+G in the chart.
+                const entryDate = new Date(selectedTrade.entry_time);
+                const unixSec = Math.floor(entryDate.getTime() / 1000);
+                const ymd = entryDate.toISOString().split('T')[0];
+                const ymdCompact = ymd.replace(/-/g, '');
+                const sym = encodeURIComponent(`NSE:${selectedTrade.symbol}`);
+                const tvUrl =
+                  `https://www.tradingview.com/chart/?symbol=${sym}` +
+                  `&interval=60` +
+                  `&time=${unixSec}` +
+                  `&goto=${ymd}` +
+                  `&date=${ymd}` +
+                  `&fromdate=${ymdCompact}T0000` +
+                  `&todate=${ymdCompact}T2359`;
+                const dateLabel = entryDate.toLocaleString('en-IN', {
+                  year: 'numeric', month: 'short', day: '2-digit',
+                  hour: '2-digit', minute: '2-digit', hour12: false,
+                });
+                // TradingView's Go-to-date dialog accepts only the date (YYYY-MM-DD).
+                // Timestamp is a separate field, so we copy just the date.
+                const clipboardText = ymd;
+                const handleClick = () => {
+                  if (navigator.clipboard?.writeText) {
+                    navigator.clipboard.writeText(clipboardText).catch(() => {});
+                  }
+                };
+                return (
+                  <a
+                    href={tvUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={handleClick}
+                    style={{
+                      marginLeft: 'auto',
+                      color: '#1e88e5',
+                      fontSize: '0.8rem',
+                      textDecoration: 'none',
+                      padding: '0.15rem 0.5rem',
+                      border: '1px solid #1e88e5',
+                      borderRadius: '3px',
+                      whiteSpace: 'nowrap',
+                    }}
+                    title={`Opens TradingView and copies "${clipboardText}" to clipboard. Press Alt+G in TradingView and paste. Entry: ${dateLabel}`}
+                  >
+                    Open in TradingView ↗ ({ymd})
+                  </a>
+                );
+              })()}
             </div>
 
-            <div style={{ background: "#fff", padding: "1rem", borderRadius: "4px" }}>
-              <div ref={containerRef} style={{ width: "100%", height: "500px" }} />
+            <div style={{ flex: 1, background: "#fff", borderRadius: "4px", minHeight: 0 }}>
+              <TVChartContainer
+                symbol={selectedTrade.symbol}
+                timeframe="OneHour"
+                tradeMarkers={tradeMarkers}
+                visibleRange={visibleRange}
+                autoStudies={autoStudies}
+                customIndicators={customIndicators}
+              />
             </div>
           </div>
         ) : (

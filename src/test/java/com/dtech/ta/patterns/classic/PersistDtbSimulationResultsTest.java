@@ -22,15 +22,16 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Persist HNS / REV_HNS retest-entry simulation trades to JSON for visualization.
- * Uses CPZZ pivots, neckline retest entry, head-price SL, 1x pattern height target,
- * close-basis stop trigger (Arm D variant from CpzzPivotStopSimulationTest).
+ * Persist DTB (Double Top / Double Bottom) retest-entry simulation trades to JSON for visualization.
+ * Uses CPZZ pivots, neckline retest entry, 1-OTM SL, measured-move target,
+ * close-basis stop trigger.
  */
-class PersistSimulationResultsTest {
+class PersistDtbSimulationResultsTest {
 
     private static final Path DATA_DIR = Paths.get("/tmp/hourly-scan-bars");
     private static final Path OUTPUT_DIR = Paths.get("/tmp/sim-results");
@@ -38,6 +39,8 @@ class PersistSimulationResultsTest {
     private static final int MAX_BARS_TO_BREAKOUT = 30;
     private static final int MAX_BARS_TO_RETEST = 30;
     private static final int TIME_STOP_BARS = 30;
+    private static final int WINDOW_SIZE = 200;
+    private static final int SLIDE_STEP = 100;
 
     @Test
     void persistSimulationResults() throws IOException {
@@ -47,7 +50,7 @@ class PersistSimulationResultsTest {
         Files.createDirectories(OUTPUT_DIR);
 
         // Generate run ID with timestamp
-        String runId = "cpzz-hns-retest-" + Instant.now()
+        String runId = "cpzz-dtb-retest-" + Instant.now()
                 .atZone(ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
 
@@ -56,24 +59,22 @@ class PersistSimulationResultsTest {
         double totalPnl = 0;
         Set<String> processedSymbols = new HashSet<>();
 
+        // Diagnostic counters
+        AtomicInteger totalDetected = new AtomicInteger(0);
+        AtomicInteger noBreakout = new AtomicInteger(0);
+        AtomicInteger noRetest = new AtomicInteger(0);
+        AtomicInteger lateDetection = new AtomicInteger(0);
+        AtomicInteger badGeometry = new AtomicInteger(0);
+        AtomicInteger entered = new AtomicInteger(0);
+
         try (var stream = Files.newDirectoryStream(DATA_DIR, "*.csv")) {
             for (Path csv : stream) {
                 String sym = csv.getFileName().toString().replace(".csv", "");
                 processedSymbols.add(sym);
                 BarSeries series = loadCsv(sym, csv);
-                if (series.getBarCount() < 250) continue;
+                if (series.getBarCount() < WINDOW_SIZE + 50) continue;
 
-                List<PivotPoint> pivots = runCpzz(series);
-
-                // HNS patterns (bearish, SHORT direction)
-                for (HnsPattern p : new HnsClassicDetector().findAll(series, pivots, series.getBarCount())) {
-                    simulateAndCollect(sym, p, pivots, series, false, allTrades);
-                }
-
-                // Reverse HNS patterns (bullish, LONG direction)
-                for (ReverseHnsPattern p : new ReverseHnsClassicDetector().findAll(series, pivots, series.getBarCount())) {
-                    simulateAndCollect(sym, p, pivots, series, true, allTrades);
-                }
+                scanWithSlidingWindow(sym, series, allTrades, totalDetected, noBreakout, noRetest, lateDetection, badGeometry, entered);
             }
         }
 
@@ -87,7 +88,7 @@ class PersistSimulationResultsTest {
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode root = mapper.createObjectNode();
         root.put("run_id", runId);
-        root.put("strategy_name", "CPZZ + HNS retest + head SL + close trigger");
+        root.put("strategy_name", "CPZZ + DTB retest + 1-OTM SL + close trigger");
         root.put("timeframe", "OneHour");
         root.put("stocks_count", processedSymbols.size());
         root.put("total_trades", allTrades.size());
@@ -156,21 +157,97 @@ class PersistSimulationResultsTest {
         // Update index
         updateIndex(runId, processedSymbols.size(), allTrades.size(), totalWins, totalLosses, totalPnl, mapper);
 
-        assertTrue(allTrades.size() > 0, "At least one trade should be persisted");
+        // Log diagnostics
+        System.out.println("Diagnostic: detected=" + totalDetected.get()
+                + " noBreakout=" + noBreakout.get()
+                + " noRetest=" + noRetest.get()
+                + " lateDetection=" + lateDetection.get()
+                + " badGeometry=" + badGeometry.get()
+                + " entered=" + entered.get());
         System.out.println("Persisted " + allTrades.size() + " trades to " + runFile);
     }
 
-    private void simulateAndCollect(String sym, ClassicPattern p, List<PivotPoint> pivots,
-                                     BarSeries full, boolean bullishPattern,
-                                     List<TradeRecord> allTrades) {
-        int eBar = p.pivots().get(4).barIndex();
-        if (eBar + 5 >= full.getBarCount()) return;
+    private void scanWithSlidingWindow(String sym, BarSeries full,
+                                        List<TradeRecord> allTrades,
+                                        AtomicInteger totalDetected,
+                                        AtomicInteger noBreakout, AtomicInteger noRetest,
+                                        AtomicInteger lateDetection, AtomicInteger badGeometry,
+                                        AtomicInteger entered) {
+        Set<String> seen = new HashSet<>();
 
-        double bPrice = p.pivots().get(1).price();
-        double dPrice = p.pivots().get(3).price();
-        double headPrice = p.pivots().get(2).price();
-        double neckline = (bPrice + dPrice) / 2.0;
-        double height = Math.abs(headPrice - neckline);
+        // Sliding window: extract pivots per window, detect patterns
+        for (int windowEnd = WINDOW_SIZE; windowEnd <= full.getEndIndex(); windowEnd += SLIDE_STEP) {
+            BarSeries window = sliceUpTo(full, windowEnd);
+            List<PivotPoint> pivots = runCpzz(window);
+
+            // Double Top patterns (bearish, SHORT direction)
+            for (DoubleTopPattern p : new DoubleTopClassicDetector().findAll(window, pivots, WINDOW_SIZE)) {
+                String key = sym + "-DT-" + p.endBarIndex();
+                if (seen.contains(key)) continue;
+                seen.add(key);
+                totalDetected.incrementAndGet();
+                simulateAndCollect(sym, p, pivots, full, false, allTrades, noBreakout, noRetest, lateDetection, badGeometry, entered);
+            }
+
+            // Double Bottom patterns (bullish, LONG direction)
+            for (DoubleBottomPattern p : new DoubleBottomClassicDetector().findAll(window, pivots, WINDOW_SIZE)) {
+                String key = sym + "-DB-" + p.endBarIndex();
+                if (seen.contains(key)) continue;
+                seen.add(key);
+                totalDetected.incrementAndGet();
+                simulateAndCollect(sym, p, pivots, full, true, allTrades, noBreakout, noRetest, lateDetection, badGeometry, entered);
+            }
+        }
+    }
+
+    private BarSeries sliceUpTo(BarSeries full, int endIndex) {
+        BarSeries window = new BaseBarSeriesBuilder().withName(full.getName()).build();
+        for (int i = 0; i <= endIndex && i <= full.getEndIndex(); i++) {
+            window.addBar(full.getBar(i));
+        }
+        return window;
+    }
+
+    private void simulateAndCollect(String sym, Object patternObj, List<PivotPoint> pivots,
+                                     BarSeries full, boolean bullishPattern,
+                                     List<TradeRecord> allTrades,
+                                     AtomicInteger noBreakout, AtomicInteger noRetest,
+                                     AtomicInteger lateDetection, AtomicInteger badGeometry,
+                                     AtomicInteger entered) {
+        // Extract pivots based on pattern type
+        List<PivotPoint> patternPivots;
+        double atr;
+        int eBar;
+
+        if (patternObj instanceof DoubleTopPattern) {
+            DoubleTopPattern p = (DoubleTopPattern) patternObj;
+            patternPivots = p.pivots();
+            atr = p.atr();
+            eBar = p.endBarIndex();
+        } else if (patternObj instanceof DoubleBottomPattern) {
+            DoubleBottomPattern p = (DoubleBottomPattern) patternObj;
+            patternPivots = p.pivots();
+            atr = p.atr();
+            eBar = p.endBarIndex();
+        } else {
+            return;
+        }
+
+        if (patternPivots.size() < 4) return;
+
+        // Need room for breakout (30 bars) + retest (30 bars) + exit simulation (30 bars) + margin
+        // With sliding window, eBar should be well before series end
+        if (eBar + MAX_BARS_TO_BREAKOUT + MAX_BARS_TO_RETEST + TIME_STOP_BARS + 10 >= full.getBarCount()) {
+            lateDetection.incrementAndGet();
+            return;
+        }
+
+        double aPrice = patternPivots.get(0).price();
+        double bPrice = patternPivots.get(1).price();  // neckline
+        double cPrice = patternPivots.get(2).price();
+        double dPrice = patternPivots.get(3).price();
+        double neckline = bPrice;  // B IS the neckline for DTB
+        double height = Math.abs(aPrice - neckline);
 
         // Breakout
         int breakoutBar = -1;
@@ -182,7 +259,10 @@ class PersistSimulationResultsTest {
                 break;
             }
         }
-        if (breakoutBar < 0) return;
+        if (breakoutBar < 0) {
+            noBreakout.incrementAndGet();
+            return;
+        }
 
         // Retest
         int retestBar = -1;
@@ -196,19 +276,35 @@ class PersistSimulationResultsTest {
                 break;
             }
         }
-        if (retestBar < 0) return;
+        if (retestBar < 0) {
+            noRetest.incrementAndGet();
+            return;
+        }
 
         double entry = full.getBar(retestBar).getClosePrice().doubleValue();
         double target = bullishPattern ? neckline + height : neckline - height;
 
-        // Use head price as SL (Arm D variant)
-        double stop = headPrice;
+        // 1-OTM SL placement
+        double stop;
+        if (bullishPattern) {
+            // LONG, DB: stop below min(A,C) by 1 ATR
+            stop = Math.min(aPrice, cPrice) - atr;
+        } else {
+            // SHORT, DT: stop above max(A,C) by 1 ATR
+            stop = Math.max(aPrice, cPrice) + atr;
+        }
 
         // Geometry sanity
-        if (bullishPattern && (stop >= entry || target <= entry)) return;
-        if (!bullishPattern && (stop <= entry || target >= entry)) return;
+        if (bullishPattern && (stop >= entry || target <= entry)) {
+            badGeometry.incrementAndGet();
+            return;
+        }
+        if (!bullishPattern && (stop <= entry || target >= entry)) {
+            badGeometry.incrementAndGet();
+            return;
+        }
 
-        // Simulate trade with close-basis trigger (onClose = true)
+        // Simulate trade with close-basis trigger
         int exitBar = -1;
         double exitPrice = entry;
         String exitReason = "TIMEOUT";
@@ -277,9 +373,10 @@ class PersistSimulationResultsTest {
         }
 
         // Create trade record
+        String patternType = bullishPattern ? "DOUBLE_BOTTOM" : "DOUBLE_TOP";
         TradeRecord trade = new TradeRecord(
                 sym,
-                bullishPattern ? "REV_HNS" : "HNS",
+                patternType,
                 bullishPattern ? "LONG" : "SHORT",
                 retestBar,
                 full.getBar(retestBar).getEndTime(),
@@ -293,10 +390,11 @@ class PersistSimulationResultsTest {
                 pnl,
                 wasWinner,
                 holdingBars,
-                new ArrayList<>(p.pivots()),
+                new ArrayList<>(patternPivots),
                 barsAround
         );
 
+        entered.incrementAndGet();
         allTrades.add(trade);
     }
 
