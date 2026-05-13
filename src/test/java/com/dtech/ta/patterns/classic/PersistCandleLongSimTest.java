@@ -40,7 +40,9 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -60,8 +62,10 @@ class PersistCandleLongSimTest {
     @Autowired(required = false)
     private SimulationPersistenceService simulationPersistenceService;
 
-    private static final Path HOURLY_DATA_DIR = Paths.get("/tmp/hourly-scan-bars-2015-2022");
-    private static final Path DAILY_DATA_DIR = Paths.get("/tmp/daily-bars-2015-2022");
+    private static final Path HOURLY_DATA_DIR = Paths.get(
+        System.getProperty("sim.hourly.dir", "/tmp/hourly-scan-bars-2015-2022"));
+    private static final Path DAILY_DATA_DIR = Paths.get(
+        System.getProperty("sim.daily.dir", "/tmp/daily-bars-2015-2022"));
     private static final Path OUTPUT_DIR = Paths.get("/tmp/sim-results");
 
     // Parameters
@@ -120,6 +124,12 @@ class PersistCandleLongSimTest {
         try (var stream = Files.newDirectoryStream(HOURLY_DATA_DIR, "*.csv")) {
             for (Path hourlyPath : stream) {
                 String sym = hourlyPath.getFileName().toString().replace(".csv", "");
+                String symbolFilterProp = System.getProperty("sim.symbols", "");
+                if (!symbolFilterProp.isEmpty()) {
+                    Set<String> allowed = Arrays.stream(symbolFilterProp.split(","))
+                        .map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet());
+                    if (!allowed.contains(sym)) continue;
+                }
                 Path dailyPath = DAILY_DATA_DIR.resolve(sym + ".csv");
 
                 if (!Files.exists(dailyPath)) continue;

@@ -1,5 +1,5 @@
 // TradingView Save/Load Adapter with symbol-agnostic layouts
-// Layouts are now stored separately and drawings are tied to symbol + layoutId
+// Layouts are now stored separately and drawings are tied to symbol + layoutId + timeframe
 import { apiFetch, getApiUrl } from '../config/api';
 import { withAuth } from '../utils/apiHelper';
 
@@ -68,6 +68,7 @@ const STORAGE_LAST_LAYOUT_KEY = 'lastLayoutId';
 export interface AdapterContext {
   symbol: string;
   tabId: string;
+  timeframe?: string;
 }
 
 // Maps a (tabId, symbol) pair to a scoped key for the drawings backend API.
@@ -177,7 +178,7 @@ export function createSaveLoadAdapter(getContext: () => AdapterContext) {
     },
 
     // ========== Drawings Storage (Separate from Layouts) ==========
-    // Drawings are stored per symbol + layoutId combination
+    // Drawings are stored per symbol + layoutId + timeframe combination
 
     saveLineToolsAndGroups: async (layoutId: string | number | undefined, chartId: string | number, state: any) => {
       try {
@@ -202,6 +203,7 @@ export function createSaveLoadAdapter(getContext: () => AdapterContext) {
           body: JSON.stringify({
             symbol: scopedSymbol(ctx),
             layoutId: numericLayoutId,
+            timeframe: ctx.timeframe,
             drawings: serializableState,
           })
         }));
@@ -226,6 +228,9 @@ export function createSaveLoadAdapter(getContext: () => AdapterContext) {
         const url = getApiUrl('/api/chart-state/drawings');
         url.searchParams.set('symbol', scopedSymbol(ctx));
         url.searchParams.set('layoutId', String(numericLayoutId));
+        if (ctx.timeframe) {
+          url.searchParams.set('timeframe', ctx.timeframe);
+        }
 
         const response = await apiFetch(url.toString(), withAuth());
 

@@ -125,6 +125,17 @@ public class DrawingExtractorService {
         } else if (source.has("toolname") && !source.get("toolname").isNull()) {
             rawType = source.get("toolname").asText();
         }
+
+        // TV's getLineToolsState() nests the actual type inside "state"
+        if ((rawType == null || rawType.isBlank()) && source.has("state")) {
+            JsonNode innerState = source.get("state");
+            if (innerState.has("type") && !innerState.get("type").isNull()) {
+                rawType = innerState.get("type").asText();
+            } else if (innerState.has("toolname") && !innerState.get("toolname").isNull()) {
+                rawType = innerState.get("toolname").asText();
+            }
+        }
+
         if (rawType == null || rawType.isBlank()) {
             return null;
         }
