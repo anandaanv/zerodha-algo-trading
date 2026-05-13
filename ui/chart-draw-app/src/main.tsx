@@ -58,6 +58,9 @@ import TradeOrdersPage from './tradeMonitor/pages/TradeOrdersPage';
 // Trade Alerts
 import TradeAlertToast from './elliottScreener/components/TradeAlertToast';
 
+// Simulation Viewer
+import SimulationViewer from './simulation/pages/SimulationViewer';
+
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -239,6 +242,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="ADMIN">
               <TradeOrdersPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/simulation-viewer"
+          element={
+            <ProtectedRoute requiredRole="USER">
+              <SimulationViewer />
             </ProtectedRoute>
           }
         />

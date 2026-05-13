@@ -83,10 +83,15 @@ export async function subscribeSymbol(symbol: string): Promise<void> {
   }
 }
 
-export async function fetchOHLC(symbol: string, interval: string): Promise<OhlcRow[]> {
+export async function fetchOHLC(symbol: string, interval: string, from?: number, to?: number): Promise<OhlcRow[]> {
   const url = getApiUrl('/api/ohlc');
   url.searchParams.set('symbol', symbol);
   url.searchParams.set('interval', interval);
+  if (from !== undefined && to !== undefined) {
+    url.searchParams.set('from', String(from));
+    url.searchParams.set('to', String(to));
+    url.searchParams.set('fetchLatest', 'false');
+  }
   addServiceTokenToUrl(url);
   const res = await apiFetch(url.toString(), withAuth());
   if (!res.ok) throw new Error(`ohlc fetch failed ${res.status}`);

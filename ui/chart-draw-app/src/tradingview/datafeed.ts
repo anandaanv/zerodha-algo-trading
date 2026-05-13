@@ -145,26 +145,23 @@ const datafeed: any = {
 
     try {
       const interval = resolutionToInterval[resolution] || intervalMapping['1h'] || 'OneHour';
-      const cacheKey = `${symbolInfo.name}_${interval}`;
+      // Pad the FETCH range backward for indicator warmup (MACD(84,182,63) needs ~245 bars).
+      // The chart still RENDERS only within (from, to), but the bars exist for indicator math.
+      // 90 calendar days back = ~600 hourly bars — covers the slowest realistic warmup.
+      const WARMUP_PAD_SECONDS = 90 * 24 * 60 * 60;
+      const fetchFrom = from - WARMUP_PAD_SECONDS;
+      const cacheKey = `${symbolInfo.name}_${interval}_${fetchFrom}_${to}`;
       const cachedData = getBarsCache.get(cacheKey);
 
       // Use cached data if available
       if (cachedData && (Date.now() - cachedData.timestamp) < BARS_CACHE_DURATION) {
-        const { data: allBars, oldestTime } = cachedData;
-        // from and to are in SECONDS, but bar.time is in MILLISECONDS
-        const fromMs = from * 1000;
-        const toMs = to * 1000;
-        if (fromMs < oldestTime) {
-          onHistoryCallback([], { noData: true });
-          return;
-        }
-        const filteredBars = allBars.filter(bar => bar.time >= fromMs && bar.time < toMs);
-        onHistoryCallback(filteredBars.length > 0 ? filteredBars : allBars, { noData: false });
+        const { data: allBars } = cachedData;
+        onHistoryCallback(allBars, { noData: allBars.length === 0 });
         return;
       }
 
-      // Fetch fresh data from API
-      const rows = await fetchOHLC(symbolInfo.name, interval);
+      // Fetch fresh data from API with the (padded) time range
+      const rows = await fetchOHLC(symbolInfo.name, interval, fetchFrom, to);
       if (!rows || rows.length === 0) {
         onHistoryCallback([], { noData: true });
         return;
@@ -195,25 +192,14 @@ const datafeed: any = {
         return;
       }
 
-      const oldestTime = bars[0].time;
-
-      if (firstDataRequest) {
+      if (firstDataRequest && bars.length > 0) {
         lastBarsCache.set(symbolInfo.ticker || symbolInfo.name, bars[bars.length - 1]);
       }
 
-      // Cache the data
-      getBarsCache.set(cacheKey, { data: bars, timestamp: Date.now(), oldestTime });
+      // Cache the data for this specific time range
+      getBarsCache.set(cacheKey, { data: bars, timestamp: Date.now(), oldestTime: bars.length > 0 ? bars[0].time : from * 1000 });
 
-      // Filter for requested range (from/to are in seconds, bar.time is in milliseconds)
-      const fromMs = from * 1000;
-      const toMs = to * 1000;
-      const filteredBars = bars.filter(bar => bar.time >= fromMs && bar.time < toMs);
-
-      if (filteredBars.length === 0) {
-        onHistoryCallback(bars, { noData: false });
-      } else {
-        onHistoryCallback(filteredBars, { noData: false });
-      }
+      onHistoryCallback(bars, { noData: bars.length === 0 });
     } catch (error) {
       console.error('[getBars] Error:', error);
       onErrorCallback(String(error));

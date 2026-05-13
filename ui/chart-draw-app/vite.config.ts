@@ -7,7 +7,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     port: 5173,
     host: true,
-    allowedHosts: ['tradeapp.dheemantech.in'],
+    allowedHosts: ['tradeapp.dheemantech.in', '.ngrok-free.app', '.ngrok.app', '.ngrok.io'],
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     outDir: 'dist',
