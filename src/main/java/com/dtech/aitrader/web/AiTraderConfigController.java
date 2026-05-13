@@ -39,4 +39,15 @@ public class AiTraderConfigController {
         response.put(request.getConfigKey(), request.getConfigValue());
         return response;
     }
+
+    @PostMapping("/refresh")
+    public Map<String, String> refreshCache(Authentication auth) {
+        log.info("POST /api/ai-trader/config/refresh - clearing all cached configs");
+        configService.refreshAll();
+
+        Map<String, String> response = new HashMap<>();
+        response.put("status", "cleared");
+        response.put("message", "All cached config entries have been invalidated. Next reads will fetch from DB.");
+        return response;
+    }
 }

@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface AiTraderSymbolRepository extends JpaRepository<AiTraderSymbol, String> {
     List<AiTraderSymbol> findByAiLevelsEnabledTrue();
+    List<AiTraderSymbol> findByPatternAgentEnabledTrue();
 }

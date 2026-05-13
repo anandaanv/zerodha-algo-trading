@@ -26,8 +26,23 @@ import java.util.stream.Collectors;
 public class AiLevelsPromptBuilder {
     private final ChartDataService chartDataService;
 
+    /**
+     * Builds levels prompt with optional asOf timestamp for walk-forward testing.
+     * @param symbol The symbol to analyze
+     * @return Levels prompt using latest data
+     */
     public String buildLevelsPrompt(String symbol) {
-        log.info("Building levels prompt for symbol: {}", symbol);
+        return buildLevelsPrompt(symbol, Optional.empty());
+    }
+
+    /**
+     * Builds levels prompt sliced to a specific asOf instant (no look-ahead).
+     * @param symbol The symbol to analyze
+     * @param asOf If present, slice all bars to bar.endTime <= asOf
+     * @return Levels prompt with data as-of the specified instant
+     */
+    public String buildLevelsPrompt(String symbol, Optional<Instant> asOf) {
+        log.info("Building levels prompt for symbol: {} asOf: {}", symbol, asOf);
 
         try {
             // Fetch hourly, daily, and weekly bars
@@ -36,6 +51,21 @@ public class AiLevelsPromptBuilder {
 
             if (hourlyBars.isEmpty() || dailyBars.isEmpty()) {
                 throw new IllegalStateException("No bars available for " + symbol);
+            }
+
+            // Slice bars if asOf is provided
+            if (asOf.isPresent()) {
+                long asOfMillis = asOf.get().toEpochMilli();
+                hourlyBars = hourlyBars.stream()
+                        .filter(bar -> bar.getTime() * 1000L <= asOfMillis)
+                        .collect(Collectors.toList());
+                dailyBars = dailyBars.stream()
+                        .filter(bar -> bar.getTime() * 1000L <= asOfMillis)
+                        .collect(Collectors.toList());
+
+                if (hourlyBars.isEmpty() || dailyBars.isEmpty()) {
+                    throw new IllegalStateException("No bars available for " + symbol + " as of " + asOf.get());
+                }
             }
 
             // Keep last 300 hourly bars for context
@@ -48,10 +78,15 @@ public class AiLevelsPromptBuilder {
                     .skip(Math.max(0, dailyBars.size() - 250))
                     .collect(Collectors.toList());
 
-            // Get latest timestamp across all timeframes
-            long latestTs = hourlyContext.isEmpty() ? System.currentTimeMillis() / 1000 :
-                           hourlyContext.get(hourlyContext.size() - 1).getTime();
-            String latestIso = formatIsoDateTime(latestTs);
+            // Get timestamp to show in prompt
+            String latestIso;
+            if (asOf.isPresent()) {
+                latestIso = asOf.get().toString();
+            } else {
+                long latestTs = hourlyContext.isEmpty() ? System.currentTimeMillis() / 1000 :
+                               hourlyContext.get(hourlyContext.size() - 1).getTime();
+                latestIso = formatIsoDateTime(latestTs);
+            }
 
             // Resample daily bars to weekly
             List<WeeklyBar> weeklyBars = resampleToWeekly(dailyContext);

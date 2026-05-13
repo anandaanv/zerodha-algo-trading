@@ -62,4 +62,7 @@ public class PaperTrade {
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    @Column
+    private LocalDateTime lastCheckedAt;
 }

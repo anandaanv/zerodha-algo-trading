@@ -11,8 +11,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -98,15 +101,29 @@ WATCH_TRADES: Emit 0-3 high-conviction trade setups per symbol. Only include if 
 Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
 """;
 
+    /**
+     * Runs AI levels agent for a symbol (uses current time).
+     */
     public AiLevels runForSymbol(String symbol, Long userId) {
-        log.info("Running AI levels agent for symbol: {}, userId: {}", symbol, userId);
+        return runForSymbol(symbol, userId, Optional.empty());
+    }
+
+    /**
+     * Runs AI levels agent for a symbol with optional asOf timestamp.
+     * @param symbol The symbol to analyze
+     * @param userId The user ID
+     * @param asOf If present, slice data to this instant; otherwise use current time
+     * @return Generated AiLevels record
+     */
+    public AiLevels runForSymbol(String symbol, Long userId, Optional<Instant> asOf) {
+        log.info("Running AI levels agent for symbol: {}, userId: {}, asOf: {}", symbol, userId, asOf);
 
         try {
             // Resolve user's active AI provider
             AiProviderResolver.ProviderConfig cfg = aiProviderResolver.resolveForUser(userId);
 
-            // Build prompt
-            String prompt = promptBuilderService.buildLevelsPrompt(symbol);
+            // Build prompt (with asOf if provided)
+            String prompt = promptBuilderService.buildLevelsPrompt(symbol, asOf);
 
             // Call LLM gateway
             LlmGateway.LlmResponse response = llmGateway.call(cfg, SYSTEM_PROMPT, prompt, 4096);
@@ -127,14 +144,18 @@ Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
             // Validate JSON
             JsonNode levelsJson = objectMapper.readTree(jsonText);
 
+            // Compute generatedForDate
+            LocalDate generatedForDate = asOf
+                    .map(i -> i.atZone(ZoneId.of("Asia/Kolkata")).toLocalDate())
+                    .orElse(LocalDate.now());
+
             // Persist AiLevels (upsert pattern to handle same-day reruns)
-            LocalDate today = LocalDate.now();
             AiLevels aiLevels = aiLevelsRepository
-                    .findBySymbolAndTimeframeAndGeneratedForDate(symbol, "OneHour", today)
+                    .findBySymbolAndTimeframeAndGeneratedForDate(symbol, "OneHour", generatedForDate)
                     .orElse(AiLevels.builder()
                             .symbol(symbol)
                             .timeframe("OneHour")
-                            .generatedForDate(today)
+                            .generatedForDate(generatedForDate)
                             .build());
 
             // Always update fields (whether new or existing)

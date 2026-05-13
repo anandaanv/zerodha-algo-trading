@@ -27,6 +27,12 @@ public class LlmGateway {
             .connectTimeout(Duration.ofSeconds(30))
             .build();
 
+    // Provider type enum
+    public enum ProviderType {
+        ANTHROPIC,
+        OPENAI_COMPATIBLE  // Covers OpenAI, NVIDIA NIM, Groq, local servers, etc.
+    }
+
     // Token cost rates $/M tokens (input, output)
     private static final Map<String, double[]> TOKEN_RATES = new HashMap<>();
 
@@ -35,18 +41,32 @@ public class LlmGateway {
         TOKEN_RATES.put("claude-opus-4-7-20251022", new double[]{15.0, 75.0});
         TOKEN_RATES.put("gpt-4o", new double[]{5.0, 15.0});
         TOKEN_RATES.put("gpt-4-turbo", new double[]{10.0, 30.0});
+        TOKEN_RATES.put("nvidia/llama-3.1-nemotron-70b-instruct", new double[]{0.20, 0.20});
+        TOKEN_RATES.put("nvidia/llama-3.3-nemotron-70b-instruct", new double[]{0.20, 0.20});
     }
 
     /**
-     * Calls an LLM provider (Anthropic or OpenAI) with the given prompts.
+     * Detects the LLM provider type from the base URL.
+     */
+    public ProviderType detectProvider(String baseUrl) {
+        if (baseUrl.contains("anthropic.com")) {
+            return ProviderType.ANTHROPIC;
+        }
+        return ProviderType.OPENAI_COMPATIBLE;
+    }
+
+    /**
+     * Calls an LLM provider (Anthropic or OpenAI-compatible) with the given prompts.
      */
     public LlmResponse call(AiProviderResolver.ProviderConfig cfg, String systemPrompt, String userPrompt, int maxTokens) {
         long startTime = System.currentTimeMillis();
 
         try {
-            if (cfg.isAnthropic()) {
+            ProviderType provider = detectProvider(cfg.baseUrl());
+            if (provider == ProviderType.ANTHROPIC) {
                 return callAnthropicApi(cfg, systemPrompt, userPrompt, maxTokens, startTime);
             } else {
+                log.debug("Detected OpenAI-compatible provider for base URL: {}", cfg.baseUrl());
                 return callOpenAiApi(cfg, systemPrompt, userPrompt, maxTokens, startTime);
             }
         } catch (Exception e) {
@@ -160,7 +180,11 @@ public class LlmGateway {
     }
 
     private BigDecimal calculateCost(String model, int inputTokens, int outputTokens) {
-        double[] rates = TOKEN_RATES.getOrDefault(model, new double[]{3.0, 15.0});
+        double[] rates = TOKEN_RATES.get(model);
+        if (rates == null) {
+            log.warn("Model {} not found in TOKEN_RATES, using zero cost", model);
+            rates = new double[]{0.0, 0.0};
+        }
         double inputCost = (inputTokens / 1_000_000.0) * rates[0];
         double outputCost = (outputTokens / 1_000_000.0) * rates[1];
         return new BigDecimal(inputCost + outputCost).setScale(6, java.math.RoundingMode.HALF_UP);

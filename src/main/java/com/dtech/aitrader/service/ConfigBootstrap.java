@@ -25,6 +25,8 @@ public class ConfigBootstrap {
         ensureConfig("pattern.enabled", "false");
         ensureConfig("paper_trade.enabled", "true");
         ensureConfig("ai_lines.suppression_tolerance_pct", "1.0");
+        ensureConfig("trail_stop.enabled", "false");
+        ensureConfig("trail_stop.check_interval_hours", "4");
 
         log.info("AI Trader config bootstrap complete");
     }

@@ -1,7 +1,11 @@
 package com.dtech.kitecon.trade.controller;
 
 import com.dtech.aitrader.data.AgentDecision;
+import com.dtech.aitrader.data.PaperTrade;
+import com.dtech.aitrader.model.ExitDecision;
 import com.dtech.aitrader.model.PatternSignal;
+import com.dtech.aitrader.repository.PaperTradeRepository;
+import com.dtech.aitrader.service.ExitAgentService;
 import com.dtech.aitrader.service.PatternAgentService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +26,8 @@ import java.util.Map;
 @Slf4j
 public class AiPatternController {
     private final PatternAgentService patternAgentService;
+    private final ExitAgentService exitAgentService;
+    private final PaperTradeRepository paperTradeRepository;
 
     /**
      * POST /api/ai-pattern/decide
@@ -88,6 +94,70 @@ public class AiPatternController {
         response.put("outputTokens", decision.getOutputTokens());
         response.put("costUsd", decision.getCostUsd());
         response.put("modelUsed", decision.getModelUsed());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * POST /api/ai-pattern/exit/decide
+     *
+     * Takes a paperTradeId, fetches the open trade, calls ExitAgent for a decision.
+     *
+     * Request body:
+     * {
+     *   "paperTradeId": 1
+     * }
+     *
+     * Response:
+     * {
+     *   "action": "HOLD" | "CLOSE_NOW" | "MOVE_TO_BREAKEVEN" | "TRAIL_TO_X" | "EXTEND_TARGET_TO_Y",
+     *   "newStop": <number> | null,
+     *   "newTarget": <number> | null,
+     *   "confidence": 0.0-1.0,
+     *   "reasoning": "...",
+     *   "inputTokens": 1234,
+     *   "outputTokens": 456,
+     *   "costUsd": 0.04,
+     *   "modelUsed": "claude-sonnet-4-5-20250929"
+     * }
+     */
+    @PostMapping("/exit/decide")
+    public ResponseEntity<Map<String, Object>> exitDecide(
+        @RequestBody Map<String, Long> request,
+        Authentication authentication
+    ) {
+        Long paperTradeId = request.get("paperTradeId");
+        if (paperTradeId == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "paperTradeId required"));
+        }
+
+        log.info("POST /api/ai-pattern/exit/decide: paperTradeId={}", paperTradeId);
+
+        // Resolve userId from authentication
+        Long userId = extractUserId(authentication);
+
+        // Fetch paper trade
+        var tradeOpt = paperTradeRepository.findById(paperTradeId);
+        if (tradeOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        PaperTrade trade = tradeOpt.get();
+
+        // Call exit agent
+        ExitDecision decision = exitAgentService.decide(trade, userId);
+
+        // Build response
+        Map<String, Object> response = new HashMap<>();
+        response.put("action", decision.action());
+        response.put("newStop", decision.newStop());
+        response.put("newTarget", decision.newTarget());
+        response.put("confidence", decision.confidence());
+        response.put("reasoning", decision.reasoning());
+        response.put("inputTokens", decision.inputTokens());
+        response.put("outputTokens", decision.outputTokens());
+        response.put("costUsd", decision.costUsd());
+        response.put("modelUsed", decision.modelUsed());
 
         return ResponseEntity.ok(response);
     }

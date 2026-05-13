@@ -54,26 +54,15 @@ public class PatternAgentService {
         // Build prompt
         String userPrompt = promptBuilder.buildPatternPrompt(signal);
 
-        // Resolve provider config (uses model from DB user config, not the @Value)
+        // Resolve provider config — the active provider's model is the source of truth
         AiProviderResolver.ProviderConfig cfg = providerResolver.resolveForUser(userId);
-
-        // Override model if pattern.model is set and not default
-        String modelToUse = patternModel;
-        if (patternModel != null && !patternModel.isBlank() &&
-            !patternModel.equals("claude-sonnet-4-5-20250929")) {
-            modelToUse = patternModel;
-        }
-
-        // Build a custom config with the pattern model
-        AiProviderResolver.ProviderConfig customCfg =
-            new AiProviderResolver.ProviderConfig(cfg.apiKey(), modelToUse, cfg.baseUrl(), cfg.isAnthropic(), cfg.isLocal());
 
         // Call LLM with system prompt focused on single trade decision
         String systemPrompt = "You are a quant trader making a SINGLE binary decision on whether to take a trade. " +
             "A pattern engine has fired a signal. Filter aggressively for trend conflicts, poor R:R, extreme indicators, and weak price action. " +
             "Output STRICTLY JSON. No markdown.";
 
-        LlmGateway.LlmResponse response = llmGateway.call(customCfg, systemPrompt, userPrompt, 500);
+        LlmGateway.LlmResponse response = llmGateway.call(cfg, systemPrompt, userPrompt, 500);
 
         // Parse Claude response
         PatternDecision decision = parseResponse(response.text());

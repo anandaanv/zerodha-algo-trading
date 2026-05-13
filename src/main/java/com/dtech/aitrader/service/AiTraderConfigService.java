@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -12,14 +13,40 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class AiTraderConfigService {
     private final AiTraderConfigRepository configRepo;
-    private final ConcurrentHashMap<String, String> cache = new ConcurrentHashMap<>();
+
+    // Cache entry: value + timestamp of when it was cached
+    private static class CacheEntry {
+        final String value;
+        final long cachedAtMillis;
+
+        CacheEntry(String value) {
+            this.value = value;
+            this.cachedAtMillis = System.currentTimeMillis();
+        }
+
+        boolean isExpired(long ttlMillis) {
+            return System.currentTimeMillis() - cachedAtMillis > ttlMillis;
+        }
+    }
+
+    private static final long CACHE_TTL_MILLIS = 30_000L; // 30 seconds
+    private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
     public String getString(String key, String defaultValue) {
-        return cache.computeIfAbsent(key, k ->
-                configRepo.findByConfigKey(k)
-                        .map(cfg -> cfg.getConfigValue())
-                        .orElse(defaultValue)
-        );
+        CacheEntry entry = cache.get(key);
+
+        // Check if entry exists and is not expired
+        if (entry != null && !entry.isExpired(CACHE_TTL_MILLIS)) {
+            return entry.value;
+        }
+
+        // Fetch from DB and cache
+        String value = configRepo.findByConfigKey(key)
+                .map(cfg -> cfg.getConfigValue())
+                .orElse(defaultValue);
+
+        cache.put(key, new CacheEntry(value));
+        return value;
     }
 
     public Integer getInt(String key, Integer defaultValue) {
@@ -62,5 +89,10 @@ public class AiTraderConfigService {
         }
         cache.remove(key);
         log.debug("Updated config: {} = {}", key, value);
+    }
+
+    public void refreshAll() {
+        cache.clear();
+        log.info("Cleared all cached configs");
     }
 }

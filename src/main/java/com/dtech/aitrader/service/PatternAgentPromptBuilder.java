@@ -52,6 +52,19 @@ public class PatternAgentPromptBuilder {
      * @return User prompt for Claude with complete decision context
      */
     public String buildPatternPrompt(PatternSignal signal) {
+        return buildPatternPrompt(signal, Optional.empty());
+    }
+
+    /**
+     * Builds a pattern prompt with optional asOf slicing for walk-forward testing.
+     *
+     * @param signal The pattern signal
+     * @param asOf If present, slice bars to bar.endTime <= asOf; use signal.signalTime if empty
+     * @return User prompt with no look-ahead
+     */
+    public String buildPatternPrompt(PatternSignal signal, Optional<Instant> asOf) {
+        // If asOf not provided, use signal's signalTime
+        Instant effectiveAsOf = asOf.orElse(signal.getSignalTime());
         StringBuilder prompt = new StringBuilder();
 
         // 1. Pattern Signal Block
@@ -74,19 +87,19 @@ public class PatternAgentPromptBuilder {
             prompt.append("\n");
         }
 
-        // 3. Recent hourly bars (last 100)
-        appendHourlyBars(prompt, signal.getSymbol());
+        // 3. Recent hourly bars (last 100, sliced to asOf)
+        appendHourlyBars(prompt, signal.getSymbol(), effectiveAsOf);
 
-        // 4. Current hourly indicators
-        appendHourlyIndicators(prompt, signal.getSymbol());
+        // 4. Current hourly indicators (sliced to asOf)
+        appendHourlyIndicators(prompt, signal.getSymbol(), effectiveAsOf);
 
-        // 5. Daily indicators snapshot
-        appendDailyIndicators(prompt, signal.getSymbol());
+        // 5. Daily indicators snapshot (sliced to asOf)
+        appendDailyIndicators(prompt, signal.getSymbol(), effectiveAsOf);
 
-        // 6. AI Structural Levels
-        appendAiStructuralLevels(prompt, signal.getSymbol());
+        // 6. AI Structural Levels (use signal's signalTime for look-up)
+        appendAiStructuralLevels(prompt, signal.getSymbol(), signal.getSignalTime());
 
-        // 7. User-drawn lines
+        // 7. User-drawn lines (always use latest)
         appendUserDrawings(prompt, signal.getSymbol());
 
         // 8. Decision Instructions with JSON Schema (strengthened)
@@ -127,11 +140,21 @@ public class PatternAgentPromptBuilder {
         return prompt.toString();
     }
 
-    private void appendHourlyBars(StringBuilder prompt, String symbol) {
+    private void appendHourlyBars(StringBuilder prompt, String symbol, Instant asOf) {
         try {
             List<OhlcBarDTO> hourlyBars = chartDataService.getBars(symbol, "OneHour", null, null, false);
             if (hourlyBars.isEmpty()) {
                 prompt.append("## Recent Hourly Bars\n(no bars available)\n\n");
+                return;
+            }
+
+            // Slice to asOf
+            long asOfMillis = asOf.toEpochMilli();
+            hourlyBars = hourlyBars.stream()
+                    .filter(bar -> bar.getTime() * 1000L <= asOfMillis)
+                    .collect(Collectors.toList());
+            if (hourlyBars.isEmpty()) {
+                prompt.append("## Recent Hourly Bars\n(no bars available as of ").append(asOf).append(")\n\n");
                 return;
             }
 
@@ -159,11 +182,21 @@ public class PatternAgentPromptBuilder {
         }
     }
 
-    private void appendHourlyIndicators(StringBuilder prompt, String symbol) {
+    private void appendHourlyIndicators(StringBuilder prompt, String symbol, Instant asOf) {
         try {
             List<OhlcBarDTO> hourlyBars = chartDataService.getBars(symbol, "OneHour", null, null, false);
             if (hourlyBars.isEmpty()) {
                 prompt.append("## Current Hourly Indicators\n(no bars available)\n\n");
+                return;
+            }
+
+            // Slice to asOf
+            long asOfMillis = asOf.toEpochMilli();
+            hourlyBars = hourlyBars.stream()
+                    .filter(bar -> bar.getTime() * 1000L <= asOfMillis)
+                    .collect(Collectors.toList());
+            if (hourlyBars.isEmpty()) {
+                prompt.append("## Current Hourly Indicators\n(no bars available as of ").append(asOf).append(")\n\n");
                 return;
             }
 
@@ -197,11 +230,21 @@ public class PatternAgentPromptBuilder {
         }
     }
 
-    private void appendDailyIndicators(StringBuilder prompt, String symbol) {
+    private void appendDailyIndicators(StringBuilder prompt, String symbol, Instant asOf) {
         try {
             List<OhlcBarDTO> dailyBars = chartDataService.getBars(symbol, "Day", null, null, false);
             if (dailyBars.isEmpty()) {
                 prompt.append("## Daily Indicators Snapshot\n(no daily bars available)\n\n");
+                return;
+            }
+
+            // Slice to asOf
+            long asOfMillis = asOf.toEpochMilli();
+            dailyBars = dailyBars.stream()
+                    .filter(bar -> bar.getTime() * 1000L <= asOfMillis)
+                    .collect(Collectors.toList());
+            if (dailyBars.isEmpty()) {
+                prompt.append("## Daily Indicators Snapshot\n(no daily bars available as of ").append(asOf).append(")\n\n");
                 return;
             }
 
@@ -228,23 +271,23 @@ public class PatternAgentPromptBuilder {
         }
     }
 
-    private void appendAiStructuralLevels(StringBuilder prompt, String symbol) {
+    private void appendAiStructuralLevels(StringBuilder prompt, String symbol, Instant signalTime) {
         try {
-            Optional<AiLevels> levels = aiLevelsRepository.findFirstBySymbolOrderByGeneratedAtDesc(symbol);
+            // Look up levels generated for this signal's date
+            LocalDate signalDate = signalTime.atZone(ZoneId.of("Asia/Kolkata")).toLocalDate();
+            Optional<AiLevels> levels = aiLevelsRepository.findBySymbolAndTimeframeAndGeneratedForDate(
+                symbol, "OneHour", signalDate);
 
             if (levels.isEmpty()) {
-                prompt.append("## AI Structural Levels\n(no AI structural levels available today)\n\n");
-                return;
+                // Fallback: try to get the most recent levels
+                levels = aiLevelsRepository.findFirstBySymbolOrderByGeneratedAtDesc(symbol);
+                if (levels.isEmpty()) {
+                    prompt.append("## AI Structural Levels\n(no AI structural levels available)\n\n");
+                    return;
+                }
             }
 
             AiLevels levelData = levels.get();
-
-            // Check if this is today's data
-            LocalDate today = LocalDate.now(ZoneId.of("UTC"));
-            if (!levelData.getGeneratedForDate().equals(today)) {
-                prompt.append("## AI Structural Levels\n(no AI structural levels available today)\n\n");
-                return;
-            }
 
             // Parse levelsJson
             try {
