@@ -38,14 +38,14 @@ public class AiLevelsPromptBuilder {
                 throw new IllegalStateException("No bars available for " + symbol);
             }
 
-            // Keep last 500 hourly bars for context
+            // Keep last 300 hourly bars for context
             List<OhlcBarDTO> hourlyContext = hourlyBars.stream()
-                    .skip(Math.max(0, hourlyBars.size() - 500))
+                    .skip(Math.max(0, hourlyBars.size() - 300))
                     .collect(Collectors.toList());
 
-            // Keep last 500 daily bars for context (extend fetch for indicator warmup)
+            // Keep last 250 daily bars for context (extend fetch for indicator warmup)
             List<OhlcBarDTO> dailyContext = dailyBars.stream()
-                    .skip(Math.max(0, dailyBars.size() - 500))
+                    .skip(Math.max(0, dailyBars.size() - 250))
                     .collect(Collectors.toList());
 
             // Get latest timestamp across all timeframes
@@ -81,52 +81,45 @@ public class AiLevelsPromptBuilder {
             // Weekly bars
             prompt.append("## Weekly bars (last ").append(weeklyBars.size()).append(" weeks)\n");
             prompt.append("```\n");
-            prompt.append("week_start_iso, open, high, low, close, volume\n");
+            prompt.append("week_start_iso, open, high, low, close\n");
             for (WeeklyBar wb : weeklyBars) {
-                prompt.append(String.format("%s, %8.2f, %8.2f, %8.2f, %8.2f, %12.0f\n",
-                        wb.weekStartIso, wb.open, wb.high, wb.low, wb.close, wb.volume));
+                prompt.append(String.format("%s, %8.2f, %8.2f, %8.2f, %8.2f\n",
+                        wb.weekStartIso, wb.open, wb.high, wb.low, wb.close));
             }
             prompt.append("```\n\n");
 
             // Weekly indicators (last 30)
             prompt.append("## Weekly indicators (last 30 bars)\n");
             prompt.append("```\n");
-            prompt.append("week_start, close, rsi14, macd_line, macd_sig, macd_hist, stochrsi_k, stochrsi_d\n");
-            formatIndicatorsCsv(prompt, weeklyBars, wIndicators, 30);
+            prompt.append("week_start, close, rsi14, macd_hist, stochrsi_k\n");
+            formatIndicatorsCsvTrimmed(prompt, weeklyBars, wIndicators, 30);
             prompt.append("```\n\n");
 
             // Daily bars
             prompt.append("## Daily bars (last ").append(dailyContext.size()).append(")\n");
             prompt.append("```\n");
-            prompt.append("date, open, high, low, close, volume\n");
+            prompt.append("date, open, high, low, close\n");
             for (OhlcBarDTO bar : dailyContext) {
-                prompt.append(String.format("%s, %8.2f, %8.2f, %8.2f, %8.2f, %12.0f\n",
-                        formatIsoDate(bar.getTime()), bar.getOpen(), bar.getHigh(), bar.getLow(), bar.getClose(), bar.getVolume()));
+                prompt.append(String.format("%s, %8.2f, %8.2f, %8.2f, %8.2f\n",
+                        formatIsoDate(bar.getTime()), bar.getOpen(), bar.getHigh(), bar.getLow(), bar.getClose()));
             }
             prompt.append("```\n\n");
 
             // Daily indicators (last 30)
             prompt.append("## Daily indicators (last 30 bars)\n");
             prompt.append("```\n");
-            prompt.append("date, close, rsi14, macd_line, macd_sig, macd_hist, stochrsi_k, stochrsi_d\n");
-            formatIndicatorsCsvFromBars(prompt, dailyContext, dIndicators, 30);
+            prompt.append("date, close, rsi14, macd_hist, stochrsi_k\n");
+            formatIndicatorsCsvFromBarsTrimmed(prompt, dailyContext, dIndicators, 30);
             prompt.append("```\n\n");
 
             // Hourly bars
             prompt.append("## Hourly bars (last ").append(hourlyContext.size()).append(")\n");
             prompt.append("```\n");
-            prompt.append("datetime_utc, open, high, low, close, volume\n");
+            prompt.append("datetime_utc, open, high, low, close\n");
             for (OhlcBarDTO bar : hourlyContext) {
-                prompt.append(String.format("%s, %8.2f, %8.2f, %8.2f, %8.2f, %12.0f\n",
-                        formatIsoDateTime(bar.getTime()), bar.getOpen(), bar.getHigh(), bar.getLow(), bar.getClose(), bar.getVolume()));
+                prompt.append(String.format("%s, %8.2f, %8.2f, %8.2f, %8.2f\n",
+                        formatIsoDateTime(bar.getTime()), bar.getOpen(), bar.getHigh(), bar.getLow(), bar.getClose()));
             }
-            prompt.append("```\n\n");
-
-            // Hourly indicators (last 30)
-            prompt.append("## Hourly indicators (last 30 bars)\n");
-            prompt.append("```\n");
-            prompt.append("datetime_utc, close, rsi14, macd_line, macd_sig, macd_hist, stochrsi_k, stochrsi_d\n");
-            formatIndicatorsCsvFromBars(prompt, hourlyContext, hIndicators, 30);
             prompt.append("```\n\n");
 
             // Current indicator snapshot
@@ -381,6 +374,19 @@ public class AiLevelsPromptBuilder {
         }
     }
 
+    private void formatIndicatorsCsvTrimmed(StringBuilder sb, List<WeeklyBar> weeks, IndicatorData ind, int limit) {
+        int start = Math.max(0, weeks.size() - limit);
+        for (int i = start; i < weeks.size(); i++) {
+            WeeklyBar wb = weeks.get(i);
+            sb.append(String.format("%s, %8.2f, %s, %s, %s\n",
+                    wb.weekStartIso.substring(0, 10) + "T00:00:00Z",
+                    wb.close,
+                    formatIndValue(i < ind.rsi.length ? ind.rsi[i] : Double.NaN),
+                    formatIndValue(i < ind.macdHist.length ? ind.macdHist[i] : Double.NaN),
+                    formatIndValue(i < ind.stochK.length ? ind.stochK[i] : Double.NaN)));
+        }
+    }
+
     private void formatIndicatorsCsv(StringBuilder sb, List<WeeklyBar> weeks, IndicatorData ind, int limit) {
         int start = Math.max(0, weeks.size() - limit);
         for (int i = start; i < weeks.size(); i++) {
@@ -394,6 +400,21 @@ public class AiLevelsPromptBuilder {
                     formatIndValue(i < ind.macdHist.length ? ind.macdHist[i] : Double.NaN),
                     formatIndValue(i < ind.stochK.length ? ind.stochK[i] : Double.NaN),
                     formatIndValue(i < ind.stochD.length ? ind.stochD[i] : Double.NaN)));
+        }
+    }
+
+    private void formatIndicatorsCsvFromBarsTrimmed(StringBuilder sb, List<OhlcBarDTO> bars, IndicatorData ind, int limit) {
+        int start = Math.max(0, bars.size() - limit);
+        for (int i = start; i < bars.size(); i++) {
+            OhlcBarDTO bar = bars.get(i);
+            String timeStr = bar.getTime() > 86400 * 30000 ?
+                    formatIsoDateTime(bar.getTime()) : formatIsoDate(bar.getTime());
+            sb.append(String.format("%s, %8.2f, %s, %s, %s\n",
+                    timeStr,
+                    bar.getClose(),
+                    formatIndValue(i < ind.rsi.length ? ind.rsi[i] : Double.NaN),
+                    formatIndValue(i < ind.macdHist.length ? ind.macdHist[i] : Double.NaN),
+                    formatIndValue(i < ind.stochK.length ? ind.stochK[i] : Double.NaN)));
         }
     }
 

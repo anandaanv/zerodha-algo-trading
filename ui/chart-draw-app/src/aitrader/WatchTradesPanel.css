@@ -1,0 +1,208 @@
+.watch-trades-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: white;
+}
+
+.watch-trades-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.watch-trades-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.header-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.trade-count {
+  font-size: 0.8rem;
+  color: #666;
+  background: #f0f0f0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.refresh-btn {
+  padding: 0.4rem 0.75rem;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.watch-trades-content {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+}
+
+.loading-message,
+.empty-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #999;
+  font-size: 0.9rem;
+}
+
+.trades-table-wrapper {
+  width: 100%;
+  height: 100%;
+  overflow-x: auto;
+}
+
+.trades-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.trades-table thead {
+  position: sticky;
+  top: 0;
+  background: #f5f5f5;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.trades-table th {
+  padding: 0.5rem;
+  text-align: left;
+  font-weight: 600;
+  color: #666;
+  border-right: 1px solid #e0e0e0;
+}
+
+.trades-table th:last-child {
+  border-right: none;
+}
+
+.trade-row {
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.trade-row:hover {
+  background: #f9f9f9;
+}
+
+.trade-row.long {
+  border-left: 3px solid #4caf50;
+}
+
+.trade-row.short {
+  border-left: 3px solid #f44336;
+}
+
+.trades-table td {
+  padding: 0.5rem;
+  border-right: 1px solid #f0f0f0;
+}
+
+.trades-table td:last-child {
+  border-right: none;
+}
+
+.symbol-cell {
+  font-weight: 600;
+  color: #1976d2;
+}
+
+.direction-cell {
+  text-align: center;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.direction-cell.long {
+  color: #4caf50;
+}
+
+.direction-cell.short {
+  color: #f44336;
+}
+
+.rr-cell {
+  font-weight: 600;
+  color: #333;
+}
+
+.confidence-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.confidence-bar {
+  width: 40px;
+  height: 16px;
+  background: #f0f0f0;
+  border-radius: 2px;
+  overflow: hidden;
+  border: 1px solid #ddd;
+}
+
+.confidence-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff9800 0%, #4caf50 100%);
+  transition: width 0.2s;
+}
+
+.confidence-cell span {
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 35px;
+}
+
+.trigger-cell {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #666;
+}
+
+.date-cell {
+  color: #999;
+  white-space: nowrap;
+}
+
+@media (max-width: 1200px) {
+  .trades-table {
+    font-size: 0.75rem;
+  }
+
+  .trades-table th,
+  .trades-table td {
+    padding: 0.4rem;
+  }
+
+  .trigger-cell {
+    max-width: 80px;
+  }
+}

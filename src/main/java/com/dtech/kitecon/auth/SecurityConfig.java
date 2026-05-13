@@ -116,7 +116,7 @@ public class SecurityConfig {
                         ).hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // AI Trader endpoints — USER role
-                        .requestMatchers("/api/ai-levels/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
+                        .requestMatchers("/api/ai-levels/**", "/api/ai-pattern/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
 
                         // All other endpoints require authentication
                         .anyRequest().authenticated()

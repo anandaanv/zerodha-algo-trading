@@ -20,6 +20,9 @@ public class AgentDecision {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false)
+    private Long userId;
+
     @Column(nullable = false, length = 32)
     private String symbol;
 
@@ -35,10 +38,10 @@ public class AgentDecision {
     @Column(nullable = false)
     private LocalDateTime decidedAt;
 
-    @Column(nullable = false, length = 16)
+    @Column(length = 16)
     private String verdict;
 
-    @Column(nullable = false, length = 8)
+    @Column(length = 8)
     private String direction;
 
     @Column(nullable = false, precision = 12, scale = 2)

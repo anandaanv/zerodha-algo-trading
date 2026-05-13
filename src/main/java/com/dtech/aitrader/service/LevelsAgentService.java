@@ -74,10 +74,26 @@ Return STRICTLY this JSON shape — NO markdown, NO commentary, NO extra keys:
       "rationale": "<150 chars>"
     }
   ],
-  "summary": "<300 chars overall structural read>"
+  "summary": "<300 chars overall structural read>",
+  "watch_trades": [
+    {
+      "id": "wt1",
+      "direction": "LONG" | "SHORT",
+      "trigger_condition": "<trigger in <50 chars, e.g. 'Break and hourly close above 213'>",
+      "entry": <number>,
+      "stop": <number>,
+      "target": <number>,
+      "rr": <number>,
+      "confidence": <0.0-1.0>,
+      "validity_until": "<ISO-8601 UTC>",
+      "rationale": "<200 chars max>"
+    }
+  ]
 }
 
 Aim for: 5-8 trendlines, 4-6 horizontals, 0-1 confident Elliott labelings (empty if uncertain — don't force), 1-2 fib zones from the major recent swing.
+
+WATCH_TRADES: Emit 0-3 high-conviction trade setups per symbol. Only include if confidence >= 0.6 and setup is well-defined (clear trigger, entry, stop, target). Do NOT emit every line crossing or every minor opportunity.
 
 Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
 """;
