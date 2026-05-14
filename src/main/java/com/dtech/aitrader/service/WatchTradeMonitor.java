@@ -1,6 +1,8 @@
 package com.dtech.aitrader.service;
 
 import com.dtech.aitrader.data.WatchTrade;
+import com.dtech.aitrader.event.PatternSignalEvent;
+import com.dtech.aitrader.model.PatternSignal;
 import com.dtech.aitrader.repository.WatchTradeRepository;
 import com.dtech.chartdata.model.OhlcBarDTO;
 import com.dtech.chartdata.service.ChartDataService;
@@ -8,10 +10,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -30,6 +34,7 @@ public class WatchTradeMonitor {
     private final AiTraderConfigService configService;
     private final ChartDataService chartDataService;
     private final ObjectMapper objectMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Runs every 5 minutes during market hours (9:15 AM - 3:15 PM IST, Mon-Fri).
@@ -66,7 +71,22 @@ public class WatchTradeMonitor {
                         wt.setTriggeredPrice(latestPrice(wt.getSymbol()));
                         watchTradeRepo.save(wt);
                         log.info("WatchTrade #{} TRIGGERED: {} {}", wt.getId(), wt.getSymbol(), wt.getDirection());
-                        // TODO Phase 3.5: emit PatternSignalEvent so PatternAgent picks up
+
+                        // Phase 3.5: emit PatternSignalEvent so PatternAgent picks up
+                        PatternSignal signal = PatternSignal.builder()
+                            .symbol(wt.getSymbol())
+                            .patternType("WATCH_TRADE_" + wt.getTriggerType())
+                            .patternSource("AI_ANALYSE")
+                            .signalRef("watch_trade_" + wt.getId())
+                            .direction(wt.getDirection())
+                            .suggestedEntry(wt.getEntry() != null ? wt.getEntry().doubleValue() : 0)
+                            .suggestedSl(wt.getSl() != null ? wt.getSl().doubleValue() : 0)
+                            .suggestedTarget(wt.getTarget() != null ? wt.getTarget().doubleValue() : 0)
+                            .signalTime(Instant.now())
+                            .timeframe("OneHour")
+                            .build();
+                        eventPublisher.publishEvent(new PatternSignalEvent(this, signal));
+                        log.info("Published PatternSignalEvent for WatchTrade #{}", wt.getId());
                     }
                 } catch (Exception e) {
                     log.warn("Error evaluating WatchTrade #{}: {}", wt.getId(), e.getMessage());

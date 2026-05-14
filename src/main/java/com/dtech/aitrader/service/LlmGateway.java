@@ -78,7 +78,17 @@ public class LlmGateway {
     private LlmResponse callAnthropicApi(AiProviderResolver.ProviderConfig cfg, String systemPrompt, String userPrompt, int maxTokens, long startTime) throws IOException, InterruptedException {
         String endpoint = cfg.baseUrl() + (cfg.baseUrl().endsWith("/") ? "" : "/") + "messages";
 
-        // Build request body
+        // Build system blocks with cache control
+        ArrayNode systemBlocks = objectMapper.createArrayNode();
+        ObjectNode systemBlock = objectMapper.createObjectNode();
+        systemBlock.put("type", "text");
+        systemBlock.put("text", systemPrompt);
+        ObjectNode cacheControl = objectMapper.createObjectNode();
+        cacheControl.put("type", "ephemeral");
+        systemBlock.set("cache_control", cacheControl);
+        systemBlocks.add(systemBlock);
+
+        // Build user message
         ObjectNode messageNode = objectMapper.createObjectNode();
         messageNode.put("role", "user");
         messageNode.put("content", userPrompt);
@@ -90,7 +100,7 @@ public class LlmGateway {
         requestBody.put("model", cfg.model());
         requestBody.put("max_tokens", maxTokens);
         requestBody.put("temperature", 0.2);
-        requestBody.put("system", systemPrompt);
+        requestBody.set("system", systemBlocks);  // Changed from put to set (array)
         requestBody.set("messages", messagesArray);
 
         String jsonBody = objectMapper.writeValueAsString(requestBody);
@@ -114,13 +124,15 @@ public class LlmGateway {
         String text = responseNode.path("content").get(0).path("text").asText();
         int inputTokens = responseNode.path("usage").path("input_tokens").asInt();
         int outputTokens = responseNode.path("usage").path("output_tokens").asInt();
+        int cacheCreationTokens = responseNode.path("usage").path("cache_creation_input_tokens").asInt(0);
+        int cacheReadTokens = responseNode.path("usage").path("cache_read_input_tokens").asInt(0);
         String modelUsed = responseNode.path("model").asText(cfg.model());
 
-        BigDecimal costUsd = calculateCost(cfg.model(), inputTokens, outputTokens);
+        BigDecimal costUsd = calculateCostWithCache(cfg.model(), inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens);
         long duration = System.currentTimeMillis() - startTime;
 
-        log.info("Anthropic API call succeeded. Model: {}, Input: {}, Output: {}, Cost: ${}, Duration: {}ms",
-                modelUsed, inputTokens, outputTokens, costUsd, duration);
+        log.info("Anthropic API call succeeded. Model: {}, Input: {} (cache_write: {}, cache_read: {}), Output: {}, Cost: ${}, Duration: {}ms",
+                modelUsed, inputTokens, cacheCreationTokens, cacheReadTokens, outputTokens, costUsd, duration);
 
         return new LlmResponse(text, inputTokens, outputTokens, modelUsed, costUsd);
     }
@@ -188,6 +200,24 @@ public class LlmGateway {
         double inputCost = (inputTokens / 1_000_000.0) * rates[0];
         double outputCost = (outputTokens / 1_000_000.0) * rates[1];
         return new BigDecimal(inputCost + outputCost).setScale(6, java.math.RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateCostWithCache(String model, int inputTokens, int cacheCreationTokens, int cacheReadTokens, int outputTokens) {
+        double[] rates = TOKEN_RATES.get(model);
+        if (rates == null) {
+            log.warn("Model {} not found in TOKEN_RATES, using zero cost", model);
+            rates = new double[]{0.0, 0.0};
+        }
+        double inputRate = rates[0];
+        double outputRate = rates[1];
+
+        double cost =
+            inputTokens * inputRate / 1_000_000.0
+          + cacheCreationTokens * inputRate * 1.25 / 1_000_000.0
+          + cacheReadTokens * inputRate * 0.10 / 1_000_000.0
+          + outputTokens * outputRate / 1_000_000.0;
+
+        return new BigDecimal(cost).setScale(6, java.math.RoundingMode.HALF_UP);
     }
 
     public record LlmResponse(String text, int inputTokens, int outputTokens, String modelUsed, BigDecimal costUsd) {}

@@ -147,6 +147,7 @@ Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
      *   - leading prose ("Based on the analysis: {...}")
      *   - ```json fenced blocks
      *   - trailing commentary
+     *   - JS-style // comments and trailing commas
      * Falls back to the original (trimmed) text if no braces found.
      */
     static String extractJsonObject(String raw) {
@@ -165,10 +166,50 @@ Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
             if (c == '{') depth++;
             else if (c == '}') {
                 depth--;
-                if (depth == 0) return s.substring(start, i + 1);
+                if (depth == 0) {
+                    String body = s.substring(start, i + 1);
+                    // Strip JS-style comments and trailing commas
+                    body = stripLineComments(body);
+                    body = body.replaceAll(",\\s*([}\\]])", "$1");
+                    return body;
+                }
             }
         }
         // unbalanced — return from first { onward, parser will error and we'll log raw
-        return s.substring(start);
+        String body = s.substring(start);
+        body = stripLineComments(body);
+        body = body.replaceAll(",\\s*([}\\]])", "$1");
+        return body;
+    }
+
+    /**
+     * Strips // comments from JSON while respecting string boundaries.
+     */
+    private static String stripLineComments(String s) {
+        StringBuilder out = new StringBuilder(s.length());
+        boolean inString = false;
+        boolean escape = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (inString) {
+                out.append(c);
+                if (escape) escape = false;
+                else if (c == '\\') escape = true;
+                else if (c == '"') inString = false;
+                continue;
+            }
+            if (c == '"') {
+                inString = true;
+                out.append(c);
+                continue;
+            }
+            if (c == '/' && i + 1 < s.length() && s.charAt(i + 1) == '/') {
+                while (i < s.length() && s.charAt(i) != '\n') i++;
+                if (i < s.length()) out.append('\n');
+                continue;
+            }
+            out.append(c);
+        }
+        return out.toString();
     }
 }
