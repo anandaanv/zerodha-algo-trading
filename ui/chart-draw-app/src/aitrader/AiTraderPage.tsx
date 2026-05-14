@@ -38,18 +38,20 @@ function isoToEpochSec(t: any): number {
 }
 
 /**
- * Programmatically trigger TradingView's "Go To Date" dialog (Alt+G) and pre-fill it.
+ * Programmatically trigger TradingView's "Go To Date" dialog (Alt+G) and click
+ * the target day in the calendar picker.
  *
- * 1. Open the dialog via TV's executeActionById('Chart.Dialogs.ShowGoToDate').
- * 2. Find the TV widget iframe in the parent document and reach into its DOM
- *    (charting_library is served from same origin so this is allowed).
- * 3. Set the date input value to the target date, dispatch input/change events
- *    so the dialog's internal state updates, then click the Submit/OK button.
+ * The dialog renders a calendar (not a date input):
+ *   button[aria-label^="Switch to months"]   ← header, text = "May 2026"
+ *   button[aria-label^="Previous month"]     ← navigates back one month
+ *   button[aria-label^="Next month"]         ← navigates forward one month
+ *   button[data-day="2024-03-15"]            ← cell for a specific day
  *
- * If any step fails, we leave the dialog open so the trader can complete it manually.
+ * TV renders the calendar into the parent document body via a portal, but we search
+ * both the parent document and any same-origin iframes to be defensive.
  *
- * @param chart  TradingView active chart returned by widget.activeChart()
- * @param dateYmd Target date in YYYY-MM-DD form (e.g. "2024-03-15")
+ * @param chart   TradingView active chart from widget.activeChart()
+ * @param dateYmd Target date as "YYYY-MM-DD"
  */
 function triggerGoToDate(chart: any, dateYmd: string): void {
   try {
@@ -59,64 +61,93 @@ function triggerGoToDate(chart: any, dateYmd: string): void {
     return;
   }
 
-  // Wait for the dialog to render, then try to pre-fill and submit it.
-  const findIframe = (): HTMLIFrameElement | null => {
-    const list = document.querySelectorAll<HTMLIFrameElement>('iframe');
-    for (const f of list) {
-      const src = f.src || '';
-      if (src.includes('charting_library') || src.includes('tradingview')) return f;
-    }
-    return list[0] || null;
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const parts = dateYmd.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) {
+    console.warn('[triggerGoToDate] bad date:', dateYmd);
+    return;
+  }
+  const [yr, mo /* 1-based */, dy] = parts;
+  const targetMonthIdx = mo - 1;
+
+  // Collect parent document + any accessible iframe documents
+  const collectDocs = (): Document[] => {
+    const out: Document[] = [document];
+    document.querySelectorAll<HTMLIFrameElement>('iframe').forEach(f => {
+      try { if (f.contentDocument) out.push(f.contentDocument); } catch { /* cross-origin */ }
+    });
+    return out;
   };
+  const findIn = <T extends Element>(selector: string): T | null => {
+    for (const d of collectDocs()) {
+      const el = d.querySelector<T>(selector);
+      if (el) return el;
+    }
+    return null;
+  };
+  const parseHeader = (): { month: number; year: number } | null => {
+    const btn = findIn<HTMLButtonElement>('button[aria-label^="Switch to months"]');
+    if (!btn) return null;
+    const m = (btn.textContent || '').trim().match(/^([A-Za-z]+)\s+(\d+)$/);
+    if (!m) return null;
+    const idx = MONTHS.indexOf(m[1]);
+    return idx < 0 ? null : { month: idx, year: parseInt(m[2], 10) };
+  };
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-  let attempts = 0;
-  const tick = () => {
-    attempts += 1;
-    const iframe = findIframe();
-    const doc = iframe?.contentDocument;
-    if (!doc) {
-      if (attempts < 10) setTimeout(tick, 100);
+  (async () => {
+    // 1. Wait for the calendar to render
+    let header: ReturnType<typeof parseHeader> = null;
+    for (let i = 0; i < 30; i++) {
+      header = parseHeader();
+      if (header) break;
+      await sleep(80);
+    }
+    if (!header) {
+      console.warn('[triggerGoToDate] calendar header not found — dialog may not have opened');
       return;
     }
 
-    // Candidate selectors for the date input — TV's class names change between versions
-    // so try several. Pick the first one that's visible.
-    const dateInput = doc.querySelector<HTMLInputElement>(
-      'input[type="date"], input[data-name="date"], .tv-dialog input[type="text"]'
-    );
-    if (!dateInput) {
-      if (attempts < 10) setTimeout(tick, 100);
-      return;
-    }
-
-    // Fill date — TV usually expects YYYY-MM-DD when the input type="date", else
-    // it may want the localized form. We try both shapes.
-    try {
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype, 'value'
-      )?.set;
-      nativeSetter?.call(dateInput, dateYmd);
-      dateInput.dispatchEvent(new Event('input', { bubbles: true }));
-      dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-    } catch (e) {
-      console.warn('[triggerGoToDate] set value failed:', e);
-    }
-
-    // Click submit/OK
-    setTimeout(() => {
-      const submit = doc.querySelector<HTMLButtonElement>(
-        'button[data-name="submit-button"], .tv-dialog__submit-button, ' +
-        'button[type="submit"], .tv-button-submit, .submitButton-DwNQ7tjg'
+    // 2. Navigate prev/next month until header matches target year+month
+    for (let safety = 0; safety < 360; safety++) {
+      header = parseHeader();
+      if (!header) break;
+      if (header.year === yr && header.month === targetMonthIdx) break;
+      const goBack = header.year > yr || (header.year === yr && header.month > targetMonthIdx);
+      const btn = findIn<HTMLButtonElement>(
+        goBack ? 'button[aria-label^="Previous month"]' : 'button[aria-label^="Next month"]'
       );
-      if (submit) {
-        submit.click();
-        console.log('[triggerGoToDate] submitted dialog with date', dateYmd);
-      } else {
-        console.warn('[triggerGoToDate] submit button not found — dialog left open for manual entry');
+      if (!btn || btn.disabled) {
+        console.warn('[triggerGoToDate] nav button missing/disabled at', header, 'targeting', { yr, targetMonthIdx });
+        break;
       }
-    }, 150);
-  };
-  setTimeout(tick, 200);
+      btn.click();
+      await sleep(30);
+    }
+
+    // 3. Click the target day. If disabled (weekend/holiday), pick the nearest
+    //    enabled prior day within the same month.
+    let dayBtn = findIn<HTMLButtonElement>(`button[data-day="${dateYmd}"]`);
+    if (!dayBtn || dayBtn.disabled) {
+      const alt = new Date(Date.UTC(yr, targetMonthIdx, dy));
+      for (let i = 1; i < 10; i++) {
+        alt.setUTCDate(alt.getUTCDate() - 1);
+        if (alt.getUTCMonth() !== targetMonthIdx) break;
+        const altYmd = alt.toISOString().substring(0, 10);
+        const b = findIn<HTMLButtonElement>(`button[data-day="${altYmd}"]`);
+        if (b && !b.disabled) { dayBtn = b; break; }
+      }
+    }
+
+    if (dayBtn) {
+      dayBtn.click();
+      console.log('[triggerGoToDate] clicked day:', dayBtn.getAttribute('data-day'));
+    } else {
+      console.warn('[triggerGoToDate] no enabled day cell found near', dateYmd);
+    }
+  })();
 }
 
 export default function AiTraderPage() {
