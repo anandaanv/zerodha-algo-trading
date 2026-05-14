@@ -46,6 +46,17 @@ export default function TVChartContainer({
   const widgetRef = useRef<any>(null);
   const studiesAddedRef = useRef(false);
 
+  // Stabilise volatile inputs in refs so the main effect can read the latest values
+  // without putting them in its dependency array. Without this, callers that pass an
+  // inline `onChartReady={(chart) => {...}}` would trigger a full widget remount on
+  // every parent re-render — including unrelated state changes like a toast popping up.
+  const onChartReadyRef = useRef(onChartReady);
+  const autoStudiesRef = useRef(autoStudies);
+  const customIndicatorsRef = useRef(customIndicators);
+  useEffect(() => { onChartReadyRef.current = onChartReady; }, [onChartReady]);
+  useEffect(() => { autoStudiesRef.current = autoStudies; }, [autoStudies]);
+  useEffect(() => { customIndicatorsRef.current = customIndicators; }, [customIndicators]);
+
   const interval = mapTimeframeToInterval(timeframe);
 
   useEffect(() => {
@@ -71,13 +82,12 @@ export default function TVChartContainer({
         'mainSeriesProperties.showCountdown': false,
       },
       custom_indicators_getter: (_PineJS: any) => {
-        console.log('[custom_indicators_getter] called. customIndicators count:', (customIndicators || []).length);
-        if (customIndicators && customIndicators.length > 0) {
-          customIndicators.forEach((ci, i) => {
-            console.log(`  [${i}] name:`, ci.name, 'has metainfo:', !!ci.metainfo, 'has constructor:', !!ci.constructor);
-          });
-        }
-        return Promise.resolve(customIndicators || []);
+        const ci = customIndicatorsRef.current || [];
+        console.log('[custom_indicators_getter] called. customIndicators count:', ci.length);
+        ci.forEach((c, i) => {
+          console.log(`  [${i}] name:`, c.name, 'has metainfo:', !!c.metainfo, 'has constructor:', !!c.constructor);
+        });
+        return Promise.resolve(ci);
       },
     };
 
@@ -93,8 +103,9 @@ export default function TVChartContainer({
         studiesAddedRef.current = false;
 
         // ---- Studies ----
-        if (!studiesAddedRef.current && autoStudies.length > 0) {
-          autoStudies.forEach((study) => {
+        const studiesNow = autoStudiesRef.current || [];
+        if (!studiesAddedRef.current && studiesNow.length > 0) {
+          studiesNow.forEach((study) => {
             try {
               const inputs = study.inputs;
               // For multi-timeframe studies, pass BOTH `resolution` and `interval`
@@ -299,7 +310,8 @@ export default function TVChartContainer({
           try { (tvWidget as any).selectLineTool && (tvWidget as any).selectLineTool('cursor'); } catch (e2) {}
         }
 
-        if (onChartReady) onChartReady(chart);
+        const cb = onChartReadyRef.current;
+        if (cb) cb(chart);
       } catch (e) {
         console.error('Error in onChartReady:', e);
       }
@@ -311,7 +323,10 @@ export default function TVChartContainer({
         widgetRef.current = null;
       }
     };
-  }, [symbol, timeframe, interval, onChartReady, tradeMarkers, visibleRange, autoStudies, customIndicators]);
+    // Intentionally exclude onChartReady / autoStudies / customIndicators from deps —
+    // they're read via refs above so callers can pass inline arrows/arrays without
+    // triggering a full widget remount on every parent re-render.
+  }, [symbol, timeframe, interval, tradeMarkers, visibleRange]);
 
   return <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />;
 }
