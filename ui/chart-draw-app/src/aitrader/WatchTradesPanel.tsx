@@ -17,9 +17,9 @@ type WatchTrade = {
   validityUntil: string;
 };
 
-type Props = { onSelectSymbol: (s: string) => void; refreshTick?: number };
+type Props = { symbol?: string; onSelectSymbol: (s: string) => void; refreshTick?: number };
 
-export default function WatchTradesPanel({ onSelectSymbol, refreshTick }: Props) {
+export default function WatchTradesPanel({ symbol, onSelectSymbol, refreshTick }: Props) {
   const [trades, setTrades] = useState<WatchTrade[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -42,14 +42,16 @@ export default function WatchTradesPanel({ onSelectSymbol, refreshTick }: Props)
     load();
   }, [refreshTick]);
 
-  if (loading && trades.length === 0)
+  const filtered = symbol ? trades.filter(t => t.symbol === symbol) : trades;
+
+  if (loading && filtered.length === 0)
     return <div style={{ padding: 8, fontSize: 12, color: '#888' }}>Loading…</div>;
-  if (trades.length === 0)
-    return <div style={{ padding: 8, fontSize: 12, color: '#888' }}>No watching trades.</div>;
+  if (filtered.length === 0)
+    return <div style={{ padding: 8, fontSize: 12, color: '#888' }}>No watching trades{symbol ? ` for ${symbol}` : ''}.</div>;
 
   return (
     <div>
-      {trades.map(t => (
+      {filtered.map(t => (
         <div
           key={t.id}
           onClick={() => onSelectSymbol(t.symbol)}

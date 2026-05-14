@@ -3,6 +3,7 @@ package com.dtech.kitecon.simulation;
 import com.dtech.kitecon.simulation.db.SimulationPersistenceService;
 import com.dtech.kitecon.simulation.db.SimulationRun;
 import com.dtech.kitecon.simulation.db.SimulationTrade;
+import com.dtech.kitecon.simulation.db.SimulationTradeRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,21 +36,33 @@ public class SimulationViewerController {
     @Autowired
     private SimulationPersistenceService persistenceService;
 
+    @Autowired
+    private SimulationTradeRepository tradeRepository;
+
     /**
      * GET /api/simulation-results
      * Returns metadata of all available simulation runs.
      * Merges DB runs + JSON-only runs (union), deduped by run_id, DB takes precedence.
      */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> listRuns() {
+    public ResponseEntity<Map<String, Object>> listRuns(
+            @RequestParam(required = false) String symbol) {
         try {
             // DB-only listing. JSON-based runs are intentionally excluded — they bloat
             // the browser on large trades arrays. Use the backfill test to import
             // a JSON run into DB if you want it visible here.
             List<Map<String, Object>> rows = new ArrayList<>();
             List<SimulationRun> dbRuns = persistenceService.findAllRuns();
+
+            // If symbol filter requested, restrict to runs that have at least one trade for that symbol
+            Set<Long> runIdsWithSymbol = null;
+            if (symbol != null && !symbol.isBlank()) {
+                runIdsWithSymbol = new HashSet<>(tradeRepository.findDistinctRunIdsBySymbol(symbol.trim().toUpperCase()));
+            }
+
             if (dbRuns != null) {
                 for (SimulationRun run : dbRuns) {
+                    if (runIdsWithSymbol != null && !runIdsWithSymbol.contains(run.getId())) continue;
                     Map<String, Object> dto = runToDto(run);
                     dto.put("source", "database");
                     rows.add(dto);
@@ -107,7 +120,8 @@ public class SimulationViewerController {
     public ResponseEntity<Map<String, Object>> getTrades(
             @PathVariable String runId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "100") int size) {
+            @RequestParam(defaultValue = "100") int size,
+            @RequestParam(required = false) String symbol) {
         try {
             Optional<SimulationRun> optRun = persistenceService.findByRunId(runId);
             if (optRun.isEmpty()) {
@@ -115,7 +129,9 @@ public class SimulationViewerController {
             }
             Long runDbId = optRun.get().getId();
             Pageable pageable = PageRequest.of(page, size);
-            Page<SimulationTrade> trades = persistenceService.getTrades(runDbId, pageable);
+            Page<SimulationTrade> trades = (symbol != null && !symbol.isBlank())
+                    ? tradeRepository.findByRunIdAndSymbolOrderByEntryTime(runDbId, symbol.trim().toUpperCase(), pageable)
+                    : persistenceService.getTrades(runDbId, pageable);
 
             Map<String, Object> response = new HashMap<>();
             response.put("content", trades.getContent().stream()

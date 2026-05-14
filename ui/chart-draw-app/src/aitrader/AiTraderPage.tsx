@@ -38,6 +38,7 @@ function isoToEpochSec(t: any): number {
 
 export default function AiTraderPage() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('WIPRO');
+  const [symbolInput, setSymbolInput] = useState<string>('WIPRO');
   const [refreshTick, setRefreshTick] = useState<number>(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [analyseLoading, setAnalyseLoading] = useState(false);
@@ -47,7 +48,22 @@ export default function AiTraderPage() {
   const aiShapeIdsRef = useRef<any[]>([]);
   const tabId = getOrCreateTabId();
 
-  const handleSelectSymbol = (symbol: string) => setSelectedSymbol(symbol);
+  // Single source of truth for symbol changes — also bumps refreshTick so dependent panels re-fetch.
+  const handleSelectSymbol = useCallback((symbol: string) => {
+    if (!symbol) return;
+    const up = symbol.trim().toUpperCase();
+    setSelectedSymbol(up);
+    setSymbolInput(up);
+    setRefreshTick(t => t + 1);
+  }, []);
+
+  const commitSymbolInput = useCallback(() => {
+    if (symbolInput && symbolInput.trim().toUpperCase() !== selectedSymbol) {
+      handleSelectSymbol(symbolInput);
+    } else {
+      setSymbolInput(selectedSymbol); // normalize display
+    }
+  }, [symbolInput, selectedSymbol, handleSelectSymbol]);
 
   const showToast = useCallback((msg: string, kind: 'success'|'error' = 'success') => {
     setToast({ msg, kind });
@@ -146,7 +162,18 @@ export default function AiTraderPage() {
           padding: '6px 12px', borderBottom: '1px solid #e0e0e0', background: '#fafafa',
           fontSize: 13,
         }}>
-          <span style={{ fontWeight: 600, marginRight: 8 }}>{selectedSymbol}</span>
+          <input
+            value={symbolInput}
+            onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
+            onBlur={commitSymbolInput}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
+            placeholder="Symbol"
+            style={{
+              width: 120, padding: '4px 8px', fontSize: 13, fontWeight: 600,
+              border: '1px solid #ccc', borderRadius: 4, marginRight: 8,
+              textTransform: 'uppercase',
+            }}
+          />
           <button
             onClick={handleAiLevels} disabled={aiLoading}
             style={{
@@ -167,21 +194,32 @@ export default function AiTraderPage() {
           <TVChartContainer
             symbol={selectedSymbol}
             timeframe="OneHour"
-            onChartReady={(chart) => { chartRef.current = chart; }}
+            onChartReady={(chart) => {
+              chartRef.current = chart;
+              // Sync the React state when user changes symbol via TV's own search bar
+              try {
+                chart.onSymbolChanged().subscribe(null, () => {
+                  try {
+                    const newSym = chart.symbol();
+                    if (newSym && newSym !== selectedSymbol) handleSelectSymbol(newSym);
+                  } catch {}
+                });
+              } catch {}
+            }}
           />
         </div>
       </div>
 
       {/* Right: 3 stacked panels */}
       <div style={{ width: 320, borderLeft: '1px solid #ddd', overflowY: 'auto', background: '#fff' }}>
-        <CollapsibleSection title="Active trades" defaultOpen={true}>
-          <ActiveTradesPanel onSelectSymbol={handleSelectSymbol} refreshTick={refreshTick} />
+        <CollapsibleSection title={`Active trades · ${selectedSymbol}`} defaultOpen={true}>
+          <ActiveTradesPanel symbol={selectedSymbol} onSelectSymbol={handleSelectSymbol} refreshTick={refreshTick} />
         </CollapsibleSection>
-        <CollapsibleSection title="AI Watch trades" defaultOpen={true}>
-          <WatchTradesPanel onSelectSymbol={handleSelectSymbol} refreshTick={refreshTick} />
+        <CollapsibleSection title={`AI Watch trades · ${selectedSymbol}`} defaultOpen={true}>
+          <WatchTradesPanel symbol={selectedSymbol} onSelectSymbol={handleSelectSymbol} refreshTick={refreshTick} />
         </CollapsibleSection>
-        <CollapsibleSection title="Simulated trades" defaultOpen={false}>
-          <SimulatedTradesPanel onSelectSymbol={handleSelectSymbol} />
+        <CollapsibleSection title={`Simulated trades · ${selectedSymbol}`} defaultOpen={false}>
+          <SimulatedTradesPanel symbol={selectedSymbol} onSelectSymbol={handleSelectSymbol} />
         </CollapsibleSection>
       </div>
 

@@ -38,12 +38,12 @@ type Replay = {
   modelUsed: string;
 };
 
-type Props = { onSelectSymbol: (s: string) => void };
+type Props = { symbol?: string; onSelectSymbol: (s: string) => void };
 
 const f = (n: any, dp = 2) => (n == null ? '-' : Number(n).toFixed(dp));
 const truncate = (s: string, n: number) => (s && s.length > n ? s.substring(0, n) + '…' : s);
 
-export default function SimulatedTradesPanel({ onSelectSymbol }: Props) {
+export default function SimulatedTradesPanel({ symbol, onSelectSymbol }: Props) {
   const [runs, setRuns] = useState<SimRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [groupExpanded, setGroupExpanded] = useState<Record<string, boolean>>({});
@@ -53,19 +53,29 @@ export default function SimulatedTradesPanel({ onSelectSymbol }: Props) {
   const [replays, setReplays] = useState<Record<number, Replay>>({});
   const [replayLoading, setReplayLoading] = useState<Set<number>>(new Set());
 
+  // Re-fetch runs whenever the selected symbol changes. Backend filters server-side
+  // to runs that have at least one trade for the symbol.
   useEffect(() => {
     setLoading(true);
-    fetch(getApiUrl('/api/simulation-results').toString(), withAuth())
+    const url = symbol
+      ? getApiUrl(`/api/simulation-results?symbol=${encodeURIComponent(symbol)}`)
+      : getApiUrl('/api/simulation-results');
+    fetch(url.toString(), withAuth())
       .then(r => r.ok ? r.json() : [])
       .then(d => setRuns(Array.isArray(d) ? d : (d?.runs ?? [])))
       .finally(() => setLoading(false));
-  }, []);
+    // Symbol change → invalidate the per-run trade cache so newly-expanded rows
+    // re-fetch with the right symbol filter applied.
+    setTradesByRun({});
+    setRunExpanded({});
+  }, [symbol]);
 
   const fetchTrades = useCallback(async (runId: number) => {
     if (tradesByRun[runId]) return;
     setTradesLoading(s => new Set(s).add(runId));
     try {
-      const url = getApiUrl(`/api/simulation-results/${runId}/trades?page=0&size=200`);
+      const symParam = symbol ? `&symbol=${encodeURIComponent(symbol)}` : '';
+      const url = getApiUrl(`/api/simulation-results/${runId}/trades?page=0&size=200${symParam}`);
       const r = await fetch(url.toString(), withAuth());
       if (r.ok) {
         const data = await r.json();
@@ -75,7 +85,7 @@ export default function SimulatedTradesPanel({ onSelectSymbol }: Props) {
     } finally {
       setTradesLoading(s => { const n = new Set(s); n.delete(runId); return n; });
     }
-  }, [tradesByRun]);
+  }, [tradesByRun, symbol]);
 
   const toggleRun = (runId: number) => {
     setRunExpanded(e => ({ ...e, [runId]: !e[runId] }));
