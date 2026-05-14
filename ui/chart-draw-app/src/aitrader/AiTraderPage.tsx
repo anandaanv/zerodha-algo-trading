@@ -224,9 +224,21 @@ export default function AiTraderPage() {
       try { chart.setSymbol?.(symbol, () => {}); } catch (e) { console.warn('setSymbol failed', e); }
     }
 
-    const duration = Math.max(86400, exitEpoch - entryEpoch);
-    const buffer = duration * 0.3;
-    const targetRange = { from: entryEpoch - buffer, to: exitEpoch + buffer };
+    // Preserve current zoom: keep the visible span, just slide the window so the
+    // trade's entry is centered. setVisibleRange to a tighter window than the
+    // current one would force TV to zoom in (resize candles), which the trader
+    // doesn't want — they just want to scroll to the date.
+    let span: number;
+    try {
+      const current = chart.getVisibleRange?.();
+      span = current && current.to > current.from
+        ? (current.to - current.from)
+        : Math.max(86400 * 30, exitEpoch - entryEpoch);
+    } catch {
+      span = Math.max(86400 * 30, exitEpoch - entryEpoch);
+    }
+    const center = (entryEpoch + exitEpoch) / 2;
+    const targetRange = { from: center - span / 2, to: center + span / 2 };
 
     // Helper: apply the range, await any Promise the SDK returns.
     const applyRange = async () => {
