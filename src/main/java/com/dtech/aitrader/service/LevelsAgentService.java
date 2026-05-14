@@ -1,5 +1,7 @@
 package com.dtech.aitrader.service;
 
+import com.dtech.aitrader.annotation.dto.AnnotationBundleDto;
+import com.dtech.aitrader.annotation.service.AnnotationBundleBuilder;
 import com.dtech.aitrader.data.AiLevels;
 import com.dtech.aitrader.data.AiTraderSymbol;
 import com.dtech.aitrader.repository.AiLevelsRepository;
@@ -27,6 +29,7 @@ public class LevelsAgentService {
     private final AiLevelsRepository aiLevelsRepository;
     private final AiTraderSymbolRepository aiTraderSymbolRepository;
     private final ObjectMapper objectMapper;
+    private final AnnotationBundleBuilder annotationBundleBuilder;
 
     private static final String SYSTEM_PROMPT = """
 You are a senior chart analyst specializing in structural levels on Indian FNO equities.
@@ -60,25 +63,40 @@ Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
      * Runs AI levels agent for a symbol (uses current time).
      */
     public AiLevels runForSymbol(String symbol, Long userId) {
-        return runForSymbol(symbol, userId, Optional.empty());
+        return runForSymbol(symbol, userId, Optional.empty(), null);
     }
 
     /**
-     * Runs AI levels agent for a symbol with optional asOf timestamp.
-     * @param symbol The symbol to analyze
-     * @param userId The user ID
-     * @param asOf If present, slice data to this instant; otherwise use current time
-     * @return Generated AiLevels record
+     * Runs AI levels agent for a symbol with optional asOf timestamp. Annotation lookup will fall back
+     * to the user's most-recent-thesis-and-cross-tab annotations since no tab context is provided.
      */
     public AiLevels runForSymbol(String symbol, Long userId, Optional<Instant> asOf) {
-        log.info("Running AI levels agent for symbol: {}, userId: {}, asOf: {}", symbol, userId, asOf);
+        return runForSymbol(symbol, userId, asOf, null);
+    }
+
+    /**
+     * Runs AI levels agent for a symbol with optional asOf and an optional tab uuid for tab-scoped annotations.
+     *
+     * @param symbol  The symbol to analyze
+     * @param userId  The user ID
+     * @param asOf    If present, slice data to this instant; otherwise use current time
+     * @param tabUuid If present, scope annotations + thesis lookup to this tab; otherwise look across all the user's tabs
+     * @return Generated AiLevels record
+     */
+    public AiLevels runForSymbol(String symbol, Long userId, Optional<Instant> asOf, String tabUuid) {
+        log.info("Running AI levels agent for symbol: {}, userId: {}, asOf: {}, tabUuid: {}",
+                symbol, userId, asOf, tabUuid);
 
         try {
             // Resolve user's active AI provider
             AiProviderResolver.ProviderConfig cfg = aiProviderResolver.resolveForUser(userId);
 
+            // Pull trader annotations + thesis; render to a Markdown fragment for the prompt
+            AnnotationBundleDto bundle = annotationBundleBuilder.buildForLevels(userId, symbol, tabUuid);
+            String annotationsFragment = annotationBundleBuilder.toPromptSection(bundle);
+
             // Build prompt (with asOf if provided)
-            String prompt = promptBuilderService.buildLevelsPrompt(symbol, asOf);
+            String prompt = promptBuilderService.buildLevelsPrompt(symbol, asOf, annotationsFragment);
 
             // Call LLM gateway
             LlmGateway.LlmResponse response = llmGateway.call(cfg, SYSTEM_PROMPT, prompt, 4096);
