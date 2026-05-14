@@ -101,20 +101,16 @@ public class ExitAgentService {
      */
     private ExitDecisionParsed parseResponse(String responseText) {
         try {
-            String cleanText = responseText.trim();
-
-            // Strip markdown fences if present
-            if (cleanText.startsWith("```json")) {
-                cleanText = cleanText.substring(7);
-            } else if (cleanText.startsWith("```")) {
-                cleanText = cleanText.substring(3);
+            // Tolerates chatty preambles + markdown fences (Llama-tuned providers like NVIDIA).
+            String cleanText = LevelsAgentService.extractJsonObject(responseText);
+            JsonNode node;
+            try {
+                node = objectMapper.readTree(cleanText);
+            } catch (Exception parseErr) {
+                log.error("ExitAgent: failed to parse JSON. First 300 chars of raw response: {}",
+                        responseText.length() > 300 ? responseText.substring(0, 300) : responseText);
+                throw parseErr;
             }
-            if (cleanText.endsWith("```")) {
-                cleanText = cleanText.substring(0, cleanText.length() - 3);
-            }
-            cleanText = cleanText.trim();
-
-            JsonNode node = objectMapper.readTree(cleanText);
             return new ExitDecisionParsed(
                 node.path("action").asText("HOLD"),
                 node.path("new_stop").isNull() ? null : node.path("new_stop").asDouble(),

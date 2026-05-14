@@ -65,6 +65,7 @@ export default function TVChartApp() {
   const [layoutModalMode, setLayoutModalMode] = useState<'save' | 'load' | null>(null);
 
   const chartRef = useRef<any>(null);
+  const aiShapeIdsRef = useRef<any[]>([]);
   const [scanTf, setScanTf] = useState('1h');
   const [useVisibleRange, setUseVisibleRange] = useState(true);
   const [scanFromTime, setScanFromTime] = useState('');
@@ -794,6 +795,15 @@ export default function TVChartApp() {
     }
   }, [scanTf, useVisibleRange, scanFromTime, scanToTime]);
 
+  const isoToEpochSec = (t: any): number => {
+    if (typeof t === 'number') return t > 1e12 ? Math.floor(t / 1000) : t;
+    if (typeof t === 'string') {
+      const ms = Date.parse(t);
+      return isNaN(ms) ? 0 : Math.floor(ms / 1000);
+    }
+    return 0;
+  };
+
   const handleAiLevels = useCallback(async () => {
     if (!chartRef.current) {
       setAiToast({ msg: 'Chart not ready', kind: 'error' });
@@ -816,30 +826,126 @@ export default function TVChartApp() {
           body: JSON.stringify({ symbol, tabId, layoutId: 1, timeframe }),
         }
       );
-
       if (!res.ok) {
         const errBody = await res.text();
         throw new Error(`HTTP ${res.status}: ${errBody.substring(0, 200)}`);
       }
+      const data = await res.json();
 
-      const data: any = await res.json();
-      const merged = data.lines_merged_count ?? data.linesMergedCount ?? 0;
-      const suppressed = data.lines_suppressed_count ?? data.linesSuppressedCount ?? 0;
-      let msg = `AI added ${merged} line${merged !== 1 ? 's' : ''}`;
-      if (suppressed > 0) msg += ` (${suppressed} suppressed — previously deleted)`;
-      setAiToast({ msg, kind: 'success' });
-
-      // Refresh chart drawings by resetting data
-      try {
-        if (widgetRef.current && widgetRef.current.activeChart) {
-          widgetRef.current.activeChart().resetData();
-        }
-      } catch (e) {
-        console.warn('Failed to refresh chart drawings after AI levels:', e);
+      // Parse levelsJson — may be parsed object or JSON string
+      let levels = data.levelsJson ?? data.levels_json;
+      if (typeof levels === 'string') {
+        try { levels = JSON.parse(levels); } catch { levels = {}; }
       }
+      levels = levels || {};
+
+      // Clear previous AI shapes
+      for (const id of aiShapeIdsRef.current) {
+        try { chart.removeEntity(id); } catch {}
+      }
+      aiShapeIdsRef.current = [];
+
+      let drawnCount = 0;
+
+      // ── Trendlines ──
+      for (const tl of (levels.trendlines || [])) {
+        try {
+          const t0 = isoToEpochSec(tl.anchor_t0 || tl.t0);
+          const t1 = isoToEpochSec(tl.anchor_t1 || tl.t1);
+          const p0 = Number(tl.anchor_p0 ?? tl.p0);
+          const p1 = Number(tl.anchor_p1 ?? tl.p1);
+          if (!t0 || !t1 || !Number.isFinite(p0) || !Number.isFinite(p1)) continue;
+
+          const id = await chart.createMultipointShape(
+            [{ time: t0, price: p0 }, { time: t1, price: p1 }],
+            {
+              shape: 'trend_line',
+              lock: false,
+              disableSelection: false,
+              disableSave: true,
+              disableUndo: true,
+              text: tl.rationale || '',
+              overrides: {
+                'linetooltrendline.linecolor': '#7E57C2',
+                'linetooltrendline.linewidth': 1,
+                'linetooltrendline.linestyle': 2,
+                'linetooltrendline.extendRight': true,
+                'linetooltrendline.showLabel': false,
+              },
+            }
+          );
+          if (id) { aiShapeIdsRef.current.push(id); drawnCount++; }
+        } catch (e) { console.warn('AI trendline failed', tl, e); }
+      }
+
+      // ── Horizontal levels ──
+      for (const h of (levels.horizontal_levels || [])) {
+        try {
+          const price = Number(h.price);
+          if (!Number.isFinite(price)) continue;
+          const visRange = chart.getVisibleRange();
+          const anchorTime = visRange?.from || Math.floor(Date.now() / 1000);
+
+          const id = await chart.createShape(
+            { time: anchorTime, price },
+            {
+              shape: 'horizontal_line',
+              lock: false,
+              disableSelection: false,
+              disableSave: true,
+              disableUndo: true,
+              text: h.rationale || '',
+            }
+          );
+          if (id) {
+            try {
+              const shape = chart.getShapeById(id);
+              if (shape?.setProperties) {
+                shape.setProperties({
+                  linecolor: '#26A69A',
+                  linewidth: 1,
+                  linestyle: 2,
+                  textcolor: '#26A69A',
+                  showLabel: false,
+                });
+              }
+            } catch {}
+            aiShapeIdsRef.current.push(id);
+            drawnCount++;
+          }
+        } catch (e) { console.warn('AI horizontal failed', h, e); }
+      }
+
+      // ── Fibonacci zones ──
+      for (const f of (levels.fib_zones || [])) {
+        try {
+          const t0 = isoToEpochSec(f.from_t || f.t0);
+          const t1 = isoToEpochSec(f.to_t || f.t1);
+          const p0 = Number(f.from_p ?? f.p0);
+          const p1 = Number(f.to_p ?? f.p1);
+          if (!t0 || !t1 || !Number.isFinite(p0) || !Number.isFinite(p1)) continue;
+
+          const id = await chart.createMultipointShape(
+            [{ time: t0, price: p0 }, { time: t1, price: p1 }],
+            {
+              shape: 'fib_retracement',
+              lock: false,
+              disableSelection: false,
+              disableSave: true,
+              disableUndo: true,
+            }
+          );
+          if (id) { aiShapeIdsRef.current.push(id); drawnCount++; }
+        } catch (e) { console.warn('AI fib failed', f, e); }
+      }
+
+      setAiToast({
+        msg: `Drew ${drawnCount} AI line${drawnCount !== 1 ? 's' : ''}. ${levels.summary || ''}`.trim(),
+        kind: 'success',
+      });
+      setAiLoading(false);
     } catch (e: any) {
       setAiToast({ msg: e?.message || 'Failed to fetch AI levels', kind: 'error' });
-    } finally {
       setAiLoading(false);
     }
   }, []);
