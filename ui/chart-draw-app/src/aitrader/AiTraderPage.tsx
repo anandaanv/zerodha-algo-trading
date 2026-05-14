@@ -37,6 +37,88 @@ function isoToEpochSec(t: any): number {
   return 0;
 }
 
+/**
+ * Programmatically trigger TradingView's "Go To Date" dialog (Alt+G) and pre-fill it.
+ *
+ * 1. Open the dialog via TV's executeActionById('Chart.Dialogs.ShowGoToDate').
+ * 2. Find the TV widget iframe in the parent document and reach into its DOM
+ *    (charting_library is served from same origin so this is allowed).
+ * 3. Set the date input value to the target date, dispatch input/change events
+ *    so the dialog's internal state updates, then click the Submit/OK button.
+ *
+ * If any step fails, we leave the dialog open so the trader can complete it manually.
+ *
+ * @param chart  TradingView active chart returned by widget.activeChart()
+ * @param dateYmd Target date in YYYY-MM-DD form (e.g. "2024-03-15")
+ */
+function triggerGoToDate(chart: any, dateYmd: string): void {
+  try {
+    chart.executeActionById?.('Chart.Dialogs.ShowGoToDate');
+  } catch (e) {
+    console.warn('[triggerGoToDate] executeActionById failed:', e);
+    return;
+  }
+
+  // Wait for the dialog to render, then try to pre-fill and submit it.
+  const findIframe = (): HTMLIFrameElement | null => {
+    const list = document.querySelectorAll<HTMLIFrameElement>('iframe');
+    for (const f of list) {
+      const src = f.src || '';
+      if (src.includes('charting_library') || src.includes('tradingview')) return f;
+    }
+    return list[0] || null;
+  };
+
+  let attempts = 0;
+  const tick = () => {
+    attempts += 1;
+    const iframe = findIframe();
+    const doc = iframe?.contentDocument;
+    if (!doc) {
+      if (attempts < 10) setTimeout(tick, 100);
+      return;
+    }
+
+    // Candidate selectors for the date input — TV's class names change between versions
+    // so try several. Pick the first one that's visible.
+    const dateInput = doc.querySelector<HTMLInputElement>(
+      'input[type="date"], input[data-name="date"], .tv-dialog input[type="text"]'
+    );
+    if (!dateInput) {
+      if (attempts < 10) setTimeout(tick, 100);
+      return;
+    }
+
+    // Fill date — TV usually expects YYYY-MM-DD when the input type="date", else
+    // it may want the localized form. We try both shapes.
+    try {
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, 'value'
+      )?.set;
+      nativeSetter?.call(dateInput, dateYmd);
+      dateInput.dispatchEvent(new Event('input', { bubbles: true }));
+      dateInput.dispatchEvent(new Event('change', { bubbles: true }));
+    } catch (e) {
+      console.warn('[triggerGoToDate] set value failed:', e);
+    }
+
+    // Click submit/OK
+    setTimeout(() => {
+      const submit = doc.querySelector<HTMLButtonElement>(
+        'button[data-name="submit-button"], .tv-dialog__submit-button, ' +
+        'button[type="submit"], .tv-button-submit, .submitButton-DwNQ7tjg'
+      );
+      if (submit) {
+        submit.click();
+        console.log('[triggerGoToDate] submitted dialog with date', dateYmd);
+      } else {
+        console.warn('[triggerGoToDate] submit button not found — dialog left open for manual entry');
+      }
+    }, 150);
+  };
+  setTimeout(tick, 200);
+}
+
 export default function AiTraderPage() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('WIPRO');
   const [symbolInput, setSymbolInput] = useState<string>('WIPRO');
@@ -73,8 +155,16 @@ export default function AiTraderPage() {
   }, []);
 
   // Pan the chart to a simulated trade and draw entry/SL/TP horizontals.
-  // We deliberately go through chartRef directly — no React state changes — so the
-  // TVChartContainer widget does NOT remount (which would look like a page refresh).
+  // Strategy:
+  //   1. Try chart.setVisibleRange (proper API). It may return a Promise — await it.
+  //   2. Bars for the trade's date may not be loaded yet; subscribe to onDataLoaded
+  //      and re-apply the range once data arrives (mirrors TVChartContainer's pattern).
+  //   3. After a grace period, if the visible range is still far from the target,
+  //      fall back to TradingView's Go To Date dialog (Alt+G) — open it via
+  //      executeActionById('Chart.Dialogs.ShowGoToDate'), then pre-fill the date input
+  //      and click Submit using the iframe's DOM (same-origin, so accessible).
+  // No React state changes anywhere in this handler — the TVChartContainer widget
+  // must NOT remount.
   const handleSelectSimTrade = useCallback(async (trade: any) => {
     if (!chartRef.current) { showToast('Chart not ready', 'error'); return; }
     const chart = chartRef.current;
@@ -86,19 +176,54 @@ export default function AiTraderPage() {
     const entryEpoch = isoToEpochSec(trade.entryTime ?? trade.entry_time);
     const exitEpoch = isoToEpochSec(trade.exitTime ?? trade.exit_time) || (entryEpoch + 7 * 86400);
 
-    // If a stray different-symbol trade ever lands here, switch via TV API (no remount).
+    if (entryEpoch <= 0) {
+      showToast('Trade has no entry time', 'error');
+      return;
+    }
+
+    const entryDateIso = new Date(entryEpoch * 1000).toISOString();
+    console.log('[handleSelectSimTrade] trade:', {
+      symbol, direction, entry, sl, target,
+      entryISO: entryDateIso,
+      exitISO: new Date(exitEpoch * 1000).toISOString(),
+    });
+
+    // If a stray different-symbol trade lands here, switch via TV API (no remount).
     if (symbol && symbol !== selectedSymbol) {
       try { chart.setSymbol?.(symbol, () => {}); } catch (e) { console.warn('setSymbol failed', e); }
     }
 
-    // Pan to entry/exit window with a 30% buffer on each side.
-    if (entryEpoch > 0) {
-      const duration = Math.max(86400, exitEpoch - entryEpoch);
-      const buffer = duration * 0.3;
+    const duration = Math.max(86400, exitEpoch - entryEpoch);
+    const buffer = duration * 0.3;
+    const targetRange = { from: entryEpoch - buffer, to: exitEpoch + buffer };
+
+    // Helper: apply the range, await any Promise the SDK returns.
+    const applyRange = async () => {
       try {
-        chart.setVisibleRange({ from: entryEpoch - buffer, to: exitEpoch + buffer });
-      } catch (e) { console.warn('setVisibleRange failed', e); }
-    }
+        const result = chart.setVisibleRange(targetRange);
+        if (result && typeof result.then === 'function') await result;
+        return true;
+      } catch (e) {
+        console.warn('[handleSelectSimTrade] setVisibleRange failed:', e);
+        return false;
+      }
+    };
+
+    // 1. First attempt
+    await applyRange();
+
+    // 2. Retry once after the datafeed reports fresh bars are loaded.
+    try {
+      const sub = chart.onDataLoaded?.();
+      if (sub && typeof sub.subscribe === 'function') {
+        let fired = false;
+        sub.subscribe(null, () => {
+          if (fired) return;
+          fired = true;
+          setTimeout(applyRange, 200);
+        });
+      }
+    } catch (e) { /* ignore — onDataLoaded may not be supported */ }
 
     // Clear previous sim-trade shapes
     for (const id of simTradeShapeIdsRef.current) {
@@ -111,7 +236,7 @@ export default function AiTraderPage() {
       if (!Number.isFinite(price)) return;
       try {
         const id = await chart.createShape(
-          { time: entryEpoch || Math.floor(Date.now() / 1000), price },
+          { time: entryEpoch, price },
           { shape: 'horizontal_line', lock: false, disableSelection: false, disableSave: true, disableUndo: true, text: label }
         );
         if (id) {
@@ -129,8 +254,25 @@ export default function AiTraderPage() {
     drawLine(sl, '#EF5350', 'SL');
     drawLine(target, '#26A69A', 'Target');
 
-    const when = (trade.entryTime ?? trade.entry_time ?? '').toString().substring(0, 16).replace('T', ' ');
+    const when = entryDateIso.substring(0, 16).replace('T', ' ');
     showToast(`${symbol} ${direction} · ${when} · entry ${entry.toFixed(2)}`);
+
+    // 3. After a grace period, if the visible range hasn't reached the target,
+    //    fall back to the Go To Date dialog (Alt+G) and pre-fill it.
+    setTimeout(() => {
+      try {
+        const current = chart.getVisibleRange?.();
+        if (!current) return;
+        const targetCenter = (targetRange.from + targetRange.to) / 2;
+        const currentCenter = (current.from + current.to) / 2;
+        const drift = Math.abs(targetCenter - currentCenter);
+        // 30 days drift = setVisibleRange didn't take effect → fall back
+        if (drift > 30 * 86400) {
+          console.warn('[handleSelectSimTrade] visible range drifted by', drift, 's — opening Go To Date dialog');
+          triggerGoToDate(chart, entryDateIso.substring(0, 10));
+        }
+      } catch (e) { /* ignore */ }
+    }, 1500);
   }, [selectedSymbol, showToast]);
 
   const handleAiLevels = useCallback(async () => {
