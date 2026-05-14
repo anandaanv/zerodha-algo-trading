@@ -31,26 +31,13 @@ public class LevelsAgentService {
     private static final String SYSTEM_PROMPT = """
 You are a senior chart analyst specializing in structural levels on Indian FNO equities.
 
-Analyze the provided multi-timeframe OHLC + indicator context and identify the IMPORTANT support/resistance levels, trendlines, fibonacci zones, and Elliott Wave labels.
+Analyze the provided multi-timeframe OHLC + indicator context and identify high-conviction support/resistance levels.
 
-Focus on LEVELS THAT MATTER (multi-touch, structural pivots) — not every minor swing. Quality over quantity.
+Focus on LEVELS THAT MATTER: multi-touch, round-number, structural pivots. Quality over quantity.
 
 Return STRICTLY this JSON shape — NO markdown, NO commentary, NO extra keys:
 
 {
-  "trendlines": [
-    {
-      "id": "tl1",
-      "anchor_t0": "<ISO-8601 UTC, e.g. 2025-02-05T03:45:00Z>",
-      "anchor_p0": <number>,
-      "anchor_t1": "<ISO-8601 UTC>",
-      "anchor_p1": <number>,
-      "role": "support" | "resistance",
-      "primary_timeframe": "weekly" | "daily" | "hourly",
-      "confidence": <0.0-1.0>,
-      "rationale": "<150 chars max>"
-    }
-  ],
   "horizontal_levels": [
     {
       "id": "h1",
@@ -61,42 +48,10 @@ Return STRICTLY this JSON shape — NO markdown, NO commentary, NO extra keys:
       "rationale": "<150 chars>"
     }
   ],
-  "elliott_waves": [
-    {
-      "wave": "1" | "2" | "3" | "4" | "5" | "A" | "B" | "C",
-      "anchor_t": "<ISO-8601 UTC>",
-      "anchor_p": <number>,
-      "rationale": "<150 chars>"
-    }
-  ],
-  "fib_zones": [
-    {
-      "id": "f1",
-      "from_t": "<ISO-8601 UTC>", "from_p": <number>,
-      "to_t": "<ISO-8601 UTC>", "to_p": <number>,
-      "rationale": "<150 chars>"
-    }
-  ],
-  "summary": "<300 chars overall structural read>",
-  "watch_trades": [
-    {
-      "id": "wt1",
-      "direction": "LONG" | "SHORT",
-      "trigger_condition": "<trigger in <50 chars, e.g. 'Break and hourly close above 213'>",
-      "entry": <number>,
-      "stop": <number>,
-      "target": <number>,
-      "rr": <number>,
-      "confidence": <0.0-1.0>,
-      "validity_until": "<ISO-8601 UTC>",
-      "rationale": "<200 chars max>"
-    }
-  ]
+  "summary": "<300 chars overall structural read>"
 }
 
-Aim for: 5-8 trendlines, 4-6 horizontals, 0-1 confident Elliott labelings (empty if uncertain — don't force), 1-2 fib zones from the major recent swing.
-
-WATCH_TRADES: Emit 0-3 high-conviction trade setups per symbol. Only include if confidence >= 0.6 and setup is well-defined (clear trigger, entry, stop, target). Do NOT emit every line crossing or every minor opportunity.
+Aim for 5-10 high-conviction horizontal levels only. Omit trendlines, elliott waves, fibonacci zones, and watch trades.
 
 Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
 """;
@@ -128,21 +83,19 @@ Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
             // Call LLM gateway
             LlmGateway.LlmResponse response = llmGateway.call(cfg, SYSTEM_PROMPT, prompt, 4096);
 
-            // Parse response JSON (strip markdown if present)
-            String jsonText = response.text().trim();
-            if (jsonText.startsWith("```json")) {
-                jsonText = jsonText.substring(7);
-            }
-            if (jsonText.startsWith("```")) {
-                jsonText = jsonText.substring(3);
-            }
-            if (jsonText.endsWith("```")) {
-                jsonText = jsonText.substring(0, jsonText.length() - 3);
-            }
-            jsonText = jsonText.trim();
+            // Parse response JSON — defensively handle chatty preambles + markdown fences.
+            // Sonnet usually obeys "JSON only" but NVIDIA / Llama-tuned models often prepend
+            // "Based on the analysis..." or wrap in ```json fences. Extract the outermost {...}.
+            String jsonText = extractJsonObject(response.text());
 
-            // Validate JSON
-            JsonNode levelsJson = objectMapper.readTree(jsonText);
+            JsonNode levelsJson;
+            try {
+                levelsJson = objectMapper.readTree(jsonText);
+            } catch (Exception parseErr) {
+                log.error("Levels agent: failed to parse JSON from model response. First 400 chars of raw response: {}",
+                        response.text().length() > 400 ? response.text().substring(0, 400) : response.text());
+                throw parseErr;
+            }
 
             // Compute generatedForDate
             LocalDate generatedForDate = asOf
@@ -187,5 +140,35 @@ Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
             log.error("Error running levels agent for {} (userId: {})", symbol, userId, e);
             throw new RuntimeException("Levels agent failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Extract the outermost JSON object {...} from a model response. Tolerates:
+     *   - leading prose ("Based on the analysis: {...}")
+     *   - ```json fenced blocks
+     *   - trailing commentary
+     * Falls back to the original (trimmed) text if no braces found.
+     */
+    static String extractJsonObject(String raw) {
+        if (raw == null) return "";
+        String s = raw.trim();
+        // Strip code fences if present
+        if (s.startsWith("```json")) s = s.substring(7).trim();
+        else if (s.startsWith("```")) s = s.substring(3).trim();
+        if (s.endsWith("```")) s = s.substring(0, s.length() - 3).trim();
+        // Find outermost balanced braces
+        int start = s.indexOf('{');
+        if (start < 0) return s;
+        int depth = 0;
+        for (int i = start; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '{') depth++;
+            else if (c == '}') {
+                depth--;
+                if (depth == 0) return s.substring(start, i + 1);
+            }
+        }
+        // unbalanced — return from first { onward, parser will error and we'll log raw
+        return s.substring(start);
     }
 }
