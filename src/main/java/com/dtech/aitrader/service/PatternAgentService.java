@@ -1,5 +1,7 @@
 package com.dtech.aitrader.service;
 
+import com.dtech.aitrader.annotation.dto.AnnotationBundleDto;
+import com.dtech.aitrader.annotation.service.AnnotationBundleBuilder;
 import com.dtech.aitrader.data.AgentDecision;
 import com.dtech.aitrader.data.PaperTrade;
 import com.dtech.aitrader.model.PatternSignal;
@@ -30,6 +32,7 @@ public class PatternAgentService {
     private final AgentDecisionRepository agentDecisionRepository;
     private final PaperTradeRepository paperTradeRepository;
     private final ObjectMapper objectMapper;
+    private final AnnotationBundleBuilder annotationBundleBuilder;
 
     @Value("${pattern.model:claude-sonnet-4-5-20250929}")
     private String patternModel;
@@ -51,8 +54,12 @@ public class PatternAgentService {
         log.info("PatternAgent.decide: symbol={}, patternType={}, direction={}",
             signal.getSymbol(), signal.getPatternType(), signal.getDirection());
 
+        // Pull trader annotations + thesis for this user+symbol; render to prompt fragment
+        AnnotationBundleDto bundle = annotationBundleBuilder.buildForPattern(userId, signal.getSymbol());
+        String annotationsFragment = annotationBundleBuilder.toPromptSection(bundle);
+
         // Build prompt
-        String userPrompt = promptBuilder.buildPatternPrompt(signal);
+        String userPrompt = promptBuilder.buildPatternPrompt(signal, Optional.empty(), annotationsFragment);
 
         // Resolve provider config — the active provider's model is the source of truth
         AiProviderResolver.ProviderConfig cfg = providerResolver.resolveForUser(userId);

@@ -32,17 +32,30 @@ public class AiLevelsPromptBuilder {
      * @return Levels prompt using latest data
      */
     public String buildLevelsPrompt(String symbol) {
-        return buildLevelsPrompt(symbol, Optional.empty());
+        return buildLevelsPrompt(symbol, Optional.empty(), "");
     }
 
     /**
      * Builds levels prompt sliced to a specific asOf instant (no look-ahead).
-     * @param symbol The symbol to analyze
-     * @param asOf If present, slice all bars to bar.endTime <= asOf
-     * @return Levels prompt with data as-of the specified instant
+     * Delegates to the annotation-aware overload with no annotations.
      */
     public String buildLevelsPrompt(String symbol, Optional<Instant> asOf) {
-        log.info("Building levels prompt for symbol: {} asOf: {}", symbol, asOf);
+        return buildLevelsPrompt(symbol, asOf, "");
+    }
+
+    /**
+     * Builds levels prompt sliced to a specific asOf instant, with an optional pre-rendered annotations
+     * section. The annotations fragment is injected immediately after the as-of timestamp block so the
+     * agent sees the trader's intent before the indicator/bar dump.
+     *
+     * @param symbol The symbol to analyze
+     * @param asOf If present, slice all bars to bar.endTime &lt;= asOf
+     * @param annotationsPromptFragment Pre-rendered Markdown annotations section, or empty/null for none
+     * @return Levels prompt with data as-of the specified instant
+     */
+    public String buildLevelsPrompt(String symbol, Optional<Instant> asOf, String annotationsPromptFragment) {
+        log.info("Building levels prompt for symbol: {} asOf: {} hasAnnotations: {}",
+                symbol, asOf, annotationsPromptFragment != null && !annotationsPromptFragment.isBlank());
 
         try {
             // Fetch hourly, daily, and weekly bars
@@ -112,6 +125,12 @@ public class AiLevelsPromptBuilder {
             // As-of timestamp
             prompt.append("## As-of timestamp\n");
             prompt.append(latestIso).append("\n\n");
+
+            // Trader's annotations — placed up front so the agent reads intent before the data dump
+            if (annotationsPromptFragment != null && !annotationsPromptFragment.isBlank()) {
+                prompt.append(annotationsPromptFragment);
+                if (!annotationsPromptFragment.endsWith("\n\n")) prompt.append("\n");
+            }
 
             // Weekly bars
             prompt.append("## Weekly bars (last ").append(weeklyBars.size()).append(" weeks)\n");

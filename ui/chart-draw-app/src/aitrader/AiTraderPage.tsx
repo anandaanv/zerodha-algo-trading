@@ -5,6 +5,7 @@ import ActiveTradesPanel from './ActiveTradesPanel';
 import WatchTradesPanel from './WatchTradesPanel';
 import SimulatedTradesPanel from './SimulatedTradesPanel';
 import WatchlistPanel from './WatchlistPanel';
+import AnnotationsPanel from './annotations/AnnotationsPanel';
 import { getApiUrl } from '../config/api';
 import { withAuth } from '../utils/apiHelper';
 import './AiTraderPage.css';
@@ -220,6 +221,9 @@ export default function AiTraderPage() {
         </CollapsibleSection>
         <CollapsibleSection title={`Simulated trades · ${selectedSymbol}`} defaultOpen={false}>
           <SimulatedTradesPanel symbol={selectedSymbol} onSelectSymbol={handleSelectSymbol} />
+        </CollapsibleSection>
+        <CollapsibleSection title={`Annotations & thesis · ${selectedSymbol}`} defaultOpen={true}>
+          <AnnotationsPanel symbol={selectedSymbol} tabUuid={tabId} interval="OneHour" />
         </CollapsibleSection>
       </div>
 

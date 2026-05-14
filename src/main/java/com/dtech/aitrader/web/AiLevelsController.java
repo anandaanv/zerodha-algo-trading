@@ -43,8 +43,9 @@ public class AiLevelsController {
             // Extract user ID from authentication
             Long userId = extractUserId(auth);
 
-            // Run levels agent
-            AiLevels aiLevels = levelsAgentService.runForSymbol(request.getSymbol(), userId);
+            // Run levels agent (tabId is the tab uuid → annotation scoping)
+            AiLevels aiLevels = levelsAgentService.runForSymbol(
+                    request.getSymbol(), userId, java.util.Optional.empty(), request.getTabId());
 
             // Parse levels JSON
             JsonNode levelsJson = objectMapper.readTree(aiLevels.getLevelsJson());

@@ -52,17 +52,28 @@ public class PatternAgentPromptBuilder {
      * @return User prompt for Claude with complete decision context
      */
     public String buildPatternPrompt(PatternSignal signal) {
-        return buildPatternPrompt(signal, Optional.empty());
+        return buildPatternPrompt(signal, Optional.empty(), "");
     }
 
     /**
      * Builds a pattern prompt with optional asOf slicing for walk-forward testing.
-     *
-     * @param signal The pattern signal
-     * @param asOf If present, slice bars to bar.endTime <= asOf; use signal.signalTime if empty
-     * @return User prompt with no look-ahead
+     * Delegates to the annotation-aware overload with no annotations.
      */
     public String buildPatternPrompt(PatternSignal signal, Optional<Instant> asOf) {
+        return buildPatternPrompt(signal, asOf, "");
+    }
+
+    /**
+     * Builds a pattern prompt with an optional pre-rendered trader-annotations fragment. The fragment
+     * is injected after the PATTERN SIGNAL block so the agent reads the trader's intent before the
+     * indicator/bar dump.
+     *
+     * @param signal The pattern signal
+     * @param asOf If present, slice bars to bar.endTime &lt;= asOf; use signal.signalTime if empty
+     * @param annotationsPromptFragment Pre-rendered Markdown annotations section, or empty/null for none
+     * @return User prompt with no look-ahead
+     */
+    public String buildPatternPrompt(PatternSignal signal, Optional<Instant> asOf, String annotationsPromptFragment) {
         // If asOf not provided, use signal's signalTime
         Instant effectiveAsOf = asOf.orElse(signal.getSignalTime());
         StringBuilder prompt = new StringBuilder();
@@ -77,6 +88,12 @@ public class PatternAgentPromptBuilder {
             signal.getSuggestedEntry(), signal.getSuggestedSl(), signal.getSuggestedTarget()));
         prompt.append(String.format("Signal Time: %s\n", signal.getSignalTime()));
         prompt.append(String.format("Signal Ref: %s\n\n", signal.getSignalRef()));
+
+        // Trader's annotations — placed early so the agent reads intent before the data dump
+        if (annotationsPromptFragment != null && !annotationsPromptFragment.isBlank()) {
+            prompt.append(annotationsPromptFragment);
+            if (!annotationsPromptFragment.endsWith("\n\n")) prompt.append("\n");
+        }
 
         // 2. Extra context (engine-specific)
         if (signal.getExtraContext() != null && !signal.getExtraContext().isEmpty()) {
