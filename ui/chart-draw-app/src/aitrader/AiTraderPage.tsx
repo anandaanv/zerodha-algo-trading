@@ -47,6 +47,7 @@ export default function AiTraderPage() {
 
   const chartRef = useRef<any>(null);
   const aiShapeIdsRef = useRef<any[]>([]);
+  const simTradeShapeIdsRef = useRef<any[]>([]);
   const tabId = getOrCreateTabId();
 
   // Single source of truth for symbol changes — also bumps refreshTick so dependent panels re-fetch.
@@ -70,6 +71,67 @@ export default function AiTraderPage() {
     setToast({ msg, kind });
     setTimeout(() => setToast(null), 5000);
   }, []);
+
+  // Pan the chart to a simulated trade and draw entry/SL/TP horizontals.
+  // We deliberately go through chartRef directly — no React state changes — so the
+  // TVChartContainer widget does NOT remount (which would look like a page refresh).
+  const handleSelectSimTrade = useCallback(async (trade: any) => {
+    if (!chartRef.current) { showToast('Chart not ready', 'error'); return; }
+    const chart = chartRef.current;
+    const symbol = trade.symbol;
+    const direction = trade.direction;
+    const entry = Number(trade.entryPrice ?? trade.entry_price);
+    const sl = Number(trade.stopInitial ?? trade.stop_initial);
+    const target = Number(trade.targetInitial ?? trade.target_initial);
+    const entryEpoch = isoToEpochSec(trade.entryTime ?? trade.entry_time);
+    const exitEpoch = isoToEpochSec(trade.exitTime ?? trade.exit_time) || (entryEpoch + 7 * 86400);
+
+    // If a stray different-symbol trade ever lands here, switch via TV API (no remount).
+    if (symbol && symbol !== selectedSymbol) {
+      try { chart.setSymbol?.(symbol, () => {}); } catch (e) { console.warn('setSymbol failed', e); }
+    }
+
+    // Pan to entry/exit window with a 30% buffer on each side.
+    if (entryEpoch > 0) {
+      const duration = Math.max(86400, exitEpoch - entryEpoch);
+      const buffer = duration * 0.3;
+      try {
+        chart.setVisibleRange({ from: entryEpoch - buffer, to: exitEpoch + buffer });
+      } catch (e) { console.warn('setVisibleRange failed', e); }
+    }
+
+    // Clear previous sim-trade shapes
+    for (const id of simTradeShapeIdsRef.current) {
+      try { chart.removeEntity(id); } catch {}
+    }
+    simTradeShapeIdsRef.current = [];
+
+    // Draw entry/SL/TP horizontals anchored at entryEpoch.
+    const drawLine = async (price: number, color: string, label: string) => {
+      if (!Number.isFinite(price)) return;
+      try {
+        const id = await chart.createShape(
+          { time: entryEpoch || Math.floor(Date.now() / 1000), price },
+          { shape: 'horizontal_line', lock: false, disableSelection: false, disableSave: true, disableUndo: true, text: label }
+        );
+        if (id) {
+          try {
+            const shape = chart.getShapeById(id);
+            shape?.setProperties?.({ linecolor: color, linewidth: 1, linestyle: 0, textcolor: color, showLabel: true });
+          } catch {}
+          simTradeShapeIdsRef.current.push(id);
+        }
+      } catch (e) { console.warn('drawLine failed', label, e); }
+    };
+
+    const entryColor = direction === 'LONG' ? '#2e7d32' : '#c62828';
+    drawLine(entry, entryColor, `Entry ${direction}`);
+    drawLine(sl, '#EF5350', 'SL');
+    drawLine(target, '#26A69A', 'Target');
+
+    const when = (trade.entryTime ?? trade.entry_time ?? '').toString().substring(0, 16).replace('T', ' ');
+    showToast(`${symbol} ${direction} · ${when} · entry ${entry.toFixed(2)}`);
+  }, [selectedSymbol, showToast]);
 
   const handleAiLevels = useCallback(async () => {
     if (!chartRef.current) { showToast('Chart not ready', 'error'); return; }
@@ -220,7 +282,11 @@ export default function AiTraderPage() {
           <WatchTradesPanel symbol={selectedSymbol} onSelectSymbol={handleSelectSymbol} refreshTick={refreshTick} />
         </CollapsibleSection>
         <CollapsibleSection title={`Simulated trades · ${selectedSymbol}`} defaultOpen={false}>
-          <SimulatedTradesPanel symbol={selectedSymbol} onSelectSymbol={handleSelectSymbol} />
+          <SimulatedTradesPanel
+            symbol={selectedSymbol}
+            onSelectSymbol={handleSelectSymbol}
+            onSelectTrade={handleSelectSimTrade}
+          />
         </CollapsibleSection>
         <CollapsibleSection title={`Annotations & thesis · ${selectedSymbol}`} defaultOpen={true}>
           <AnnotationsPanel symbol={selectedSymbol} tabUuid={tabId} interval="OneHour" />

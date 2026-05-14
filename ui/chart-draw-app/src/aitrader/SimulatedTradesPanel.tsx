@@ -38,12 +38,21 @@ type Replay = {
   modelUsed: string;
 };
 
-type Props = { symbol?: string; onSelectSymbol: (s: string) => void };
+type Props = {
+  symbol?: string;
+  onSelectSymbol: (s: string) => void;
+  /**
+   * Invoked when the trader clicks the trade row. Receives the full trade object
+   * so the parent can pan/decorate the chart for the trade window without
+   * triggering a symbol-change re-render. When omitted, falls back to onSelectSymbol.
+   */
+  onSelectTrade?: (trade: SimTrade) => void;
+};
 
 const f = (n: any, dp = 2) => (n == null ? '-' : Number(n).toFixed(dp));
 const truncate = (s: string, n: number) => (s && s.length > n ? s.substring(0, n) + '…' : s);
 
-export default function SimulatedTradesPanel({ symbol, onSelectSymbol }: Props) {
+export default function SimulatedTradesPanel({ symbol, onSelectSymbol, onSelectTrade }: Props) {
   const [runs, setRuns] = useState<SimRun[]>([]);
   const [loading, setLoading] = useState(false);
   const [groupExpanded, setGroupExpanded] = useState<Record<string, boolean>>({});
@@ -199,7 +208,13 @@ export default function SimulatedTradesPanel({ symbol, onSelectSymbol }: Props) 
                         borderBottom: '1px solid #f5f5f5', background: '#fff',
                       }}>
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8}}>
-                          <div onClick={() => onSelectSymbol(t.symbol)} style={{flex: 1, cursor: 'pointer'}}>
+                          <div
+                            onClick={() => {
+                              if (onSelectTrade) onSelectTrade(t);
+                              else onSelectSymbol(t.symbol);
+                            }}
+                            style={{flex: 1, cursor: 'pointer'}}
+                          >
                             <span style={{
                               fontWeight: 600,
                               color: direction === 'LONG' ? '#2e7d32' : '#c62828',
