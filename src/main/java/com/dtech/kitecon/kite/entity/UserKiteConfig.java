@@ -37,6 +37,14 @@ public class UserKiteConfig {
     @Column(name = "public_token", columnDefinition = "TEXT")
     private String publicToken;
 
+    /** AES-encrypted Zerodha login password — null when auto-login isn't configured. */
+    @Column(name = "zerodha_password_encrypted", length = 1024)
+    private String zerodhaPasswordEncrypted;
+
+    /** AES-encrypted base32 TOTP shared secret (RFC 6238). */
+    @Column(name = "totp_secret_encrypted", length = 512)
+    private String totpSecretEncrypted;
+
     @Builder.Default
     @Column(name = "active", nullable = false)
     private boolean active = true;

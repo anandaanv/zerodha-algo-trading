@@ -125,6 +125,9 @@ dependencies {
     implementation 'org.jetbrains.kotlin:kotlin-scripting-jsr223:2.1.0'
     implementation 'org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.0'
     implementation 'org.jetbrains.kotlin:kotlin-scripting-jvm-host:2.1.0'
+
+    // Zerodha Kite auto-login: TOTP generation (RFC 6238)
+    implementation 'dev.samstevens.totp:totp:1.7.1'
 }
 
 task createDirectories {

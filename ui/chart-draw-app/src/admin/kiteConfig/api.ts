@@ -10,6 +10,8 @@ export interface UserKiteConfigDto {
   kiteUserId?: string;
   connected: boolean;
   active: boolean;
+  hasAutoLoginPassword?: boolean;
+  hasAutoLoginTotp?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -25,6 +27,14 @@ export interface CreateKiteConfigRequest {
 export interface UpdateKiteConfigRequest {
   label?: string;
   active?: boolean;
+  apiKey?: string;
+  apiSecret?: string;
+  kiteUserId?: string;
+}
+
+export interface AutoLoginCredentialsRequest {
+  password?: string;
+  totpSecret?: string;
 }
 
 export async function listKiteConfigs(): Promise<UserKiteConfigDto[]> {
@@ -68,4 +78,20 @@ export function getKiteConnectUrl(id: number): string {
   // The Kite developer console must have redirect URI: {server}/kite-callback/config/{id}
   const base = (window as any).__API_BASE_URL__ || '';
   return `${base}/api/admin/kite-configs/${id}/connect`;
+}
+
+export async function setAutoLoginCredentials(id: number, req: AutoLoginCredentialsRequest): Promise<void> {
+  const res = await apiFetch(`/api/admin/kite-configs/${id}/auto-login-credentials`, withAuth({
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  }));
+  if (!res.ok) throw new Error(await res.text() || `Failed: ${res.status}`);
+}
+
+export async function runAutoLogin(id: number): Promise<any> {
+  const res = await apiFetch(`/api/admin/kite-configs/${id}/auto-login`, withAuth({ method: 'POST' }));
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body?.message || `Auto-login failed: ${res.status}`);
+  return body;
 }
