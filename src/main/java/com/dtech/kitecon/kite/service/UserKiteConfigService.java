@@ -53,11 +53,21 @@ public class UserKiteConfigService {
     }
 
     @Transactional
-    public Map<String, Object> update(Long id, String label, Boolean active) {
+    public Map<String, Object> update(Long id, String label, Boolean active,
+                                       String apiKey, String apiSecret, String kiteUserId) {
         UserKiteConfig config = repository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Config not found: " + id));
         if (label != null) config.setLabel(label);
         if (active != null) config.setActive(active);
+        // Optional credential fields — only update when explicitly provided.
+        if (apiKey != null && !apiKey.isBlank()) config.setApiKey(apiKey);
+        if (apiSecret != null && !apiSecret.isBlank()) config.setApiSecret(apiSecret);
+        if (kiteUserId != null && !kiteUserId.isBlank()) config.setKiteUserId(kiteUserId);
+        // Editing api_key or api_secret invalidates any cached pool client — drop it
+        // so the next access reloads with the new values.
+        if (apiKey != null || apiSecret != null) {
+            kiteConnectPool.removeUserKiteConfig(id);
+        }
         return toDto(repository.save(config));
     }
 
@@ -160,6 +170,11 @@ public class UserKiteConfigService {
         dto.put("kiteUserId", c.getKiteUserId());
         dto.put("connected", c.getAccessToken() != null);
         dto.put("active", c.isActive());
+        // Surface whether auto-login credentials are configured (boolean only, never the values).
+        dto.put("hasAutoLoginPassword",
+                c.getZerodhaPasswordEncrypted() != null && !c.getZerodhaPasswordEncrypted().isBlank());
+        dto.put("hasAutoLoginTotp",
+                c.getTotpSecretEncrypted() != null && !c.getTotpSecretEncrypted().isBlank());
         dto.put("createdAt", c.getCreatedAt());
         dto.put("updatedAt", c.getUpdatedAt());
         return dto;

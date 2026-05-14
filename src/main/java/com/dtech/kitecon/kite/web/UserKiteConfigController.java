@@ -43,7 +43,9 @@ public class UserKiteConfigController {
 
     @PutMapping("/api/admin/kite-configs/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody UpdateRequest req) {
-        return ResponseEntity.ok(service.update(id, req.getLabel(), req.getActive()));
+        return ResponseEntity.ok(service.update(
+                id, req.getLabel(), req.getActive(),
+                req.getApiKey(), req.getApiSecret(), req.getKiteUserId()));
     }
 
     @DeleteMapping("/api/admin/kite-configs/{id}")
@@ -166,6 +168,11 @@ public class UserKiteConfigController {
     public static class UpdateRequest {
         private String label;
         private Boolean active;
+        // Optional — only updated when present + non-blank. Editing api_key or
+        // api_secret evicts the cached pool entry so the next call reloads.
+        private String apiKey;
+        private String apiSecret;
+        private String kiteUserId;
     }
 
     @lombok.Data
