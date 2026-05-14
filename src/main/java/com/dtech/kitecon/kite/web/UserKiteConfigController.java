@@ -1,13 +1,19 @@
 package com.dtech.kitecon.kite.web;
 
 import com.dtech.algo.runner.candle.KiteTickerService;
+import com.dtech.kitecon.config.KiteConnectPool;
+import com.dtech.kitecon.kite.entity.UserKiteConfig;
+import com.dtech.kitecon.kite.repository.UserKiteConfigRepository;
+import com.dtech.kitecon.kite.service.KiteAutoLoginService;
 import com.dtech.kitecon.kite.service.UserKiteConfigService;
+import com.zerodhatech.kiteconnect.KiteConnect;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.view.RedirectView;
 
+import java.time.Instant;
 import java.util.Map;
 
 @RestController
@@ -17,6 +23,9 @@ public class UserKiteConfigController {
 
     private final UserKiteConfigService service;
     private final KiteTickerService tickerService;
+    private final KiteAutoLoginService autoLoginService;
+    private final UserKiteConfigRepository configRepository;
+    private final KiteConnectPool kiteConnectPool;
 
     // ── CRUD endpoints (admin only — enforced by SecurityConfig /api/admin/**) ──
 
@@ -34,7 +43,9 @@ public class UserKiteConfigController {
 
     @PutMapping("/api/admin/kite-configs/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody UpdateRequest req) {
-        return ResponseEntity.ok(service.update(id, req.getLabel(), req.getActive()));
+        return ResponseEntity.ok(service.update(
+                id, req.getLabel(), req.getActive(),
+                req.getApiKey(), req.getApiSecret(), req.getKiteUserId()));
     }
 
     @DeleteMapping("/api/admin/kite-configs/{id}")
@@ -98,6 +109,50 @@ public class UserKiteConfigController {
         }
     }
 
+    // ── Auto-login endpoints ──
+
+    /** Stores Zerodha login password + base32 TOTP secret (encrypted at rest). */
+    @PatchMapping("/api/admin/kite-configs/{id}/auto-login-credentials")
+    public ResponseEntity<?> setAutoLoginCredentials(
+            @PathVariable Long id,
+            @RequestBody AutoLoginCredentialsRequest req) {
+        try {
+            service.setAutoLoginCredentials(id, req.getPassword(), req.getTotpSecret());
+            return ResponseEntity.ok(Map.of("status", "saved"));
+        } catch (Exception e) {
+            log.error("Failed to set auto-login credentials for config {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("status", "error", "message", e.getMessage()));
+        }
+    }
+
+    /** Manual trigger of the headless 5-step auto-login. Useful for testing. */
+    @PostMapping("/api/admin/kite-configs/{id}/auto-login")
+    public ResponseEntity<?> autoLogin(@PathVariable Long id) {
+        UserKiteConfig cfg = configRepository.findById(id).orElse(null);
+        if (cfg == null) return ResponseEntity.notFound().build();
+        try {
+            KiteAutoLoginService.LoginResult result = autoLoginService.login(cfg);
+            cfg.setAccessToken(result.accessToken());
+            cfg.setPublicToken(result.publicToken());
+            cfg.setUpdatedAt(Instant.now());
+            configRepository.save(cfg);
+            // Refresh pool
+            KiteConnect kc = new KiteConnect(cfg.getApiKey());
+            if (cfg.getKiteUserId() != null) kc.setUserId(cfg.getKiteUserId());
+            kc.setAccessToken(result.accessToken());
+            if (result.publicToken() != null) kc.setPublicToken(result.publicToken());
+            kiteConnectPool.reloadUserKiteConfig(cfg.getId(), kc);
+            return ResponseEntity.ok(Map.of(
+                    "status", "ok",
+                    "configId", cfg.getId(),
+                    "connected", true,
+                    "updatedAt", cfg.getUpdatedAt().toString()));
+        } catch (Exception e) {
+            log.error("Auto-login failed for config {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("status", "error", "message", e.getMessage()));
+        }
+    }
+
     // ── Request DTOs ──
 
     @lombok.Data
@@ -113,5 +168,16 @@ public class UserKiteConfigController {
     public static class UpdateRequest {
         private String label;
         private Boolean active;
+        // Optional — only updated when present + non-blank. Editing api_key or
+        // api_secret evicts the cached pool entry so the next call reloads.
+        private String apiKey;
+        private String apiSecret;
+        private String kiteUserId;
+    }
+
+    @lombok.Data
+    public static class AutoLoginCredentialsRequest {
+        private String password;
+        private String totpSecret;
     }
 }
