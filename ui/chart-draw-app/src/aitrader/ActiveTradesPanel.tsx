@@ -2,37 +2,31 @@ import { useEffect, useState } from 'react';
 import { getApiUrl } from '../config/api';
 import { withAuth } from '../utils/apiHelper';
 
-type WatchTrade = {
+type PaperTrade = {
   id: number;
   symbol: string;
   direction: string;
-  entry: number;
+  entryPrice: number;
   sl: number;
   target: number;
-  rr: number;
-  confidence: number;
-  triggerType: string;
-  rationale: string;
+  openedAt: string;
   status: string;
-  validityUntil: string;
 };
 
 type Props = { onSelectSymbol: (s: string) => void; refreshTick?: number };
 
-export default function WatchTradesPanel({ onSelectSymbol, refreshTick }: Props) {
-  const [trades, setTrades] = useState<WatchTrade[]>([]);
+export default function ActiveTradesPanel({ onSelectSymbol, refreshTick }: Props) {
+  const [trades, setTrades] = useState<PaperTrade[]>([]);
   const [loading, setLoading] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
       const r = await fetch(
-        getApiUrl('/api/watch-trades?status=WATCHING').toString(),
+        getApiUrl('/api/ai-trader/paper-trades?status=OPEN').toString(),
         withAuth()
       );
       if (r.ok) setTrades(await r.json());
-    } catch (err) {
-      console.error('Error loading watch trades:', err);
     } finally {
       setLoading(false);
     }
@@ -45,7 +39,7 @@ export default function WatchTradesPanel({ onSelectSymbol, refreshTick }: Props)
   if (loading && trades.length === 0)
     return <div style={{ padding: 8, fontSize: 12, color: '#888' }}>Loading…</div>;
   if (trades.length === 0)
-    return <div style={{ padding: 8, fontSize: 12, color: '#888' }}>No watching trades.</div>;
+    return <div style={{ padding: 8, fontSize: 12, color: '#888' }}>No active trades.</div>;
 
   return (
     <div>
@@ -71,7 +65,7 @@ export default function WatchTradesPanel({ onSelectSymbol, refreshTick }: Props)
             {t.symbol} {t.direction}
           </span>
           <span style={{ color: '#666' }}>
-            E {t.entry} · SL {t.sl} · TP {t.target}
+            @{t.entryPrice} · SL {t.sl} · TP {t.target}
           </span>
         </div>
       ))}

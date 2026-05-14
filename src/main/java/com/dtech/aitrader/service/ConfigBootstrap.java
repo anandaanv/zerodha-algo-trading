@@ -29,6 +29,7 @@ public class ConfigBootstrap {
         ensureConfig("ai_analyse.max_per_symbol_per_day", "5");
         ensureConfig("trail_stop.enabled", "false");
         ensureConfig("trail_stop.check_interval_hours", "4");
+        ensureConfig("watch_trade.monitor.enabled", "false");
 
         log.info("AI Trader config bootstrap complete");
     }
