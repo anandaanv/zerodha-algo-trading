@@ -70,26 +70,33 @@ export default function SimulatedTradesPanel({ symbol, onSelectSymbol }: Props) 
     setRunExpanded({});
   }, [symbol]);
 
-  const fetchTrades = useCallback(async (runId: number) => {
-    if (tradesByRun[runId]) return;
-    setTradesLoading(s => new Set(s).add(runId));
+  const fetchTrades = useCallback(async (run: SimRun) => {
+    const cacheKey = run.id;
+    if (tradesByRun[cacheKey]) return;
+    // The trades endpoint takes the STRING run_id (e.g. "candle-short-20260512-..."),
+    // not the numeric DB id. Fall back to DB id if run_id is missing for some reason.
+    const runIdParam = run.run_id || run.runId || String(run.id);
+    setTradesLoading(s => new Set(s).add(cacheKey));
     try {
       const symParam = symbol ? `&symbol=${encodeURIComponent(symbol)}` : '';
-      const url = getApiUrl(`/api/simulation-results/${runId}/trades?page=0&size=200${symParam}`);
+      const url = getApiUrl(`/api/simulation-results/${encodeURIComponent(runIdParam)}/trades?page=0&size=200${symParam}`);
       const r = await fetch(url.toString(), withAuth());
       if (r.ok) {
         const data = await r.json();
         const list = Array.isArray(data) ? data : (data?.trades ?? data?.content ?? []);
-        setTradesByRun(prev => ({ ...prev, [runId]: list }));
+        setTradesByRun(prev => ({ ...prev, [cacheKey]: list }));
+      } else {
+        console.warn(`fetchTrades failed for ${runIdParam}: HTTP ${r.status}`);
       }
     } finally {
-      setTradesLoading(s => { const n = new Set(s); n.delete(runId); return n; });
+      setTradesLoading(s => { const n = new Set(s); n.delete(cacheKey); return n; });
     }
   }, [tradesByRun, symbol]);
 
-  const toggleRun = (runId: number) => {
+  const toggleRun = (run: SimRun) => {
+    const runId = run.id;
     setRunExpanded(e => ({ ...e, [runId]: !e[runId] }));
-    if (!runExpanded[runId]) fetchTrades(runId);
+    if (!runExpanded[runId]) fetchTrades(run);
   };
 
   const handleReplay = useCallback(async (tradeId: number) => {
@@ -158,7 +165,7 @@ export default function SimulatedTradesPanel({ symbol, onSelectSymbol }: Props) 
               return (
                 <div key={runId}>
                   <div
-                    onClick={() => toggleRun(runId)}
+                    onClick={() => toggleRun(r)}
                     style={{
                       padding: '4px 18px', fontSize: 11, color: '#444',
                       borderBottom: '1px solid #f0f0f0', cursor: 'pointer',
