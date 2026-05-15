@@ -136,18 +136,43 @@ export default function TVChartContainer({
         // Reset studies flag on chart ready
         studiesAddedRef.current = false;
 
-        // Keep the saveLoadAdapter's timeframe context in sync when the trader
-        // changes resolution via TV's own toolbar. Drawings save/load is scoped by
-        // (tab, symbol, timeframe), so without this update, drawings on the 15m
-        // would get filed under whatever timeframe the parent last passed.
+        // Explicit drawings load + reload pipeline.
+        // TradingView only auto-invokes our save_load_adapter when it has a saved
+        // *layout* to attach drawings to. We never save layouts (only drawings),
+        // so TV's auto-load is skipped. Fetch the current state ourselves and
+        // apply via chart.applyLineToolsState — mirrors TVChartApp's approach.
+        const reloadDrawings = async () => {
+          if (!saveLoadAdapter) return;
+          try {
+            const state = await saveLoadAdapter.loadLineToolsAndGroups(undefined, chart.id());
+            if (state) chart.applyLineToolsState(state);
+          } catch (e) {
+            console.error('[TVChartContainer] reload drawings failed:', e);
+          }
+        };
+
+        // Initial load.
+        reloadDrawings();
+
+        // Re-fetch when the trader changes resolution. Drawings are scoped per
+        // timeframe, so switching the resolution means swapping which row applies.
         try {
           chart.onIntervalChanged().subscribe(null, () => {
             try {
               const tf = intervalToPeriod(chart.resolution());
               if (tf) timeframeRef.current = tf;
             } catch (e) { /* ignore */ }
+            reloadDrawings();
           });
         } catch (e) { /* ignore — older TV versions */ }
+
+        // Re-fetch when the trader changes symbol (via TV's search bar etc.)
+        try {
+          chart.onSymbolChanged().subscribe(null, () => {
+            // give symbolRef a moment to catch up via the parent's onSelectSymbol
+            setTimeout(reloadDrawings, 50);
+          });
+        } catch (e) { /* ignore */ }
 
         // Persist drawings on every drawing change (debounced 2s).
         // Mirrors TVChartApp's auto-save wiring so refresh restores trendlines etc.
