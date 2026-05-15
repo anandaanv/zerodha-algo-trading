@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import datafeed from './datafeed';
-import { mapTimeframeToInterval } from './intervalUtils';
+import { mapTimeframeToInterval, intervalToPeriod } from './intervalUtils';
+import { createSaveLoadAdapter } from './saveLoadAdapter';
 
 // TradingView types (loaded globally via script tag)
 declare const TradingView: any;
@@ -31,6 +32,12 @@ type Props = {
   visibleRange?: { from: number; to: number }; // unix seconds
   autoStudies?: Study[];
   customIndicators?: any[];  // array of CustomIndicator objects to register
+  /**
+   * If provided, drawings/templates are persisted to the backend via
+   * /api/chart-state/drawings keyed by ({tabId}:{symbol}, layoutId, timeframe).
+   * Survives page refresh. Omit to disable persistence (widget-memory only).
+   */
+  tabId?: string;
 };
 
 export default function TVChartContainer({
@@ -41,6 +48,7 @@ export default function TVChartContainer({
   visibleRange,
   autoStudies = [],
   customIndicators = [],
+  tabId,
 }: Props) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const widgetRef = useRef<any>(null);
@@ -53,16 +61,35 @@ export default function TVChartContainer({
   const onChartReadyRef = useRef(onChartReady);
   const autoStudiesRef = useRef(autoStudies);
   const customIndicatorsRef = useRef(customIndicators);
+  // symbol/timeframe/tabId tracked in refs so the saveLoadAdapter context closure
+  // reads the latest values (e.g. when the user changes symbol via TV's search bar).
+  const symbolRef = useRef(symbol);
+  const timeframeRef = useRef(timeframe);
+  const tabIdRef = useRef(tabId);
   useEffect(() => { onChartReadyRef.current = onChartReady; }, [onChartReady]);
   useEffect(() => { autoStudiesRef.current = autoStudies; }, [autoStudies]);
   useEffect(() => { customIndicatorsRef.current = customIndicators; }, [customIndicators]);
+  useEffect(() => { symbolRef.current = symbol; }, [symbol]);
+  useEffect(() => { timeframeRef.current = timeframe; }, [timeframe]);
+  useEffect(() => { tabIdRef.current = tabId; }, [tabId]);
 
   const interval = mapTimeframeToInterval(timeframe);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    const widgetOptions = {
+    // Build the save/load adapter only when tabId is provided. Without it, drawings stay in
+    // widget memory (the legacy behaviour). With it, drawings are scoped to
+    // (tabId:symbol, layoutId, timeframe) and round-trip through /api/chart-state/drawings.
+    const saveLoadAdapter = tabIdRef.current
+      ? createSaveLoadAdapter(() => ({
+          symbol: symbolRef.current,
+          tabId: tabIdRef.current!,
+          timeframe: timeframeRef.current,
+        }))
+      : undefined;
+
+    const widgetOptions: any = {
       symbol: symbol,
       datafeed: datafeed,
       interval: interval,
@@ -70,7 +97,9 @@ export default function TVChartContainer({
       library_path: '/charting_library/charting_library/',
       locale: 'en',
       disabled_features: ['header_symbol_search', 'symbol_search_hot_key', 'header_compare'],
-      enabled_features: ['library_custom_no_powered_branding'],
+      enabled_features: saveLoadAdapter
+        ? ['library_custom_no_powered_branding', 'saveload_separate_drawings_storage', 'items_favoriting']
+        : ['library_custom_no_powered_branding'],
       custom_css_url: '/chart-custom.css',
       fullscreen: false,
       autosize: true,
@@ -91,6 +120,11 @@ export default function TVChartContainer({
       },
     };
 
+    if (saveLoadAdapter) {
+      widgetOptions.save_load_adapter = saveLoadAdapter;
+      widgetOptions.load_last_chart = true;
+    }
+
     const tvWidget = new TradingView.widget(widgetOptions);
     widgetRef.current = tvWidget;
 
@@ -101,6 +135,41 @@ export default function TVChartContainer({
 
         // Reset studies flag on chart ready
         studiesAddedRef.current = false;
+
+        // Keep the saveLoadAdapter's timeframe context in sync when the trader
+        // changes resolution via TV's own toolbar. Drawings save/load is scoped by
+        // (tab, symbol, timeframe), so without this update, drawings on the 15m
+        // would get filed under whatever timeframe the parent last passed.
+        try {
+          chart.onIntervalChanged().subscribe(null, () => {
+            try {
+              const tf = intervalToPeriod(chart.resolution());
+              if (tf) timeframeRef.current = tf;
+            } catch (e) { /* ignore */ }
+          });
+        } catch (e) { /* ignore — older TV versions */ }
+
+        // Persist drawings on every drawing change (debounced 2s).
+        // Mirrors TVChartApp's auto-save wiring so refresh restores trendlines etc.
+        if (saveLoadAdapter) {
+          let saveTimeout: number | null = null;
+          const triggerDrawingSave = () => {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = window.setTimeout(async () => {
+              try {
+                const state = chart.getLineToolsState();
+                await saveLoadAdapter.saveLineToolsAndGroups(undefined, chart.id(), state);
+              } catch (e) {
+                console.error('[TVChartContainer] auto-save drawings failed:', e);
+              }
+            }, 2000);
+          };
+          try {
+            tvWidget.subscribe('drawing_event', triggerDrawingSave);
+          } catch (e) {
+            console.warn('[TVChartContainer] could not subscribe to drawing_event:', e);
+          }
+        }
 
         // ---- Studies ----
         const studiesNow = autoStudiesRef.current || [];
