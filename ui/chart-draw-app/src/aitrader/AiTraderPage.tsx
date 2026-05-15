@@ -28,6 +28,29 @@ function getOrCreateTabId(): string {
   return id;
 }
 
+// Small chevron tab that overlays the inner edge of a side panel.
+// side='right' → tab on the right edge (used by the left watchlist panel).
+// side='left'  → tab on the left edge (used by the right stack panel).
+function collapseTabStyle(side: 'left' | 'right'): React.CSSProperties {
+  return {
+    position: 'absolute',
+    top: 8,
+    [side]: 2,
+    width: 18, height: 22,
+    background: '#fff',
+    border: '1px solid #ddd',
+    borderRadius: 3,
+    cursor: 'pointer',
+    fontSize: 12,
+    color: '#666',
+    padding: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  };
+}
+
 function isoToEpochSec(t: any): number {
   if (typeof t === 'number') return t > 1e12 ? Math.floor(t / 1000) : t;
   if (typeof t === 'string') {
@@ -157,6 +180,27 @@ export default function AiTraderPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [analyseLoading, setAnalyseLoading] = useState(false);
   const [toast, setToast] = useState<{msg: string; kind: 'success'|'error'} | null>(null);
+  // Panel collapse state — persisted so the trader's layout survives refresh.
+  const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() =>
+    localStorage.getItem('aitrader_left_collapsed') === '1'
+  );
+  const [rightCollapsed, setRightCollapsed] = useState<boolean>(() =>
+    localStorage.getItem('aitrader_right_collapsed') === '1'
+  );
+  const toggleLeft = useCallback(() => {
+    setLeftCollapsed(v => {
+      const next = !v;
+      localStorage.setItem('aitrader_left_collapsed', next ? '1' : '0');
+      return next;
+    });
+  }, []);
+  const toggleRight = useCallback(() => {
+    setRightCollapsed(v => {
+      const next = !v;
+      localStorage.setItem('aitrader_right_collapsed', next ? '1' : '0');
+      return next;
+    });
+  }, []);
 
   const chartRef = useRef<any>(null);
   const aiShapeIdsRef = useRef<any[]>([]);
@@ -394,16 +438,35 @@ export default function AiTraderPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'row', height: '100vh', overflow: 'hidden' }}>
-      {/* Left: Watchlist */}
-      <div style={{ width: 260, borderRight: '1px solid #ddd', overflowY: 'auto', background: '#fff' }}>
-        <WatchlistPanel
-          onSelectSymbol={handleSelectSymbol}
-          onBatchComplete={() => setRefreshTick(t => t + 1)}
-        />
-      </div>
+      {/* Left: Watchlist (collapsible) */}
+      {!leftCollapsed && (
+        <div style={{ width: 260, borderRight: '1px solid #ddd', overflowY: 'auto', background: '#fff', position: 'relative' }}>
+          <button
+            onClick={toggleLeft}
+            title="Collapse watchlist"
+            style={collapseTabStyle('right')}
+          >‹</button>
+          <WatchlistPanel
+            onSelectSymbol={handleSelectSymbol}
+            onBatchComplete={() => setRefreshTick(t => t + 1)}
+          />
+        </div>
+      )}
+      {leftCollapsed && (
+        <button
+          onClick={toggleLeft}
+          title="Expand watchlist"
+          style={{
+            width: 18, borderRight: '1px solid #ddd', background: '#f5f5f5',
+            cursor: 'pointer', border: 'none', borderLeft: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, color: '#666',
+          }}
+        >›</button>
+      )}
 
       {/* Center: toolbar + chart */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #ddd', background: '#fff' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: rightCollapsed ? 'none' : '1px solid #ddd', background: '#fff' }}>
         {/* Toolbar */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -442,6 +505,7 @@ export default function AiTraderPage() {
           <TVChartContainer
             symbol={selectedSymbol}
             timeframe="OneHour"
+            tabId={tabId}
             onChartReady={(chart) => {
               chartRef.current = chart;
               // Sync the React state when user changes symbol via TV's own search bar
@@ -458,8 +522,26 @@ export default function AiTraderPage() {
         </div>
       </div>
 
-      {/* Right: 3 stacked panels */}
-      <div style={{ width: 320, borderLeft: '1px solid #ddd', overflowY: 'auto', background: '#fff' }}>
+      {/* Right: 3 stacked panels (collapsible) */}
+      {rightCollapsed && (
+        <button
+          onClick={toggleRight}
+          title="Expand panels"
+          style={{
+            width: 18, borderLeft: '1px solid #ddd', background: '#f5f5f5',
+            cursor: 'pointer', border: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, color: '#666',
+          }}
+        >‹</button>
+      )}
+      {!rightCollapsed && (
+      <div style={{ width: 320, borderLeft: '1px solid #ddd', overflowY: 'auto', background: '#fff', position: 'relative' }}>
+        <button
+          onClick={toggleRight}
+          title="Collapse panels"
+          style={collapseTabStyle('left')}
+        >›</button>
         <CollapsibleSection title={`Active trades · ${selectedSymbol}`} defaultOpen={true}>
           <ActiveTradesPanel symbol={selectedSymbol} onSelectSymbol={handleSelectSymbol} refreshTick={refreshTick} />
         </CollapsibleSection>
@@ -477,6 +559,7 @@ export default function AiTraderPage() {
           <AnnotationsPanel symbol={selectedSymbol} tabUuid={tabId} interval="OneHour" />
         </CollapsibleSection>
       </div>
+      )}
 
       {/* Toast */}
       {toast && (
