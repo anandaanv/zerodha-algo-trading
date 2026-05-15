@@ -174,8 +174,11 @@ function triggerGoToDate(chart: any, dateYmd: string): void {
 }
 
 export default function AiTraderPage() {
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('WIPRO');
-  const [symbolInput, setSymbolInput] = useState<string>('WIPRO');
+  // Persist the active symbol so refresh reloads what the trader was last looking at.
+  // Falls back to WIPRO when nothing's stored (first visit).
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(() =>
+    (localStorage.getItem('aitrader_symbol') || 'WIPRO').toUpperCase()
+  );
   const [refreshTick, setRefreshTick] = useState<number>(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [analyseLoading, setAnalyseLoading] = useState(false);
@@ -207,22 +210,15 @@ export default function AiTraderPage() {
   const simTradeShapeIdsRef = useRef<any[]>([]);
   const tabId = getOrCreateTabId();
 
-  // Single source of truth for symbol changes — also bumps refreshTick so dependent panels re-fetch.
+  // Single source of truth for symbol changes — bumps refreshTick so dependent panels re-fetch,
+  // and persists to localStorage so refresh restores the same symbol.
   const handleSelectSymbol = useCallback((symbol: string) => {
     if (!symbol) return;
     const up = symbol.trim().toUpperCase();
     setSelectedSymbol(up);
-    setSymbolInput(up);
+    localStorage.setItem('aitrader_symbol', up);
     setRefreshTick(t => t + 1);
   }, []);
-
-  const commitSymbolInput = useCallback(() => {
-    if (symbolInput && symbolInput.trim().toUpperCase() !== selectedSymbol) {
-      handleSelectSymbol(symbolInput);
-    } else {
-      setSymbolInput(selectedSymbol); // normalize display
-    }
-  }, [symbolInput, selectedSymbol, handleSelectSymbol]);
 
   const showToast = useCallback((msg: string, kind: 'success'|'error' = 'success') => {
     setToast({ msg, kind });
@@ -467,24 +463,12 @@ export default function AiTraderPage() {
 
       {/* Center: toolbar + chart */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: rightCollapsed ? 'none' : '1px solid #ddd', background: '#fff' }}>
-        {/* Toolbar */}
+        {/* Toolbar — symbol is shown by TradingView's own header, so we only carry the AI buttons */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '6px 12px', borderBottom: '1px solid #e0e0e0', background: '#fafafa',
           fontSize: 13,
         }}>
-          <input
-            value={symbolInput}
-            onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
-            onBlur={commitSymbolInput}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }}
-            placeholder="Symbol"
-            style={{
-              width: 120, padding: '4px 8px', fontSize: 13, fontWeight: 600,
-              border: '1px solid #ccc', borderRadius: 4, marginRight: 8,
-              textTransform: 'uppercase',
-            }}
-          />
           <button
             onClick={handleAiLevels} disabled={aiLoading}
             style={{
