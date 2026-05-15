@@ -377,8 +377,25 @@ public class PatternAgentPromptBuilder {
 
     private void appendUserDrawings(StringBuilder prompt, String symbol) {
         try {
+            // user_chart_state.symbol is stored as a composite key from the
+            // frontend save_load_adapter — one of these formats:
+            //   "ALKEM"                      (oldest legacy)
+            //   "<tabUUID>:ALKEM"            (tab-scoped legacy)
+            //   "<tabUUID>:ALKEM:<TF>"       (current — per-timeframe)
+            // A naive equals(symbol) check misses every row that isn't the oldest
+            // legacy form, so the AI never sees the trader's drawings. Match the
+            // bare symbol embedded anywhere in the composite.
+            String suffix = ":" + symbol;
+            String mid = ":" + symbol + ":";
             List<UserChartState> states = userChartStateRepository.findAll().stream()
-                .filter(s -> s.getSymbol().equals(symbol))
+                .filter(s -> {
+                    String stored = s.getSymbol();
+                    return stored != null && (
+                        stored.equals(symbol)
+                            || stored.endsWith(suffix)
+                            || stored.contains(mid)
+                    );
+                })
                 .sorted(Comparator.comparing(UserChartState::getCreatedAt).reversed())
                 .limit(1)
                 .collect(Collectors.toList());
@@ -401,8 +418,22 @@ public class PatternAgentPromptBuilder {
             }
 
             prompt.append("## User-Drawn Lines\n");
+            prompt.append("These were drawn by the trader on this symbol's chart. Treat them as high-prior signals — if the pattern signal aligns with one, increase confidence; if it conflicts, prefer NO_TRADE.\n");
             for (ValidationInput.Drawing drawing : drawings) {
-                prompt.append(String.format("  - Type: %s\n", drawing.getType() != null ? drawing.getType() : "?"));
+                String type = drawing.getType() != null ? drawing.getType() : "?";
+                String label = drawing.getProperties() != null && drawing.getProperties().getLabel() != null
+                        ? drawing.getProperties().getLabel() : "";
+                StringBuilder coords = new StringBuilder();
+                if (drawing.getPoints() != null && !drawing.getPoints().isEmpty()) {
+                    for (ValidationInput.Point p : drawing.getPoints()) {
+                        if (coords.length() > 0) coords.append(" → ");
+                        coords.append(String.format("(%s @ %.2f)", formatIsoDateTime(p.getTimestamp()), p.getPrice()));
+                    }
+                }
+                prompt.append(String.format("  - %s: %s%s\n",
+                        type,
+                        coords.length() > 0 ? coords.toString() : "(no coords)",
+                        label.isEmpty() ? "" : "  [\"" + label + "\"]"));
             }
             prompt.append("\n");
         } catch (Exception e) {
