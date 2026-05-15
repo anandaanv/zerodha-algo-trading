@@ -45,14 +45,25 @@ public class AiAnalysePromptBuilder {
 
     /**
      * Builds a comprehensive prompt for generating watch trades.
-     *
-     * @param symbol The stock symbol
-     * @param tabId User's tab ID for scoped drawing lookup
-     * @param layoutId Chart layout ID
-     * @param timeframe Timeframe (e.g. "OneHour")
-     * @return User prompt with bars, indicators, drawings, and AI levels
      */
     public String buildAnalysePrompt(String symbol, String tabId, Long layoutId, String timeframe) {
+        return buildAnalysePrompt(symbol, tabId, layoutId, timeframe, "");
+    }
+
+    /**
+     * Builds a comprehensive prompt for generating watch trades, with an optional
+     * pre-rendered trader-annotations fragment injected up front.
+     *
+     * @param symbol               The stock symbol
+     * @param tabId                User's tab ID for scoped drawing lookup
+     * @param layoutId             Chart layout ID
+     * @param timeframe            Timeframe (e.g. "OneHour")
+     * @param annotationsFragment  Pre-rendered Markdown section from AnnotationBundleBuilder,
+     *                             or empty/null when no annotations are configured.
+     * @return User prompt with bars, indicators, drawings, AI levels, and trader intent
+     */
+    public String buildAnalysePrompt(String symbol, String tabId, Long layoutId, String timeframe,
+                                     String annotationsFragment) {
         StringBuilder prompt = new StringBuilder();
 
         // 1. Header with context
@@ -60,19 +71,30 @@ public class AiAnalysePromptBuilder {
         prompt.append(String.format("Symbol: %s | Timeframe: %s\n", symbol, timeframe));
         prompt.append(String.format("Generated At: %s UTC\n\n", formatIsoDateTime(Instant.now().getEpochSecond())));
 
-        // 2. Recent hourly bars (last 100)
+        // 2. Trader annotations — placed up front so the agent reads stated intent
+        // (KEY_LEVEL, REJECT_ON_TOUCH, OVERTHROW_WATCH, etc.) before the data dump.
+        if (annotationsFragment != null && !annotationsFragment.isBlank()) {
+            prompt.append(annotationsFragment);
+            if (!annotationsFragment.endsWith("\n\n")) prompt.append("\n");
+        }
+
+        // 3. Recent bars
         appendHourlyBars(prompt, symbol, timeframe);
 
-        // 3. Current hourly indicators
+        // 4. Recent candle patterns — pre-classify so the AI doesn't have to spot
+        // a bearish-engulfing or pin-bar from raw OHLC and miss it.
+        appendCandlePatterns(prompt, symbol, timeframe);
+
+        // 5. Current indicators
         appendHourlyIndicators(prompt, symbol, timeframe);
 
-        // 4. Today's AI horizontal levels
+        // 6. Today's AI horizontal levels
         appendAiHorizontalLevels(prompt, symbol, timeframe);
 
-        // 5. User's drawn lines for this symbol
+        // 7. User's drawn lines for this symbol
         appendUserDrawings(prompt, symbol, tabId, layoutId, timeframe);
 
-        // 6. Decision instructions with strict JSON output
+        // 8. Decision instructions with strict JSON output
         appendDecisionInstructions(prompt);
 
         log.debug("Built analyse prompt for symbol={}, timeframe={}, length={} chars (~{} tokens)",
@@ -192,6 +214,79 @@ public class AiAnalysePromptBuilder {
             log.warn("Error fetching AI levels for {}", symbol, e);
             prompt.append("## AI Horizontal Levels\n(error fetching levels)\n\n");
         }
+    }
+
+    /**
+     * Classifies the last few candles into named price-action patterns the AI can
+     * key off explicitly. Doesn't try to be exhaustive — just flags the patterns
+     * that most often anchor trader decisions: engulfing, hammer/shooting-star,
+     * doji, inside bar.
+     */
+    private void appendCandlePatterns(StringBuilder prompt, String symbol, String timeframe) {
+        try {
+            List<OhlcBarDTO> bars = chartDataService.getBars(symbol, timeframe, null, null, false);
+            if (bars.size() < 6) {
+                prompt.append("## Recent Candle Patterns\n(not enough bars to classify)\n\n");
+                return;
+            }
+            // Look at the last 5 bars (with each one's predecessor for two-candle patterns).
+            int n = bars.size();
+            prompt.append("## Recent Candle Patterns (last 5 bars)\n");
+            for (int offset = 4; offset >= 0; offset--) {
+                OhlcBarDTO prev = bars.get(n - 2 - offset);
+                OhlcBarDTO cur  = bars.get(n - 1 - offset);
+                List<String> tags = classifyCandle(prev, cur);
+                String label = tags.isEmpty() ? "(no notable pattern)" : String.join(", ", tags);
+                prompt.append(String.format("  - %s  →  %s\n",
+                        formatIsoDateTime(cur.getTime()), label));
+            }
+            prompt.append("\n");
+        } catch (Exception e) {
+            log.warn("Error classifying candle patterns for {}", symbol, e);
+            prompt.append("## Recent Candle Patterns\n(error classifying)\n\n");
+        }
+    }
+
+    private List<String> classifyCandle(OhlcBarDTO prev, OhlcBarDTO cur) {
+        List<String> tags = new ArrayList<>();
+        double bodyCur  = Math.abs(cur.getClose() - cur.getOpen());
+        double rangeCur = Math.max(1e-9, cur.getHigh() - cur.getLow());
+        double upperWick = cur.getHigh() - Math.max(cur.getOpen(), cur.getClose());
+        double lowerWick = Math.min(cur.getOpen(), cur.getClose()) - cur.getLow();
+        boolean curGreen = cur.getClose() > cur.getOpen();
+        boolean prevGreen = prev.getClose() > prev.getOpen();
+
+        // Engulfing — two-candle reversal
+        if (!curGreen && prevGreen
+                && cur.getOpen() >= prev.getClose()
+                && cur.getClose() <= prev.getOpen()) {
+            tags.add("bearish_engulfing");
+        }
+        if (curGreen && !prevGreen
+                && cur.getOpen() <= prev.getClose()
+                && cur.getClose() >= prev.getOpen()) {
+            tags.add("bullish_engulfing");
+        }
+
+        // Pin-bar style: small body, long wick on one side
+        if (bodyCur < 0.35 * rangeCur && lowerWick > 1.8 * bodyCur && lowerWick > upperWick) {
+            tags.add("hammer / bullish_pin");
+        }
+        if (bodyCur < 0.35 * rangeCur && upperWick > 1.8 * bodyCur && upperWick > lowerWick) {
+            tags.add("shooting_star / bearish_pin");
+        }
+
+        // Doji
+        if (bodyCur < 0.10 * rangeCur) {
+            tags.add("doji");
+        }
+
+        // Inside bar
+        if (cur.getHigh() < prev.getHigh() && cur.getLow() > prev.getLow()) {
+            tags.add("inside_bar");
+        }
+
+        return tags;
     }
 
     private void appendUserDrawings(StringBuilder prompt, String symbol, String tabId, Long layoutId, String timeframe) {

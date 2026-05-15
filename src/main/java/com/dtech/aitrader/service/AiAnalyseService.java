@@ -1,5 +1,7 @@
 package com.dtech.aitrader.service;
 
+import com.dtech.aitrader.annotation.dto.AnnotationBundleDto;
+import com.dtech.aitrader.annotation.service.AnnotationBundleBuilder;
 import com.dtech.aitrader.data.WatchTrade;
 import com.dtech.aitrader.repository.WatchTradeRepository;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -29,20 +31,21 @@ public class AiAnalyseService {
     private final LlmGateway llmGateway;
     private final AiProviderResolver aiProviderResolver;
     private final ObjectMapper objectMapper;
+    private final AnnotationBundleBuilder annotationBundleBuilder;
 
     private static final String SYSTEM_PROMPT = """
 You are a trade-plan analyst specializing in technical analysis and risk management.
-Your role is to analyze charts, identify high-conviction setups, and propose concrete watch trades.
+Your role is to analyse the chart and propose every concrete, high-conviction watch trade that exists — both LONG and SHORT.
 
-Guidelines:
-- Be conservative: only propose trades when technical confirmation is strong
-- Reference user-drawn lines and AI-detected levels explicitly
-- Propose 0-3 trades per analysis (don't force trades if setup is weak)
-- Always calculate realistic risk:reward ratios
-- Use technical confluence: user lines + AI levels + indicator alignment
-- Consider liquidity and price level context
+Core directives:
+- BILATERAL ANALYSIS IS THE DEFAULT. If the chart presents a LONG setup AND a SHORT setup at comparable conviction, propose BOTH as separate watch trades. Do not pick a single side just because it scored marginally higher.
+- The trader's annotations (KEY_LEVEL, REJECT_ON_TOUCH, OVERTHROW_WATCH, RETEST_ENTRY, etc.) and user-drawn lines are HIGH-PRIOR signals. A trade aligned with an annotation gets confidence weight; a trade that ignores an explicit annotation must be justified.
+- The "Recent Candle Patterns" section pre-classifies the last few candles. Use those tags (bearish_engulfing, shooting_star, hammer, bullish_engulfing, doji, inside_bar) literally — if a bearish candle pattern is fired near a resistance level or annotated SHORT line, that's a primary SHORT signal.
+- Reference the source by ID in your rationale (user_line_3, h2, trendline T1, annotation KEY_LEVEL). One sentence per trade is enough.
+- Calculate realistic R:R with stops anchored to structure (not arbitrary ATR multiples) and targets at the next opposing level.
+- Cap at 4 watch trades per analysis. If fewer than 4 setups are valid, propose fewer — don't pad. If you cannot find any, return an empty array AND include a top-level "reason" string explaining what you considered and what was missing (so the trader can adjust the chart context).
 
-Output JSON strictly as specified — no markdown, no commentary.
+Output STRICT JSON — no markdown, no commentary.
 """;
 
     /**
@@ -75,8 +78,15 @@ Output JSON strictly as specified — no markdown, no commentary.
             // 2. Resolve LLM provider for user
             AiProviderResolver.ProviderConfig cfg = aiProviderResolver.resolveForUser(userId);
 
-            // 3. Build prompt
-            String userPrompt = promptBuilder.buildAnalysePrompt(symbol, tabId, layoutId, timeframe);
+            // 3. Pull trader annotations + thesis for this (user, symbol, tab); render
+            //    to a Markdown fragment the prompt builder injects up front. Annotations
+            //    (KEY_LEVEL, REJECT_ON_TOUCH, OVERTHROW_WATCH, ...) directly steer the
+            //    agent's bilateral analysis.
+            AnnotationBundleDto bundle = annotationBundleBuilder.buildForLevels(userId, symbol, tabId);
+            String annotationsFragment = annotationBundleBuilder.toPromptSection(bundle);
+
+            // 4. Build prompt
+            String userPrompt = promptBuilder.buildAnalysePrompt(symbol, tabId, layoutId, timeframe, annotationsFragment);
 
             // 4. Call LLM
             var response = llmGateway.call(cfg, SYSTEM_PROMPT, userPrompt, 2048);
