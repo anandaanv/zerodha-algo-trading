@@ -86,8 +86,19 @@ Output JSON strictly as specified — no markdown, no commentary.
             JsonNode root = objectMapper.readTree(cleanJson);
             JsonNode watchTradesArray = root.get("watch_trades");
 
-            if (watchTradesArray == null || !watchTradesArray.isArray()) {
-                log.warn("No watch_trades array in response for symbol={}", symbol);
+            // Surface the AI's actual response when it returns 0 trades so the trader
+            // can see *why* nothing was emitted. Otherwise the toast just says
+            // "created 0 watch trades" with no explanation.
+            boolean empty = watchTradesArray == null || !watchTradesArray.isArray() || watchTradesArray.size() == 0;
+            if (empty) {
+                String summary = root.has("summary") ? root.get("summary").asText("") : "";
+                String rationale = root.has("rationale") ? root.get("rationale").asText("") : "";
+                String reason = root.has("reason") ? root.get("reason").asText("") : "";
+                String raw = response.text();
+                String preview = raw == null ? "" : (raw.length() > 800 ? raw.substring(0, 800) + "…" : raw);
+                log.warn("AI Analyse returned 0 watch_trades for symbol={} model={} cost=${} input_tokens={} output_tokens={}\n  summary: {}\n  rationale: {}\n  reason: {}\n  raw response (first 800 chars):\n{}",
+                        symbol, cfg.model(), response.costUsd(), response.inputTokens(), response.outputTokens(),
+                        summary, rationale, reason, preview);
                 return new ArrayList<>();
             }
 
