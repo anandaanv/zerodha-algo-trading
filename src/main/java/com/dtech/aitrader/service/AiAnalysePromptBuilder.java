@@ -196,49 +196,68 @@ public class AiAnalysePromptBuilder {
 
     private void appendUserDrawings(StringBuilder prompt, String symbol, String tabId, Long layoutId, String timeframe) {
         try {
-            // Scoped lookup: symbol = "tabId:symbol"
-            String scopedSymbol = tabId + ":" + symbol;
+            // The frontend save_load_adapter stores user_chart_state.symbol as a
+            // composite that's evolved over time:
+            //   "<tabId>:<symbol>:<timeframe>"  ← current (per-TF storage)
+            //   "<tabId>:<symbol>"              ← previous (tab-scoped only)
+            //   "<symbol>"                       ← oldest legacy
+            // Try all three keys in priority order. The first hit with content wins.
+            String perTfKey   = tabId + ":" + symbol + (timeframe != null ? ":" + timeframe : "");
+            String tabKey     = tabId + ":" + symbol;
+            String legacyKey  = symbol;
+            String[] candidates = new String[] { perTfKey, tabKey, legacyKey };
 
-            // Try scoped lookup first, then fallback to symbol-only + null timeframe
-            List<UserChartState> states = userChartStateRepository
-                .findBySymbolAndLayoutIdAndTimeframe(scopedSymbol, layoutId, timeframe).stream()
-                .sorted(Comparator.comparing(UserChartState::getCreatedAt).reversed())
-                .limit(1)
-                .collect(Collectors.toList());
-
-            if (states.isEmpty()) {
-                // Fallback: try symbol-only with null timeframe
-                states = userChartStateRepository
-                    .findBySymbolAndLayoutIdAndTimeframeIsNull(scopedSymbol, layoutId).stream()
-                    .sorted(Comparator.comparing(UserChartState::getCreatedAt).reversed())
-                    .limit(1)
-                    .collect(Collectors.toList());
+            UserChartState found = null;
+            for (String key : candidates) {
+                Optional<UserChartState> withTf = (timeframe != null && !timeframe.isEmpty())
+                        ? userChartStateRepository.findBySymbolAndLayoutIdAndTimeframe(key, layoutId, timeframe)
+                        : Optional.empty();
+                if (withTf.isPresent() && withTf.get().getOverlaysJson() != null) {
+                    found = withTf.get();
+                    break;
+                }
+                Optional<UserChartState> nullTf = userChartStateRepository
+                        .findBySymbolAndLayoutIdAndTimeframeIsNull(key, layoutId);
+                if (nullTf.isPresent() && nullTf.get().getOverlaysJson() != null) {
+                    found = nullTf.get();
+                    break;
+                }
             }
 
-            if (states.isEmpty()) {
+            if (found == null || found.getOverlaysJson() == null || found.getOverlaysJson().isEmpty()) {
                 prompt.append("## User-Drawn Lines\n(no drawings found)\n\n");
                 return;
             }
 
-            UserChartState state = states.get(0);
-            if (state.getOverlaysJson() == null || state.getOverlaysJson().isEmpty()) {
-                prompt.append("## User-Drawn Lines\n(no drawings found)\n\n");
-                return;
-            }
-
-            List<ValidationInput.Drawing> drawings = drawingExtractorService.extractDrawings(state.getOverlaysJson());
+            List<ValidationInput.Drawing> drawings = drawingExtractorService.extractDrawings(found.getOverlaysJson());
             if (drawings.isEmpty()) {
                 prompt.append("## User-Drawn Lines\n(no drawings found)\n\n");
                 return;
             }
 
             prompt.append("## User-Drawn Lines\n");
+            prompt.append("Drawn by the trader on this symbol's chart. Treat as high-prior signals — propose trades that respect them, and reference the IDs below in your watch_trade rationale.\n");
             for (int i = 0; i < drawings.size(); i++) {
                 ValidationInput.Drawing drawing = drawings.get(i);
                 String type = drawing.getType() != null ? drawing.getType() : "?";
                 String id = "user_line_" + i;
-                prompt.append(String.format("  - %s (type=%s, points=%d)\n",
-                    id, type, drawing.getPoints() != null ? drawing.getPoints().size() : 0));
+                String label = (drawing.getProperties() != null && drawing.getProperties().getLabel() != null)
+                        ? drawing.getProperties().getLabel() : "";
+                StringBuilder coords = new StringBuilder();
+                if (drawing.getPoints() != null) {
+                    for (ValidationInput.Point p : drawing.getPoints()) {
+                        if (coords.length() > 0) coords.append(" → ");
+                        coords.append(String.format("(%s @ %.2f)",
+                                java.time.Instant.ofEpochSecond(p.getTimestamp())
+                                        .atZone(java.time.ZoneId.of("UTC"))
+                                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")),
+                                p.getPrice()));
+                    }
+                }
+                prompt.append(String.format("  - %s: type=%s, %s%s\n",
+                        id, type,
+                        coords.length() > 0 ? coords.toString() : "(no coords)",
+                        label.isEmpty() ? "" : "  [\"" + label + "\"]"));
             }
             prompt.append("\n");
         } catch (Exception e) {
