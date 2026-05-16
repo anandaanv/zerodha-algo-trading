@@ -6,6 +6,7 @@ import WatchTradesPanel from './WatchTradesPanel';
 import SimulatedTradesPanel from './SimulatedTradesPanel';
 import WatchlistPanel from './WatchlistPanel';
 import AnnotationsPanel from './annotations/AnnotationsPanel';
+import DrawingNoteInput from './annotations/DrawingNoteInput';
 import { getApiUrl } from '../config/api';
 import { withAuth } from '../utils/apiHelper';
 import './AiTraderPage.css';
@@ -208,6 +209,11 @@ export default function AiTraderPage() {
   const chartRef = useRef<any>(null);
   const aiShapeIdsRef = useRef<any[]>([]);
   const simTradeShapeIdsRef = useRef<any[]>([]);
+  // TV widget instance — used by DrawingNoteInput to subscribe to widget-level
+  // drawing_event. Kept in React state so the input re-mounts/wires when widget
+  // becomes ready.
+  const [tvWidget, setTvWidget] = useState<any>(null);
+  const [annotationsRefreshTick, setAnnotationsRefreshTick] = useState<number>(0);
   const tabId = getOrCreateTabId();
 
   // Single source of truth for symbol changes — bumps refreshTick so dependent panels re-fetch,
@@ -483,6 +489,14 @@ export default function AiTraderPage() {
               background: analyseLoading ? '#bbb' : '#7E57C2', color: 'white',
               cursor: analyseLoading ? 'not-allowed' : 'pointer',
             }}>{analyseLoading ? 'Analysing…' : '🔍 AI Analyse'}</button>
+          {/* On-demand drawing note input — appears only when a drawing is selected on the chart */}
+          <DrawingNoteInput
+            widget={tvWidget}
+            symbol={selectedSymbol}
+            tabUuid={tabId}
+            interval="OneHour"
+            onSaved={() => setAnnotationsRefreshTick(t => t + 1)}
+          />
         </div>
         {/* Chart */}
         <div style={{ flex: 1, minHeight: 0 }}>
@@ -490,6 +504,7 @@ export default function AiTraderPage() {
             symbol={selectedSymbol}
             timeframe="OneHour"
             tabId={tabId}
+            onWidgetReady={(w) => setTvWidget(w)}
             onChartReady={(chart) => {
               chartRef.current = chart;
               // Sync the React state when user changes symbol via TV's own search bar
@@ -539,8 +554,13 @@ export default function AiTraderPage() {
             onSelectTrade={handleSelectSimTrade}
           />
         </CollapsibleSection>
-        <CollapsibleSection title={`Annotations & thesis · ${selectedSymbol}`} defaultOpen={true}>
-          <AnnotationsPanel symbol={selectedSymbol} tabUuid={tabId} interval="OneHour" />
+        <CollapsibleSection title={`Annotations & journal · ${selectedSymbol}`} defaultOpen={true}>
+          <AnnotationsPanel
+            key={`ann-${annotationsRefreshTick}`}
+            symbol={selectedSymbol}
+            tabUuid={tabId}
+            interval="OneHour"
+          />
         </CollapsibleSection>
       </div>
       )}

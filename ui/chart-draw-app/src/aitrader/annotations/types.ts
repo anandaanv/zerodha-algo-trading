@@ -1,4 +1,5 @@
 export type AnnotationIntent =
+  | 'NOTE'
   | 'KEY_LEVEL'
   | 'RETEST_ENTRY'
   | 'BREAKOUT_CONFIRM'
@@ -9,6 +10,7 @@ export type AnnotationIntent =
   | 'TARGET';
 
 export const INTENT_LABELS: Record<AnnotationIntent, string> = {
+  NOTE:             'Note (free-text observation)',
   KEY_LEVEL:        'Key level (importance flag)',
   RETEST_ENTRY:     'Retest entry',
   BREAKOUT_CONFIRM: 'Breakout confirmation',
@@ -20,7 +22,7 @@ export const INTENT_LABELS: Record<AnnotationIntent, string> = {
 };
 
 export const INTENT_ORDER: AnnotationIntent[] = [
-  'KEY_LEVEL', 'RETEST_ENTRY', 'BREAKOUT_CONFIRM', 'REJECT_ON_TOUCH',
+  'NOTE', 'KEY_LEVEL', 'RETEST_ENTRY', 'BREAKOUT_CONFIRM', 'REJECT_ON_TOUCH',
   'OVERTHROW_WATCH', 'ABC_PROJECTION', 'INVALIDATION', 'TARGET',
 ];
 

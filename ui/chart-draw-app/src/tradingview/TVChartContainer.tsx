@@ -28,6 +28,12 @@ type Props = {
   symbol: string;
   timeframe: string;
   onChartReady?: (chart: any) => void;
+  /**
+   * Callback receiving the TradingView widget itself (IChartingLibraryWidget).
+   * Needed by callers who want to subscribe to widget-level events like
+   * `drawing_event` — those aren't on the chart object.
+   */
+  onWidgetReady?: (widget: any) => void;
   tradeMarkers?: TradeMarkers;
   visibleRange?: { from: number; to: number }; // unix seconds
   autoStudies?: Study[];
@@ -44,6 +50,7 @@ export default function TVChartContainer({
   symbol,
   timeframe,
   onChartReady,
+  onWidgetReady,
   tradeMarkers,
   visibleRange,
   autoStudies = [],
@@ -59,6 +66,7 @@ export default function TVChartContainer({
   // inline `onChartReady={(chart) => {...}}` would trigger a full widget remount on
   // every parent re-render — including unrelated state changes like a toast popping up.
   const onChartReadyRef = useRef(onChartReady);
+  const onWidgetReadyRef = useRef(onWidgetReady);
   const autoStudiesRef = useRef(autoStudies);
   const customIndicatorsRef = useRef(customIndicators);
   // symbol/timeframe/tabId tracked in refs so the saveLoadAdapter context closure
@@ -67,6 +75,7 @@ export default function TVChartContainer({
   const timeframeRef = useRef(timeframe);
   const tabIdRef = useRef(tabId);
   useEffect(() => { onChartReadyRef.current = onChartReady; }, [onChartReady]);
+  useEffect(() => { onWidgetReadyRef.current = onWidgetReady; }, [onWidgetReady]);
   useEffect(() => { autoStudiesRef.current = autoStudies; }, [autoStudies]);
   useEffect(() => { customIndicatorsRef.current = customIndicators; }, [customIndicators]);
   useEffect(() => { symbolRef.current = symbol; }, [symbol]);
@@ -127,6 +136,9 @@ export default function TVChartContainer({
 
     const tvWidget = new TradingView.widget(widgetOptions);
     widgetRef.current = tvWidget;
+    // Fire onWidgetReady synchronously so callers can subscribe to widget-level
+    // events (drawing_event etc.) before onChartReady fires asynchronously.
+    try { onWidgetReadyRef.current?.(tvWidget); } catch (e) { console.warn('onWidgetReady threw', e); }
 
     tvWidget.onChartReady(() => {
       try {
