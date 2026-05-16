@@ -33,7 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PersistDtbSimulationResultsTest {
 
-    private static final Path DATA_DIR = Paths.get("/tmp/hourly-scan-bars");
+    private static final Path DATA_DIR = Paths.get(
+        System.getProperty("sim.hourly.dir", "/tmp/hourly-scan-bars"));
     private static final Path OUTPUT_DIR = Paths.get("/tmp/sim-results");
     private static final double RETEST_TOLERANCE_PCT = 0.5;
     private static final int MAX_BARS_TO_BREAKOUT = 30;

@@ -61,6 +61,9 @@ import TradeAlertToast from './elliottScreener/components/TradeAlertToast';
 // Simulation Viewer
 import SimulationViewer from './simulation/pages/SimulationViewer';
 
+// AI Trader
+import AiTraderPage from './aitrader/AiTraderPage';
+
 const root = createRoot(document.getElementById("root")!);
 root.render(
   <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
@@ -250,6 +253,14 @@ root.render(
           element={
             <ProtectedRoute requiredRole="USER">
               <SimulationViewer />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/ai-trader"
+          element={
+            <ProtectedRoute requiredRole="ADMIN">
+              <AiTraderPage />
             </ProtectedRoute>
           }
         />

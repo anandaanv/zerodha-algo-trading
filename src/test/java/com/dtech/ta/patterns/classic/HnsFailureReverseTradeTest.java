@@ -4,6 +4,9 @@ import com.dtech.chartpattern.zigzag.ZigZagParams;
 import com.dtech.chartpattern.zigzag.ZigZagPoint;
 import com.dtech.kitecon.simulation.CandidatePivotZigZag;
 import com.dtech.kitecon.strategy.dataloader.BarsLoader;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.ta4j.core.Bar;
@@ -16,6 +19,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -52,7 +57,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  */
 class HnsFailureReverseTradeTest {
 
-    private static final Path DATA_DIR = Paths.get("/tmp/hourly-scan-bars");
+    private static final Path DATA_DIR = Paths.get(
+        System.getProperty("sim.hourly.dir", "/tmp/hourly-scan-bars"));
+    private static final Path OUTPUT_DIR = Paths.get("/tmp/sim-results");
     private static final double RETEST_TOLERANCE_PCT = 0.5;
     private static final int MAX_BARS_TO_BREAKOUT = 30;
     private static final int MAX_BARS_TO_RETEST = 30;
@@ -94,6 +101,21 @@ class HnsFailureReverseTradeTest {
 
         assertFalse(original.trades == 0 && inverted.trades == 0 && failure.trades == 0,
                 "All three arms produced zero trades");
+
+        // Write JSON output for each arm
+        try {
+            Files.createDirectories(OUTPUT_DIR);
+            String timestamp = Instant.now()
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+
+            writeArmJson(original, "A", timestamp);
+            writeArmJson(inverted, "B", timestamp);
+            writeArmJson(failure, "C", timestamp);
+        } catch (IOException e) {
+            System.err.println("Failed to write JSON: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     private void simulateAll(String sym, String type, ClassicPattern p, BarSeries full,
@@ -211,6 +233,16 @@ class HnsFailureReverseTradeTest {
             case "STOP" -> arm.stopExits++;
             default -> arm.timeoutExits++;
         }
+
+        // Build and collect trade record
+        Instant entryInstant = full.getBar(entryBar).getEndTime();
+        Instant exitInstant = full.getBar(exitBar).getEndTime();
+        TradeRecord record = new TradeRecord(
+            sym, type, longSide ? "LONG" : "SHORT",
+            entryInstant, entry, stop, target,
+            exitInstant, exitPrice, reason, pnlPct
+        );
+        arm.tradesList.add(record);
     }
 
     private List<PivotPoint> runCpzz(BarSeries series) {
@@ -288,6 +320,43 @@ class HnsFailureReverseTradeTest {
         }
     }
 
+    private void writeArmJson(Arm arm, String armLabel, String timestamp) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode root = mapper.createObjectNode();
+
+        root.put("run_id", "cpzz-hns-arm-" + armLabel + "-" + timestamp);
+        root.put("strategy_name", "HnS — Arm " + armLabel + ": " + arm.name);
+        root.put("timeframe", "OneHour");
+        root.put("stocks_count", 0);  // Not tracked in this test
+        root.put("total_trades", arm.tradesList.size());
+        root.put("wins", arm.wins);
+        root.put("losses", arm.losses);
+        root.put("total_pnl_pct", arm.pnlSum);
+
+        ArrayNode tradesArray = mapper.createArrayNode();
+        for (TradeRecord t : arm.tradesList) {
+            ObjectNode tradeNode = mapper.createObjectNode();
+            tradeNode.put("symbol", t.symbol);
+            tradeNode.put("direction", t.direction);
+            tradeNode.put("pattern_type", t.patternType);
+            tradeNode.put("entry_time", t.entryTime.toString());
+            tradeNode.put("entry_price", t.entryPrice);
+            tradeNode.put("stop_initial", t.stopInitial);
+            tradeNode.put("target_initial", t.targetInitial);
+            tradeNode.put("exit_time", t.exitTime.toString());
+            tradeNode.put("exit_price", t.exitPrice);
+            tradeNode.put("exit_reason", t.exitReason);
+            tradeNode.put("pnl_pct", t.pnlPct);
+            tradesArray.add(tradeNode);
+        }
+        root.set("trades", tradesArray);
+
+        Path outFile = OUTPUT_DIR.resolve("cpzz-hns-arm-" + armLabel + "-" + timestamp + ".json");
+        String jsonStr = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        Files.writeString(outFile, jsonStr);
+        System.out.println("Wrote " + arm.tradesList.size() + " trades to " + outFile);
+    }
+
     private static class Arm {
         final String name;
         int trades = 0, wins = 0, losses = 0;
@@ -295,6 +364,30 @@ class HnsFailureReverseTradeTest {
         int skippedBadGeom = 0;
         double pnlSum = 0;
         int holdingSum = 0;
+        List<TradeRecord> tradesList = new ArrayList<>();
         Arm(String name) { this.name = name; }
+    }
+
+    static class TradeRecord {
+        String symbol, patternType, direction;
+        Instant entryTime, exitTime;
+        double entryPrice, stopInitial, targetInitial, exitPrice, pnlPct;
+        String exitReason;
+
+        TradeRecord(String symbol, String patternType, String direction,
+                   Instant entryTime, double entryPrice, double stopInitial, double targetInitial,
+                   Instant exitTime, double exitPrice, String exitReason, double pnlPct) {
+            this.symbol = symbol;
+            this.patternType = patternType;
+            this.direction = direction;
+            this.entryTime = entryTime;
+            this.entryPrice = entryPrice;
+            this.stopInitial = stopInitial;
+            this.targetInitial = targetInitial;
+            this.exitTime = exitTime;
+            this.exitPrice = exitPrice;
+            this.exitReason = exitReason;
+            this.pnlPct = pnlPct;
+        }
     }
 }

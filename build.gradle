@@ -142,6 +142,9 @@ test {
     testLogging.events ("STANDARD_ERROR")
     testLogging.events ("STANDARD_OUT")
     jvmArgs = ['-Xmx3g', '-XX:+UseG1GC']
+    if (System.getProperty('sim.hourly.dir') != null) systemProperty 'sim.hourly.dir', System.getProperty('sim.hourly.dir')
+    if (System.getProperty('sim.daily.dir') != null) systemProperty 'sim.daily.dir', System.getProperty('sim.daily.dir')
+    if (System.getProperty('sim.symbols') != null) systemProperty 'sim.symbols', System.getProperty('sim.symbols')
 }
 
 task installTa4j(type: Exec) {

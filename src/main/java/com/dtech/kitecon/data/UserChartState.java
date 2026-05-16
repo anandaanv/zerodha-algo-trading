@@ -26,6 +26,9 @@ public class UserChartState {
     @Column(name = "layout_id")
     private Long layoutId;
 
+    @Column(name = "timeframe", length = 20)
+    private String timeframe;
+
     @Lob
     @Column(name = "overlays_json", columnDefinition = "TEXT")
     private String overlaysJson;

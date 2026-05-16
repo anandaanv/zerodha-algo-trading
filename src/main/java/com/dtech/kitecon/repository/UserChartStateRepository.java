@@ -9,4 +9,8 @@ import java.util.Optional;
 @Repository
 public interface UserChartStateRepository extends JpaRepository<UserChartState, Long> {
     Optional<UserChartState> findBySymbolAndLayoutId(String symbol, Long layoutId);
+    
+    Optional<UserChartState> findBySymbolAndLayoutIdAndTimeframe(String symbol, Long layoutId, String timeframe);
+    
+    Optional<UserChartState> findBySymbolAndLayoutIdAndTimeframeIsNull(String symbol, Long layoutId);
 }

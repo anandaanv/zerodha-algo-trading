@@ -1,5 +1,5 @@
 // TradingView Save/Load Adapter with symbol-agnostic layouts
-// Layouts are now stored separately and drawings are tied to symbol + layoutId
+// Layouts are now stored separately and drawings are tied to symbol + layoutId + timeframe
 import { apiFetch, getApiUrl } from '../config/api';
 import { withAuth } from '../utils/apiHelper';
 
@@ -68,12 +68,18 @@ const STORAGE_LAST_LAYOUT_KEY = 'lastLayoutId';
 export interface AdapterContext {
   symbol: string;
   tabId: string;
+  timeframe?: string;
 }
 
-// Maps a (tabId, symbol) pair to a scoped key for the drawings backend API.
-// This isolates each tab's drawings from other tabs with the same symbol.
+// Maps a (tabId, symbol, timeframe) tuple to a scoped key for the drawings backend.
+// Tabs isolated from each other; per-timeframe scoping nested inside that. The
+// timeframe component is appended into the `symbol` column rather than relying on
+// the dedicated timeframe column because user_chart_state has a legacy unique key
+// on (symbol, layout_id) that doesn't include timeframe — without encoding the TF
+// here, saves collide with any pre-existing null-timeframe row.
 function scopedSymbol(ctx: AdapterContext): string {
-  return `${ctx.tabId}:${ctx.symbol}`;
+  const base = `${ctx.tabId}:${ctx.symbol}`;
+  return ctx.timeframe ? `${base}:${ctx.timeframe}` : base;
 }
 
 export function createSaveLoadAdapter(getContext: () => AdapterContext) {
@@ -177,7 +183,7 @@ export function createSaveLoadAdapter(getContext: () => AdapterContext) {
     },
 
     // ========== Drawings Storage (Separate from Layouts) ==========
-    // Drawings are stored per symbol + layoutId combination
+    // Drawings are stored per symbol + layoutId + timeframe combination
 
     saveLineToolsAndGroups: async (layoutId: string | number | undefined, chartId: string | number, state: any) => {
       try {
@@ -202,6 +208,7 @@ export function createSaveLoadAdapter(getContext: () => AdapterContext) {
           body: JSON.stringify({
             symbol: scopedSymbol(ctx),
             layoutId: numericLayoutId,
+            timeframe: ctx.timeframe,
             drawings: serializableState,
           })
         }));
@@ -223,22 +230,32 @@ export function createSaveLoadAdapter(getContext: () => AdapterContext) {
           : actualLayoutId;
 
         const ctx = getContext();
-        const url = getApiUrl('/api/chart-state/drawings');
-        url.searchParams.set('symbol', scopedSymbol(ctx));
-        url.searchParams.set('layoutId', String(numericLayoutId));
 
-        const response = await apiFetch(url.toString(), withAuth());
+        // Try keys in order: per-TF composite, then legacy non-TF composite (for one-time
+        // migration of drawings saved before TF was encoded into the symbol column).
+        const candidateSymbols: string[] = [];
+        candidateSymbols.push(scopedSymbol(ctx));
+        if (ctx.timeframe) candidateSymbols.push(`${ctx.tabId}:${ctx.symbol}`);
 
-        if (response.ok) {
+        for (const symbolKey of candidateSymbols) {
+          const url = getApiUrl('/api/chart-state/drawings');
+          url.searchParams.set('symbol', symbolKey);
+          url.searchParams.set('layoutId', String(numericLayoutId));
+          if (ctx.timeframe) url.searchParams.set('timeframe', ctx.timeframe);
+
+          const response = await apiFetch(url.toString(), withAuth());
+          if (!response.ok) continue;
           const drawings = await response.json();
+          const hasContent = drawings && (
+            (drawings.sources && Object.keys(drawings.sources).length > 0) ||
+            (drawings.groups && Object.keys(drawings.groups).length > 0)
+          );
+          if (!hasContent) continue;
 
-          // Convert top-level plain objects back to Maps for TradingView
-          const stateWithMaps = {
+          return {
             sources: drawings.sources ? new Map(Object.entries(drawings.sources)) : new Map(),
             groups: drawings.groups ? new Map(Object.entries(drawings.groups)) : new Map(),
           };
-
-          return stateWithMaps;
         }
         return null;
       } catch (e) {

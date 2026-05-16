@@ -28,9 +28,25 @@ import {
   updateWorkspaceLayout,
 } from './workspaceTypes';
 import WorkspaceLayoutModal from './WorkspaceLayoutModal';
+import ScanResultsDrawer from './ScanResultsDrawer';
+import { getApiUrl } from '../config/api';
+import { withAuth } from '../utils/apiHelper';
 
 // TradingView types (loaded globally via script tag)
 declare const TradingView: any;
+
+type ScanResponse = {
+  symbol: string;
+  scanTf: string;
+  range: { from: number; to: number };
+  drawings: Array<{
+    id: string;
+    type: string;
+    score: number;
+    metrics: Record<string, unknown>;
+  }>;
+  summary: { totalDrawings: number; bestId: string; bestScore: number };
+};
 
 
 export default function TVChartApp() {
@@ -47,6 +63,19 @@ export default function TVChartApp() {
   const [isWatchlistOpen, setIsWatchlistOpen] = useState(false);
   const [showPromptBuilder, setShowPromptBuilder] = useState(false);
   const [layoutModalMode, setLayoutModalMode] = useState<'save' | 'load' | null>(null);
+
+  const chartRef = useRef<any>(null);
+  const aiShapeIdsRef = useRef<any[]>([]);
+  const [scanTf, setScanTf] = useState('1h');
+  const [useVisibleRange, setUseVisibleRange] = useState(true);
+  const [scanFromTime, setScanFromTime] = useState('');
+  const [scanToTime, setScanToTime] = useState('');
+  const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [isScanDrawerOpen, setIsScanDrawerOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiToast, setAiToast] = useState<{ msg: string; kind: 'success' | 'error' } | null>(null);
 
   // Parse URL parameters for initial defaults only
   const urlSymbol = searchParams.get('script') || searchParams.get('symbol');
@@ -305,7 +334,11 @@ export default function TVChartApp() {
 
     const saveLoadAdapter = createSaveLoadAdapter(() => {
       const tab = tabsRef.current.find(t => t.id === activeTabIdRef.current);
-      return { symbol: tab?.symbol || initSymbol, tabId: activeTabIdRef.current };
+      return {
+        symbol: tab?.symbol || initSymbol,
+        tabId: activeTabIdRef.current,
+        timeframe: tab?.timeframe,
+      };
     });
 
     const widgetOptions = {
@@ -336,6 +369,7 @@ export default function TVChartApp() {
       console.log('TradingView Chart is ready');
 
       const chart = tvWidget.activeChart();
+      chartRef.current = chart;
       let saveTimeout: number | null = null;
 
       const triggerDrawingSave = async () => {
@@ -677,12 +711,352 @@ export default function TVChartApp() {
     }
   };
 
+  const resolutionToIntervalMap: Record<string, string> = {
+    '1': 'OneMinute',
+    '3': 'ThreeMinute',
+    '5': 'FiveMinute',
+    '15': 'FifteenMinute',
+    '30': 'ThirtyMinute',
+    '60': 'OneHour',
+    '120': 'TwoHour',
+    '1D': 'Day',
+    '1W': 'Week',
+  };
+
+  const handleScan = useCallback(async () => {
+    if (!chartRef.current) {
+      setScanError('Chart not ready');
+      return;
+    }
+
+    try {
+      setScanLoading(true);
+      setScanError(null);
+
+      const chart = chartRef.current;
+      const bareSymbol = chart.symbol();
+      const activeTabId = activeTabIdRef.current;
+      const scopedSymbol = `${activeTabId}:${bareSymbol}`;
+      const currentResolution = chart.resolution();
+      const drawingsTf = resolutionToIntervalMap[currentResolution] || 'OneHour';
+      const scanTfMapped = resolutionToIntervalMap[scanTf] || 'OneHour';
+
+      let fromSec: number;
+      let toSec: number;
+
+      if (useVisibleRange) {
+        const visRange = chart.getVisibleRange();
+        if (!visRange || visRange.from === undefined || visRange.to === undefined) {
+          setScanError('Cannot read visible range');
+          setScanLoading(false);
+          return;
+        }
+        fromSec = Math.floor(visRange.from);
+        toSec = Math.floor(visRange.to);
+      } else {
+        if (!scanFromTime || !scanToTime) {
+          setScanError('Please specify From and To times');
+          setScanLoading(false);
+          return;
+        }
+        fromSec = Math.floor(new Date(scanFromTime).getTime() / 1000);
+        toSec = Math.floor(new Date(scanToTime).getTime() / 1000);
+      }
+
+      const res = await fetch(
+        getApiUrl('/api/drawing-scan/run').toString(),
+        {
+          ...withAuth(),
+          method: 'POST',
+          headers: { ...withAuth().headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: scopedSymbol,
+            drawingsTf,
+            scanTf: scanTfMapped,
+            fromSec,
+            toSec,
+          }),
+        }
+      );
+
+      if (!res.ok) {
+        setScanError(`HTTP ${res.status}: ${res.statusText}`);
+        setScanLoading(false);
+        return;
+      }
+
+      const data: ScanResponse = await res.json();
+      setScanResult(data);
+      setIsScanDrawerOpen(true);
+      setScanLoading(false);
+    } catch (err: any) {
+      setScanError(err?.message || 'Failed to scan');
+      setScanLoading(false);
+    }
+  }, [scanTf, useVisibleRange, scanFromTime, scanToTime]);
+
+  const isoToEpochSec = (t: any): number => {
+    if (typeof t === 'number') return t > 1e12 ? Math.floor(t / 1000) : t;
+    if (typeof t === 'string') {
+      const ms = Date.parse(t);
+      return isNaN(ms) ? 0 : Math.floor(ms / 1000);
+    }
+    return 0;
+  };
+
+  const handleAiLevels = useCallback(async () => {
+    if (!chartRef.current) {
+      setAiToast({ msg: 'Chart not ready', kind: 'error' });
+      return;
+    }
+    try {
+      setAiLoading(true);
+      const chart = chartRef.current;
+      const symbol = chart.symbol();
+      const resolution = chart.resolution();
+      const timeframe = resolutionToIntervalMap[resolution] || 'OneHour';
+      const tabId = activeTabIdRef.current;
+
+      const res = await fetch(
+        getApiUrl('/api/ai-levels/run').toString(),
+        {
+          ...withAuth(),
+          method: 'POST',
+          headers: { ...withAuth().headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol, tabId, layoutId: 1, timeframe }),
+        }
+      );
+      if (!res.ok) {
+        const errBody = await res.text();
+        throw new Error(`HTTP ${res.status}: ${errBody.substring(0, 200)}`);
+      }
+      const data = await res.json();
+
+      // Parse levelsJson — may be parsed object or JSON string
+      let levels = data.levelsJson ?? data.levels_json;
+      if (typeof levels === 'string') {
+        try { levels = JSON.parse(levels); } catch { levels = {}; }
+      }
+      levels = levels || {};
+
+      // Clear previous AI shapes
+      for (const id of aiShapeIdsRef.current) {
+        try { chart.removeEntity(id); } catch {}
+      }
+      aiShapeIdsRef.current = [];
+
+      let drawnCount = 0;
+
+      // ── Trendlines ──
+      for (const tl of (levels.trendlines || [])) {
+        try {
+          const t0 = isoToEpochSec(tl.anchor_t0 || tl.t0);
+          const t1 = isoToEpochSec(tl.anchor_t1 || tl.t1);
+          const p0 = Number(tl.anchor_p0 ?? tl.p0);
+          const p1 = Number(tl.anchor_p1 ?? tl.p1);
+          if (!t0 || !t1 || !Number.isFinite(p0) || !Number.isFinite(p1)) continue;
+
+          const id = await chart.createMultipointShape(
+            [{ time: t0, price: p0 }, { time: t1, price: p1 }],
+            {
+              shape: 'trend_line',
+              lock: false,
+              disableSelection: false,
+              disableSave: true,
+              disableUndo: true,
+              text: tl.rationale || '',
+              overrides: {
+                'linetooltrendline.linecolor': '#7E57C2',
+                'linetooltrendline.linewidth': 1,
+                'linetooltrendline.linestyle': 2,
+                'linetooltrendline.extendRight': true,
+                'linetooltrendline.showLabel': false,
+              },
+            }
+          );
+          if (id) { aiShapeIdsRef.current.push(id); drawnCount++; }
+        } catch (e) { console.warn('AI trendline failed', tl, e); }
+      }
+
+      // ── Horizontal levels ──
+      for (const h of (levels.horizontal_levels || [])) {
+        try {
+          const price = Number(h.price);
+          if (!Number.isFinite(price)) continue;
+          const visRange = chart.getVisibleRange();
+          const anchorTime = visRange?.from || Math.floor(Date.now() / 1000);
+
+          const id = await chart.createShape(
+            { time: anchorTime, price },
+            {
+              shape: 'horizontal_line',
+              lock: false,
+              disableSelection: false,
+              disableSave: true,
+              disableUndo: true,
+              text: h.rationale || '',
+            }
+          );
+          if (id) {
+            try {
+              const shape = chart.getShapeById(id);
+              if (shape?.setProperties) {
+                shape.setProperties({
+                  linecolor: '#26A69A',
+                  linewidth: 1,
+                  linestyle: 2,
+                  textcolor: '#26A69A',
+                  showLabel: false,
+                });
+              }
+            } catch {}
+            aiShapeIdsRef.current.push(id);
+            drawnCount++;
+          }
+        } catch (e) { console.warn('AI horizontal failed', h, e); }
+      }
+
+      // ── Fibonacci zones ──
+      for (const f of (levels.fib_zones || [])) {
+        try {
+          const t0 = isoToEpochSec(f.from_t || f.t0);
+          const t1 = isoToEpochSec(f.to_t || f.t1);
+          const p0 = Number(f.from_p ?? f.p0);
+          const p1 = Number(f.to_p ?? f.p1);
+          if (!t0 || !t1 || !Number.isFinite(p0) || !Number.isFinite(p1)) continue;
+
+          const id = await chart.createMultipointShape(
+            [{ time: t0, price: p0 }, { time: t1, price: p1 }],
+            {
+              shape: 'fib_retracement',
+              lock: false,
+              disableSelection: false,
+              disableSave: true,
+              disableUndo: true,
+            }
+          );
+          if (id) { aiShapeIdsRef.current.push(id); drawnCount++; }
+        } catch (e) { console.warn('AI fib failed', f, e); }
+      }
+
+      setAiToast({
+        msg: `Drew ${drawnCount} AI line${drawnCount !== 1 ? 's' : ''}. ${levels.summary || ''}`.trim(),
+        kind: 'success',
+      });
+      setAiLoading(false);
+    } catch (e: any) {
+      setAiToast({ msg: e?.message || 'Failed to fetch AI levels', kind: 'error' });
+      setAiLoading(false);
+    }
+  }, []);
+
+  // Auto-dismiss aiToast after 5 seconds
+  useEffect(() => {
+    if (aiToast) {
+      const timer = setTimeout(() => setAiToast(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [aiToast]);
+
   // ─── Derived: active tab for display ─────────────────────────────────────
 
   const activeTab = tabs.find(t => t.id === activeTabId) || tabs[0];
 
   return (
     <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+
+      {/* Drawing Scan Toolbar */}
+      <div style={{ padding: '8px 12px', backgroundColor: '#f5f5f5', borderBottom: '1px solid #e0e0e0', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <input
+            type="checkbox"
+            checked={useVisibleRange}
+            onChange={(e) => setUseVisibleRange(e.target.checked)}
+          />
+          Use visible range
+        </label>
+
+        {!useVisibleRange && (
+          <>
+            <input
+              type="datetime-local"
+              value={scanFromTime}
+              onChange={(e) => setScanFromTime(e.target.value)}
+              style={{ fontSize: '12px', padding: '4px 6px' }}
+            />
+            <input
+              type="datetime-local"
+              value={scanToTime}
+              onChange={(e) => setScanToTime(e.target.value)}
+              style={{ fontSize: '12px', padding: '4px 6px' }}
+            />
+          </>
+        )}
+
+        <select
+          value={scanTf}
+          onChange={(e) => setScanTf(e.target.value)}
+          style={{ fontSize: '12px', padding: '4px 6px' }}
+        >
+          <option value="1">1m</option>
+          <option value="3">3m</option>
+          <option value="5">5m</option>
+          <option value="15">15m</option>
+          <option value="30">30m</option>
+          <option value="60">1h</option>
+          <option value="120">2h</option>
+          <option value="1D">1D</option>
+          <option value="1W">1W</option>
+        </select>
+
+        <button
+          onClick={handleScan}
+          disabled={scanLoading}
+          style={{
+            fontSize: '12px',
+            padding: '6px 12px',
+            backgroundColor: scanLoading ? '#ccc' : '#1565c0',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: scanLoading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {scanLoading ? 'Scanning...' : 'Scan'}
+        </button>
+
+        {isScanDrawerOpen && (
+          <button
+            onClick={() => setIsScanDrawerOpen(false)}
+            style={{
+              fontSize: '12px',
+              padding: '6px 12px',
+              backgroundColor: '#e0e0e0',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Hide Results
+          </button>
+        )}
+
+        <button
+          onClick={handleAiLevels}
+          disabled={aiLoading}
+          style={{
+            fontSize: '12px',
+            padding: '6px 12px',
+            backgroundColor: aiLoading ? '#ccc' : '#7E57C2',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: aiLoading ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {aiLoading ? 'Drawing…' : '✨ AI Levels'}
+        </button>
+      </div>
 
       {/* Tab Bar */}
       <ChartTabBar
@@ -768,6 +1142,17 @@ export default function TVChartApp() {
             selectedPatternIdx={selectedPatternIdxRef.current}
           />
         </div>
+
+        {/* Scan Results Drawer */}
+        <ScanResultsDrawer
+          open={isScanDrawerOpen}
+          onClose={() => setIsScanDrawerOpen(false)}
+          scanResult={scanResult}
+          loading={scanLoading}
+          error={scanError}
+          symbol={activeTab?.symbol || defaultSymbol}
+          scanTf={scanTf}
+        />
       </div>
 
       {/* Workspace Layout Modal */}
@@ -809,6 +1194,28 @@ export default function TVChartApp() {
         tabs={tabs}
         activeTabId={activeTabId}
       />
+
+      {/* AI Levels Toast Notification */}
+      {aiToast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 16,
+            right: 16,
+            zIndex: 9999,
+            padding: '10px 16px',
+            borderRadius: 4,
+            background: aiToast.kind === 'success' ? '#2e7d32' : '#c62828',
+            color: 'white',
+            fontSize: 13,
+            maxWidth: 360,
+            cursor: 'pointer',
+          }}
+          onClick={() => setAiToast(null)}
+        >
+          {aiToast.msg}
+        </div>
+      )}
     </div>
   );
 }
