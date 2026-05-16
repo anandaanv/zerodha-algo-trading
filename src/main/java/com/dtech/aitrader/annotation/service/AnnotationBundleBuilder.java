@@ -2,16 +2,17 @@ package com.dtech.aitrader.annotation.service;
 
 import com.dtech.aitrader.annotation.dto.AnnotationBundleDto;
 import com.dtech.aitrader.annotation.dto.DrawingAnnotationDto;
-import com.dtech.aitrader.annotation.dto.SymbolThesisDto;
+import com.dtech.aitrader.annotation.dto.JournalNoteDto;
 import com.dtech.aitrader.annotation.entity.ChartDrawingAnnotation;
-import com.dtech.aitrader.annotation.entity.SymbolThesis;
+import com.dtech.aitrader.annotation.entity.SymbolJournalNote;
 import com.dtech.aitrader.annotation.repository.ChartDrawingAnnotationRepository;
-import com.dtech.aitrader.annotation.repository.SymbolThesisRepository;
+import com.dtech.aitrader.annotation.repository.SymbolJournalNoteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 
@@ -20,10 +21,10 @@ import java.util.List;
  * <p>
  * Two scopes:
  * - {@link #buildForLevels(Long, String, String)} — tab-scoped (Levels run is initiated from a chart on a specific tab).
- * - {@link #buildForPattern(Long, String)} — symbol-scoped (Pattern agent fires from system events, no tab context). Picks
- *   annotations across all tabs the user has, plus the most recent thesis row for the symbol.
+ * - {@link #buildForPattern(Long, String)} — symbol-scoped (Pattern agent fires from system events, no tab context).
  * <p>
- * Both also render the bundle to a prompt fragment via {@link #toPromptSection(AnnotationBundleDto)}.
+ * Renders to a Markdown prompt fragment via {@link #toPromptSection(AnnotationBundleDto)}. The fragment includes a
+ * chronological "Trader's Journal" of free-form notes plus a priority-ranked list of drawing annotations.
  */
 @Service
 @RequiredArgsConstructor
@@ -31,45 +32,52 @@ import java.util.List;
 public class AnnotationBundleBuilder {
 
     private static final int MAX_ANNOTATIONS_IN_PROMPT = 25;
+    private static final int MAX_JOURNAL_NOTES = 30;
     private static final int MAX_NOTE_CHARS = 200;
 
     private final ChartDrawingAnnotationRepository drawingRepo;
-    private final SymbolThesisRepository thesisRepo;
+    private final SymbolJournalNoteRepository journalRepo;
 
     @Transactional(readOnly = true)
     public AnnotationBundleDto buildForLevels(Long userId, String symbol, String tabUuid) {
-        if (userId == null || symbol == null) return AnnotationBundleDto.builder().annotations(Collections.emptyList()).build();
+        if (userId == null || symbol == null) {
+            return AnnotationBundleDto.builder()
+                    .annotations(Collections.emptyList())
+                    .journalNotes(Collections.emptyList())
+                    .build();
+        }
         if (tabUuid == null || tabUuid.isBlank()) {
             return buildForPattern(userId, symbol);
         }
         List<ChartDrawingAnnotation> rows = drawingRepo
                 .findByUserIdAndTabUuidAndSymbolAndActiveTrueOrderByWeightDescUpdatedAtDesc(userId, tabUuid, symbol);
-        SymbolThesis thesis = thesisRepo.findByUserIdAndTabUuidAndSymbol(userId, tabUuid, symbol).orElse(null);
-        return assemble(rows, thesis);
+        List<SymbolJournalNote> notes = journalRepo
+                .findByUserIdAndSymbolOrderByNoteDateDescCreatedAtDesc(userId, symbol);
+        return assemble(rows, notes);
     }
 
     @Transactional(readOnly = true)
     public AnnotationBundleDto buildForPattern(Long userId, String symbol) {
-        if (userId == null || symbol == null) return AnnotationBundleDto.builder().annotations(Collections.emptyList()).build();
+        if (userId == null || symbol == null) {
+            return AnnotationBundleDto.builder()
+                    .annotations(Collections.emptyList())
+                    .journalNotes(Collections.emptyList())
+                    .build();
+        }
         List<ChartDrawingAnnotation> rows = drawingRepo
                 .findByUserIdAndSymbolAndActiveTrueOrderByWeightDescUpdatedAtDesc(userId, symbol);
-        SymbolThesis thesis = thesisRepo.findFirstByUserIdAndSymbolOrderByUpdatedAtDesc(userId, symbol).orElse(null);
-        return assemble(rows, thesis);
+        List<SymbolJournalNote> notes = journalRepo
+                .findByUserIdAndSymbolOrderByNoteDateDescCreatedAtDesc(userId, symbol);
+        return assemble(rows, notes);
     }
 
-    private AnnotationBundleDto assemble(List<ChartDrawingAnnotation> rows, SymbolThesis thesis) {
-        List<DrawingAnnotationDto> dtos = rows.stream().map(this::toDto).toList();
-        SymbolThesisDto thesisDto = thesis == null ? null : SymbolThesisDto.builder()
-                .id(thesis.getId())
-                .tabUuid(thesis.getTabUuid())
-                .symbol(thesis.getSymbol())
-                .bias(thesis.getBias())
-                .regime(thesis.getRegime())
-                .horizonDays(thesis.getHorizonDays())
-                .thesisText(thesis.getThesisText())
-                .updatedAt(thesis.getUpdatedAt())
+    private AnnotationBundleDto assemble(List<ChartDrawingAnnotation> rows, List<SymbolJournalNote> notes) {
+        List<DrawingAnnotationDto> annDtos = rows.stream().map(this::toDto).toList();
+        List<JournalNoteDto> journalDtos = notes.stream().map(this::toDto).toList();
+        return AnnotationBundleDto.builder()
+                .annotations(annDtos)
+                .journalNotes(journalDtos)
                 .build();
-        return AnnotationBundleDto.builder().thesis(thesisDto).annotations(dtos).build();
     }
 
     /**
@@ -80,31 +88,34 @@ public class AnnotationBundleBuilder {
         if (bundle == null || bundle.isEmpty()) return "";
 
         StringBuilder sb = new StringBuilder();
-        sb.append("## Trader's Annotations\n\n");
-        sb.append("The trader has marked the following on this chart. Treat these as high-prior signals — ")
-                .append("they reflect setups and levels the trader believes matter. Use them to weigh trade ideas; ")
-                .append("when a trade idea aligns with an annotation, increase its confidence and reference the annotation ")
-                .append("in the rationale. When you propose a trade that ignores an annotation, justify why.\n\n");
+        sb.append("## Trader's Context\n\n");
+        sb.append("These are the trader's notes and chart markings. Treat them as high-prior signals — they reflect ")
+                .append("the trader's evolving view on this symbol. When a trade idea aligns with a journal note or ")
+                .append("an annotation, increase confidence and reference the source in the rationale. When you propose ")
+                .append("a trade that ignores them, justify why.\n\n");
 
-        SymbolThesisDto t = bundle.getThesis();
-        if (t != null) {
-            boolean has = (t.getThesisText() != null && !t.getThesisText().isBlank())
-                    || t.getBias() != null || t.getRegime() != null || t.getHorizonDays() != null;
-            if (has) {
-                sb.append("### Symbol thesis\n");
-                if (t.getBias() != null) sb.append("- Bias: ").append(t.getBias()).append("\n");
-                if (t.getRegime() != null) sb.append("- Regime: ").append(t.getRegime()).append("\n");
-                if (t.getHorizonDays() != null) sb.append("- Horizon (days): ").append(t.getHorizonDays()).append("\n");
-                if (t.getThesisText() != null && !t.getThesisText().isBlank()) {
-                    sb.append("- Trader's view: ").append(t.getThesisText().trim()).append("\n");
-                }
-                sb.append("\n");
+        // Journal — chronological dated notes (newest first)
+        List<JournalNoteDto> journal = bundle.getJournalNotes();
+        if (journal != null && !journal.isEmpty()) {
+            sb.append("### Trader's Journal (newest first)\n");
+            int n = Math.min(journal.size(), MAX_JOURNAL_NOTES);
+            DateTimeFormatter f = DateTimeFormatter.ISO_DATE;
+            for (int i = 0; i < n; i++) {
+                JournalNoteDto jn = journal.get(i);
+                String date = jn.getNoteDate() == null ? "no-date" : jn.getNoteDate().format(f);
+                String text = jn.getNoteText() == null ? "" : jn.getNoteText().trim();
+                sb.append("- ").append(date).append(": ").append(text).append("\n");
             }
+            if (journal.size() > MAX_JOURNAL_NOTES) {
+                sb.append("(…").append(journal.size() - MAX_JOURNAL_NOTES).append(" older notes omitted)\n");
+            }
+            sb.append("\n");
         }
 
+        // Drawing annotations — priority ordered by weight
         List<DrawingAnnotationDto> anns = bundle.getAnnotations();
         if (anns != null && !anns.isEmpty()) {
-            sb.append("### Drawn annotations (in priority order, weight 1-5)\n");
+            sb.append("### Drawing Annotations (in priority order, weight 1-5)\n");
             int n = Math.min(anns.size(), MAX_ANNOTATIONS_IN_PROMPT);
             for (int i = 0; i < n; i++) {
                 DrawingAnnotationDto a = anns.get(i);
@@ -131,14 +142,15 @@ public class AnnotationBundleBuilder {
             sb.append("\n");
         }
 
-        sb.append("### How to act on these annotations\n");
-        sb.append("- KEY_LEVEL / INVALIDATION / TARGET → use as anchors when computing entry/stop/target.\n");
-        sb.append("- RETEST_ENTRY → if price is approaching the level within the tolerance, propose a trade keyed on reversal confirmation at the level.\n");
-        sb.append("- BREAKOUT_CONFIRM → wait for `confirmation_bars` bars beyond the level before calling breakout.\n");
+        sb.append("### How to use this context\n");
+        sb.append("- Journal entries are timestamped — older notes provide context; recent notes are leading signals (e.g. \"earnings tomorrow\", \"watching for third wave\").\n");
+        sb.append("- KEY_LEVEL / INVALIDATION / TARGET annotations are anchors for entry/stop/target computation.\n");
+        sb.append("- RETEST_ENTRY → propose a trade when price is approaching the level within tolerance.\n");
+        sb.append("- BREAKOUT_CONFIRM → wait for `confirmation_bars` beyond the level.\n");
         sb.append("- REJECT_ON_TOUCH → propose a fade trade at first touch.\n");
-        sb.append("- OVERTHROW_WATCH → do NOT enter on the immediate breakout. Wait for price to re-enter the pattern within `expected_settle_bars`; enter only on settle.\n");
-        sb.append("- ABC_PROJECTION → the listed ratios are valid C-leg completion targets. Highlight which target current price action favors.\n");
-        sb.append("- Free-text note → the trader's intent. Read literally and respect it.\n\n");
+        sb.append("- OVERTHROW_WATCH → don't enter on immediate breakout; wait for settle inside the pattern.\n");
+        sb.append("- ABC_PROJECTION → listed ratios are valid C-leg completion targets.\n");
+        sb.append("- Free-text drawing note → the trader's intent for that specific line. Read literally and respect it.\n\n");
 
         return sb.toString();
     }
@@ -156,6 +168,17 @@ public class AnnotationBundleBuilder {
                 .note(e.getNote())
                 .weight(e.getWeight())
                 .active(e.isActive())
+                .createdAt(e.getCreatedAt())
+                .updatedAt(e.getUpdatedAt())
+                .build();
+    }
+
+    private JournalNoteDto toDto(SymbolJournalNote e) {
+        return JournalNoteDto.builder()
+                .id(e.getId())
+                .symbol(e.getSymbol())
+                .noteDate(e.getNoteDate())
+                .noteText(e.getNoteText())
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();

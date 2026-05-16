@@ -7,19 +7,22 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/**
+ * Bundle of trader context sent to the AI agents:
+ *  - journalNotes: chronological free-text notes the trader has written
+ *  - annotations:  per-drawing intent + note (RETEST_ENTRY, KEY_LEVEL, ...)
+ */
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
 public class AnnotationBundleDto {
-    private SymbolThesisDto thesis;
+    private List<JournalNoteDto> journalNotes;
     private List<DrawingAnnotationDto> annotations;
 
     public boolean isEmpty() {
-        boolean noThesis = thesis == null
-                || (thesis.getThesisText() == null || thesis.getThesisText().isBlank())
-                && thesis.getBias() == null && thesis.getRegime() == null;
+        boolean noJournal = journalNotes == null || journalNotes.isEmpty();
         boolean noAnn = annotations == null || annotations.isEmpty();
-        return noThesis && noAnn;
+        return noJournal && noAnn;
     }
 }

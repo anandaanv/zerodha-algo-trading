@@ -1,18 +1,19 @@
 package com.dtech.aitrader.annotation.service;
 
 import com.dtech.aitrader.annotation.dto.DrawingAnnotationDto;
+import com.dtech.aitrader.annotation.dto.JournalNoteDto;
 import com.dtech.aitrader.annotation.dto.SaveAnnotationRequest;
-import com.dtech.aitrader.annotation.dto.SaveThesisRequest;
-import com.dtech.aitrader.annotation.dto.SymbolThesisDto;
+import com.dtech.aitrader.annotation.dto.SaveJournalNoteRequest;
 import com.dtech.aitrader.annotation.entity.ChartDrawingAnnotation;
-import com.dtech.aitrader.annotation.entity.SymbolThesis;
+import com.dtech.aitrader.annotation.entity.SymbolJournalNote;
 import com.dtech.aitrader.annotation.repository.ChartDrawingAnnotationRepository;
-import com.dtech.aitrader.annotation.repository.SymbolThesisRepository;
+import com.dtech.aitrader.annotation.repository.SymbolJournalNoteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -22,7 +23,9 @@ import java.util.UUID;
 public class AnnotationService {
 
     private final ChartDrawingAnnotationRepository drawingRepo;
-    private final SymbolThesisRepository thesisRepo;
+    private final SymbolJournalNoteRepository journalRepo;
+
+    // ── Drawing annotations ─────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public List<DrawingAnnotationDto> listForChart(Long userId, String symbol, String tabUuid) {
@@ -88,36 +91,43 @@ public class AnnotationService {
         drawingRepo.delete(row);
     }
 
+    // ── Journal notes ───────────────────────────────────────────────────
+
     @Transactional(readOnly = true)
-    public SymbolThesisDto getThesis(Long userId, String symbol, String tabUuid) {
-        return thesisRepo.findByUserIdAndTabUuidAndSymbol(userId, tabUuid, symbol)
-                .map(this::toDto)
-                .orElse(null);
+    public List<JournalNoteDto> listJournalNotes(Long userId, String symbol) {
+        return journalRepo
+                .findByUserIdAndSymbolOrderByNoteDateDescCreatedAtDesc(userId, symbol)
+                .stream().map(this::toDto).toList();
     }
 
     @Transactional
-    public SymbolThesisDto saveThesis(Long userId, SaveThesisRequest req) {
-        if (req.getTabUuid() == null || req.getTabUuid().isBlank()) {
-            throw new IllegalArgumentException("tabUuid required");
-        }
+    public JournalNoteDto addJournalNote(Long userId, SaveJournalNoteRequest req) {
         if (req.getSymbol() == null || req.getSymbol().isBlank()) {
             throw new IllegalArgumentException("symbol required");
         }
-
-        SymbolThesis entity = thesisRepo
-                .findByUserIdAndTabUuidAndSymbol(userId, req.getTabUuid(), req.getSymbol())
-                .orElse(SymbolThesis.builder()
-                        .userId(userId)
-                        .tabUuid(req.getTabUuid())
-                        .symbol(req.getSymbol())
-                        .build());
-        entity.setBias(req.getBias());
-        entity.setRegime(req.getRegime());
-        entity.setHorizonDays(req.getHorizonDays());
-        entity.setThesisText(req.getThesisText());
-
-        return toDto(thesisRepo.save(entity));
+        if (req.getNoteText() == null || req.getNoteText().isBlank()) {
+            throw new IllegalArgumentException("noteText required");
+        }
+        SymbolJournalNote entity = SymbolJournalNote.builder()
+                .userId(userId)
+                .symbol(req.getSymbol())
+                .noteDate(req.getNoteDate() != null ? req.getNoteDate() : LocalDate.now())
+                .noteText(req.getNoteText().trim())
+                .build();
+        return toDto(journalRepo.save(entity));
     }
+
+    @Transactional
+    public void deleteJournalNote(Long userId, Long noteId) {
+        SymbolJournalNote row = journalRepo.findById(noteId)
+                .orElseThrow(() -> new IllegalArgumentException("journal note not found: " + noteId));
+        if (!row.getUserId().equals(userId)) {
+            throw new SecurityException("journal note belongs to another user");
+        }
+        journalRepo.delete(row);
+    }
+
+    // ── Mappers ─────────────────────────────────────────────────────────
 
     private DrawingAnnotationDto toDto(ChartDrawingAnnotation e) {
         return DrawingAnnotationDto.builder()
@@ -137,15 +147,13 @@ public class AnnotationService {
                 .build();
     }
 
-    private SymbolThesisDto toDto(SymbolThesis e) {
-        return SymbolThesisDto.builder()
+    private JournalNoteDto toDto(SymbolJournalNote e) {
+        return JournalNoteDto.builder()
                 .id(e.getId())
-                .tabUuid(e.getTabUuid())
                 .symbol(e.getSymbol())
-                .bias(e.getBias())
-                .regime(e.getRegime())
-                .horizonDays(e.getHorizonDays())
-                .thesisText(e.getThesisText())
+                .noteDate(e.getNoteDate())
+                .noteText(e.getNoteText())
+                .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();
     }

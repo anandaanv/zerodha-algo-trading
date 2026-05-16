@@ -1,8 +1,8 @@
 import { getApiUrl } from '../../config/api';
 import { withAuth } from '../../utils/apiHelper';
 import type {
-  DrawingAnnotation, SymbolThesis,
-  SaveAnnotationRequest, SaveThesisRequest,
+  DrawingAnnotation, JournalNote,
+  SaveAnnotationRequest, SaveJournalNoteRequest,
 } from './types';
 
 const BASE = '/api/ai-trader/annotations';
@@ -12,6 +12,8 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as unknown as T;
   return res.json() as Promise<T>;
 }
+
+// ── Drawing annotations ───────────────────────────────────────────────
 
 export async function listAnnotations(symbol: string, tabUuid?: string): Promise<DrawingAnnotation[]> {
   const qs = new URLSearchParams({ symbol });
@@ -34,18 +36,24 @@ export async function deleteAnnotation(id: number): Promise<void> {
   if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
 }
 
-export async function getThesis(symbol: string, tabUuid: string): Promise<SymbolThesis | null> {
-  const qs = new URLSearchParams({ symbol, tabUuid });
-  const res = await fetch(getApiUrl(`${BASE}/thesis?${qs.toString()}`).toString(), withAuth());
-  if (res.status === 204) return null;
+// ── Journal notes ─────────────────────────────────────────────────────
+
+export async function listJournalNotes(symbol: string): Promise<JournalNote[]> {
+  const qs = new URLSearchParams({ symbol });
+  const res = await fetch(getApiUrl(`${BASE}/journal?${qs.toString()}`).toString(), withAuth());
   return jsonOrThrow(res);
 }
 
-export async function saveThesis(req: SaveThesisRequest): Promise<SymbolThesis> {
-  const res = await fetch(getApiUrl(`${BASE}/thesis`).toString(), withAuth({
-    method: 'PUT',
+export async function addJournalNote(req: SaveJournalNoteRequest): Promise<JournalNote> {
+  const res = await fetch(getApiUrl(`${BASE}/journal`).toString(), withAuth({
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   }));
   return jsonOrThrow(res);
+}
+
+export async function deleteJournalNote(id: number): Promise<void> {
+  const res = await fetch(getApiUrl(`${BASE}/journal/${id}`).toString(), withAuth({ method: 'DELETE' }));
+  if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
 }
