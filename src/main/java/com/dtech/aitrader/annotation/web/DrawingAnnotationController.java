@@ -2,9 +2,9 @@ package com.dtech.aitrader.annotation.web;
 
 import com.dtech.aitrader.annotation.dto.AnnotationBundleDto;
 import com.dtech.aitrader.annotation.dto.DrawingAnnotationDto;
+import com.dtech.aitrader.annotation.dto.JournalNoteDto;
 import com.dtech.aitrader.annotation.dto.SaveAnnotationRequest;
-import com.dtech.aitrader.annotation.dto.SaveThesisRequest;
-import com.dtech.aitrader.annotation.dto.SymbolThesisDto;
+import com.dtech.aitrader.annotation.dto.SaveJournalNoteRequest;
 import com.dtech.aitrader.annotation.service.AnnotationBundleBuilder;
 import com.dtech.aitrader.annotation.service.AnnotationService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +24,8 @@ public class DrawingAnnotationController {
 
     private final AnnotationService service;
     private final AnnotationBundleBuilder bundleBuilder;
+
+    // ── Drawing annotations ─────────────────────────────────────────────
 
     @GetMapping
     public ResponseEntity<List<DrawingAnnotationDto>> list(
@@ -70,22 +72,35 @@ public class DrawingAnnotationController {
         }
     }
 
-    @GetMapping("/thesis")
-    public ResponseEntity<SymbolThesisDto> getThesis(
+    // ── Journal notes (replaces the old structured /thesis endpoints) ───
+
+    @GetMapping("/journal")
+    public ResponseEntity<List<JournalNoteDto>> listJournal(
             @RequestParam String symbol,
-            @RequestParam String tabUuid,
             Authentication auth) {
         Long userId = extractUserId(auth);
-        SymbolThesisDto t = service.getThesis(userId, symbol, tabUuid);
-        return t == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(t);
+        return ResponseEntity.ok(service.listJournalNotes(userId, symbol));
     }
 
-    @PutMapping("/thesis")
-    public ResponseEntity<SymbolThesisDto> saveThesis(
-            @RequestBody SaveThesisRequest req,
+    @PostMapping("/journal")
+    public ResponseEntity<JournalNoteDto> addJournal(
+            @RequestBody SaveJournalNoteRequest req,
             Authentication auth) {
         Long userId = extractUserId(auth);
-        return ResponseEntity.ok(service.saveThesis(userId, req));
+        return ResponseEntity.ok(service.addJournalNote(userId, req));
+    }
+
+    @DeleteMapping("/journal/{id}")
+    public ResponseEntity<?> deleteJournal(@PathVariable Long id, Authentication auth) {
+        Long userId = extractUserId(auth);
+        try {
+            service.deleteJournalNote(userId, id);
+            return ResponseEntity.ok(Map.of("status", "deleted"));
+        } catch (SecurityException se) {
+            return ResponseEntity.status(403).body(Map.of("error", "forbidden"));
+        } catch (IllegalArgumentException iae) {
+            return ResponseEntity.status(404).body(Map.of("error", "not found"));
+        }
     }
 
     private Long extractUserId(Authentication auth) {

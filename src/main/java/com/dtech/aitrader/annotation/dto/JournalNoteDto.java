@@ -6,18 +6,17 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class SymbolThesisDto {
+public class JournalNoteDto {
     private Long id;
-    private String tabUuid;
     private String symbol;
-    private String bias;
-    private String regime;
-    private Integer horizonDays;
-    private String thesisText;
+    private LocalDate noteDate;
+    private String noteText;
+    private Instant createdAt;
     private Instant updatedAt;
 }

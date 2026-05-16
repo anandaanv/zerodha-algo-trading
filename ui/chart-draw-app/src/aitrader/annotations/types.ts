@@ -40,14 +40,12 @@ export interface DrawingAnnotation {
   updatedAt?: string;
 }
 
-export interface SymbolThesis {
-  id?: number;
-  tabUuid: string;
+export interface JournalNote {
+  id: number;
   symbol: string;
-  bias?: string;
-  regime?: string;
-  horizonDays?: number;
-  thesisText?: string;
+  noteDate: string;   // YYYY-MM-DD
+  noteText: string;
+  createdAt?: string;
   updatedAt?: string;
 }
 
@@ -63,11 +61,9 @@ export interface SaveAnnotationRequest {
   weight?: number;
 }
 
-export interface SaveThesisRequest {
-  tabUuid: string;
+export interface SaveJournalNoteRequest {
   symbol: string;
-  bias?: string;
-  regime?: string;
-  horizonDays?: number;
-  thesisText?: string;
+  /** YYYY-MM-DD — server defaults to today if omitted */
+  noteDate?: string;
+  noteText: string;
 }

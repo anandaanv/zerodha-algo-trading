@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import AnnotationFormModal from './AnnotationFormModal';
 import {
-  deleteAnnotation, getThesis, listAnnotations, saveAnnotation, saveThesis,
+  addJournalNote, deleteAnnotation, deleteJournalNote,
+  listAnnotations, listJournalNotes, saveAnnotation,
 } from './api';
 import {
-  AnnotationIntent, DrawingAnnotation, INTENT_LABELS, SymbolThesis,
+  AnnotationIntent, DrawingAnnotation, JournalNote,
 } from './types';
 
 interface Props {
@@ -13,35 +14,34 @@ interface Props {
   interval?: string;
 }
 
+function todayYmd(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function AnnotationsPanel({ symbol, tabUuid, interval }: Props) {
   const [annotations, setAnnotations] = useState<DrawingAnnotation[]>([]);
-  const [thesis, setThesis] = useState<SymbolThesis | null>(null);
+  const [journal, setJournal] = useState<JournalNote[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState<DrawingAnnotation | null>(null);
 
-  // Editable thesis state
-  const [thesisDirty, setThesisDirty] = useState(false);
-  const [bias, setBias] = useState<string>('');
-  const [regime, setRegime] = useState<string>('');
-  const [thesisText, setThesisText] = useState<string>('');
-  const [thesisSaving, setThesisSaving] = useState(false);
-  const [thesisError, setThesisError] = useState<string | null>(null);
+  // New journal note input state
+  const [newNoteDate, setNewNoteDate] = useState<string>(todayYmd());
+  const [newNoteText, setNewNoteText] = useState<string>('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!symbol || !tabUuid) return;
     setLoading(true);
     try {
-      const [ann, t] = await Promise.all([
+      const [ann, notes] = await Promise.all([
         listAnnotations(symbol, tabUuid),
-        getThesis(symbol, tabUuid),
+        listJournalNotes(symbol),
       ]);
       setAnnotations(ann);
-      setThesis(t);
-      setBias(t?.bias || '');
-      setRegime(t?.regime || '');
-      setThesisText(t?.thesisText || '');
-      setThesisDirty(false);
+      setJournal(notes);
     } catch (e: any) {
       console.warn('annotations load failed', e);
     } finally {
@@ -51,22 +51,33 @@ export default function AnnotationsPanel({ symbol, tabUuid, interval }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  async function handleSaveThesis() {
-    setThesisSaving(true);
-    setThesisError(null);
+  async function handleAddJournal() {
+    if (!newNoteText.trim()) return;
+    setSavingNote(true);
+    setNoteError(null);
     try {
-      const saved = await saveThesis({
-        tabUuid, symbol,
-        bias: bias || undefined,
-        regime: regime || undefined,
-        thesisText: thesisText || undefined,
+      await addJournalNote({
+        symbol,
+        noteDate: newNoteDate || undefined,
+        noteText: newNoteText.trim(),
       });
-      setThesis(saved);
-      setThesisDirty(false);
+      setNewNoteText('');
+      setNewNoteDate(todayYmd());
+      await load();
     } catch (e: any) {
-      setThesisError(e?.message || 'Save failed');
+      setNoteError(e?.message || 'Save failed');
     } finally {
-      setThesisSaving(false);
+      setSavingNote(false);
+    }
+  }
+
+  async function handleDeleteJournal(id: number) {
+    if (!confirm('Delete this journal note?')) return;
+    try {
+      await deleteJournalNote(id);
+      await load();
+    } catch (e: any) {
+      alert('Delete failed: ' + (e?.message || 'unknown error'));
     }
   }
 
@@ -85,7 +96,7 @@ export default function AnnotationsPanel({ symbol, tabUuid, interval }: Props) {
     await load();
   }
 
-  async function handleDelete(id: number) {
+  async function handleDeleteAnnotation(id: number) {
     if (!confirm('Delete this annotation? The AI will no longer see it.')) return;
     try {
       await deleteAnnotation(id);
@@ -97,46 +108,71 @@ export default function AnnotationsPanel({ symbol, tabUuid, interval }: Props) {
 
   return (
     <div style={{ padding: '8px 10px', fontSize: 13 }}>
-      {/* Thesis editor */}
+      {/* Journal — dated free-form notes */}
       <div style={{ border: '1px solid #e0e0e0', borderRadius: 4, padding: 8, marginBottom: 10 }}>
-        <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>Symbol thesis</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
-          <select value={bias} onChange={e => { setBias(e.target.value); setThesisDirty(true); }} style={selectStyle}>
-            <option value="">— bias —</option>
-            <option value="LONG">LONG</option>
-            <option value="SHORT">SHORT</option>
-            <option value="NEUTRAL">NEUTRAL</option>
-            <option value="RANGE">RANGE</option>
-          </select>
-          <input value={regime} onChange={e => { setRegime(e.target.value); setThesisDirty(true); }}
-            placeholder="regime (e.g. trending)" style={selectStyle} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+            Trader's journal · {journal.length}
+          </span>
+        </div>
+
+        {/* Add note input */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <input
+            type="date"
+            value={newNoteDate}
+            onChange={e => setNewNoteDate(e.target.value)}
+            style={{ ...inputStyle, width: 120, flex: 'none' }}
+          />
         </div>
         <textarea
-          value={thesisText}
-          onChange={e => { setThesisText(e.target.value); setThesisDirty(true); }}
-          placeholder="Your overall view on this symbol (read by AI)"
-          rows={3}
-          style={{ ...selectStyle, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+          value={newNoteText}
+          onChange={e => setNewNoteText(e.target.value)}
+          placeholder="What's on your mind? e.g. 'might start third wave soon', 'earnings tomorrow', 'broke 200dMA'"
+          rows={2}
+          style={{ ...inputStyle, resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddJournal();
+          }}
         />
-        {thesisError && <div style={{ fontSize: 11, color: '#c62828', marginTop: 4 }}>{thesisError}</div>}
+        {noteError && <div style={{ fontSize: 11, color: '#c62828', marginTop: 4 }}>{noteError}</div>}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-          <span style={{ fontSize: 10, color: '#999' }}>
-            {thesis?.updatedAt ? `Updated ${new Date(thesis.updatedAt).toLocaleString()}` : 'Not yet saved'}
-          </span>
+          <span style={{ fontSize: 10, color: '#999' }}>⌘/Ctrl+Enter to save</span>
           <button
-            onClick={handleSaveThesis}
-            disabled={!thesisDirty || thesisSaving}
-            style={(!thesisDirty || thesisSaving) ? btnGrayMini : btnPrimaryMini}
+            onClick={handleAddJournal}
+            disabled={!newNoteText.trim() || savingNote}
+            style={(!newNoteText.trim() || savingNote) ? btnGrayMini : btnPrimaryMini}
           >
-            {thesisSaving ? 'Saving…' : 'Save thesis'}
+            {savingNote ? 'Saving…' : '+ Add note'}
           </button>
         </div>
+
+        {/* Notes list */}
+        {journal.length > 0 && (
+          <div style={{ marginTop: 8, maxHeight: 280, overflowY: 'auto' }}>
+            {journal.map(n => (
+              <div key={n.id} style={journalCard}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, color: '#1565c0', fontWeight: 600, marginBottom: 2 }}>
+                      {n.noteDate}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#222', whiteSpace: 'pre-wrap' }}>
+                      {n.noteText}
+                    </div>
+                  </div>
+                  <button onClick={() => handleDeleteJournal(n.id)} style={btnLinkDanger}>delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Annotations list header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <span style={{ fontSize: 11, color: '#666', textTransform: 'uppercase', letterSpacing: 0.4 }}>
-          Annotations · {annotations.length}
+          Drawing annotations · {annotations.length}
         </span>
         <button onClick={() => { setEditTarget(null); setShowModal(true); }} style={btnPrimaryMini}>+ Add</button>
       </div>
@@ -144,7 +180,7 @@ export default function AnnotationsPanel({ symbol, tabUuid, interval }: Props) {
       {loading && <div style={{ color: '#999', padding: '8px 0' }}>Loading…</div>}
       {!loading && annotations.length === 0 && (
         <div style={{ color: '#999', fontSize: 12, padding: '8px 0' }}>
-          No annotations yet. Click <b>+ Add</b> to attach intent + a note to a drawing.
+          No drawing annotations yet. Click <b>+ Add</b> to attach intent + a note to a drawing.
         </div>
       )}
 
@@ -172,7 +208,7 @@ export default function AnnotationsPanel({ symbol, tabUuid, interval }: Props) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <button onClick={() => { setEditTarget(a); setShowModal(true); }} style={btnLink}>edit</button>
-              <button onClick={() => handleDelete(a.id)} style={btnLinkDanger}>delete</button>
+              <button onClick={() => handleDeleteAnnotation(a.id)} style={btnLinkDanger}>delete</button>
             </div>
           </div>
         </div>
@@ -192,7 +228,7 @@ export default function AnnotationsPanel({ symbol, tabUuid, interval }: Props) {
   );
 }
 
-const selectStyle: React.CSSProperties = {
+const inputStyle: React.CSSProperties = {
   fontSize: 12, padding: '4px 6px', border: '1px solid #bbb',
   borderRadius: 3, background: '#fff', color: '#1f1f1f',
 };
@@ -212,6 +248,10 @@ const btnLinkDanger: React.CSSProperties = { ...btnLink, color: '#c62828' };
 const annCard: React.CSSProperties = {
   border: '1px solid #e8e8e8', borderRadius: 4, padding: '6px 8px',
   marginBottom: 6, background: '#fafafa',
+};
+const journalCard: React.CSSProperties = {
+  border: '1px solid #eaeaea', borderRadius: 4, padding: '6px 8px',
+  marginBottom: 6, background: '#fdfdfd',
 };
 
 function intentBadge(intent: string): React.CSSProperties {
