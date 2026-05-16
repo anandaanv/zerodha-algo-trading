@@ -193,8 +193,8 @@ export default function AnnotationsPanel({ symbol, tabUuid, interval }: Props) {
 }
 
 const selectStyle: React.CSSProperties = {
-  fontSize: 12, padding: '4px 6px', border: '1px solid #ccc',
-  borderRadius: 3, background: '#fff',
+  fontSize: 12, padding: '4px 6px', border: '1px solid #bbb',
+  borderRadius: 3, background: '#fff', color: '#1f1f1f',
 };
 const btnPrimaryMini: React.CSSProperties = {
   background: '#1565c0', color: '#fff', border: 'none', borderRadius: 3,
