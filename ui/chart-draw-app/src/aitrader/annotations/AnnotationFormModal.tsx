@@ -244,7 +244,8 @@ const footer: React.CSSProperties = {
 };
 const input: React.CSSProperties = {
   width: '100%', padding: '6px 8px', fontSize: 13,
-  border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box',
+  border: '1px solid #bbb', borderRadius: 4, boxSizing: 'border-box',
+  color: '#1f1f1f', background: '#fff',
 };
 const iconBtn: React.CSSProperties = {
   background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 16, color: '#666',
