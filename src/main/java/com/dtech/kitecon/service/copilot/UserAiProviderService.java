@@ -88,6 +88,26 @@ public class UserAiProviderService {
         return providerRepository.findByUserIdAndActiveTrue(userId);
     }
 
+    /**
+     * Finds the first provider for this user whose base URL contains the substring (e.g. "anthropic.com"),
+     * regardless of active flag. Used by per-role provider routing (Agent 1 wants Anthropic even when the
+     * user's default active provider is something else).
+     */
+    public Optional<UserAiProvider> findByUserIdAndBaseUrlContains(Long userId, String substr) {
+        if (substr == null || substr.isBlank()) return Optional.empty();
+        return listProviders(userId).stream()
+                .filter(p -> p.getBaseUrl() != null && p.getBaseUrl().contains(substr))
+                .findFirst();
+    }
+
+    /** Returns the decrypted key for a specific provider entity. */
+    public Optional<String> getDecryptedApiKey(UserAiProvider provider) {
+        if (provider == null) return Optional.empty();
+        String enc = provider.getApiKeyEncrypted();
+        if (enc == null || enc.isBlank()) return Optional.empty();
+        return Optional.of(encryptionService.decrypt(enc));
+    }
+
     /** Returns the decrypted API key for the active provider, or empty. */
     public Optional<String> getActiveApiKey(Long userId) {
         return getActiveProvider(userId)
