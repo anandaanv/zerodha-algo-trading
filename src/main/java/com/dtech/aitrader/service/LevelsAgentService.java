@@ -168,7 +168,7 @@ Use ISO-8601 UTC timestamps with the trailing 'Z'. Use absolute INR prices.
      *   - JS-style // comments and trailing commas
      * Falls back to the original (trimmed) text if no braces found.
      */
-    static String extractJsonObject(String raw) {
+    public static String extractJsonObject(String raw) {
         if (raw == null) return "";
         String s = raw.trim();
         // Strip code fences if present
