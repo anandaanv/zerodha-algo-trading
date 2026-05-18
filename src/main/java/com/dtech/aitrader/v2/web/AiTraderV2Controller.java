@@ -5,6 +5,7 @@ import com.dtech.aitrader.data.PlanGroupState;
 import com.dtech.aitrader.data.WatchTrade;
 import com.dtech.aitrader.repository.PlanGroupRepository;
 import com.dtech.aitrader.repository.WatchTradeRepository;
+import com.dtech.aitrader.v2.batch.NightlyBundleDumpService;
 import com.dtech.aitrader.v2.orchestrator.OrchestratorV2Service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +28,7 @@ import java.util.Map;
 public class AiTraderV2Controller {
 
     private final OrchestratorV2Service orchestrator;
+    private final NightlyBundleDumpService nightlyBatch;
     private final PlanGroupRepository planGroupRepository;
     private final WatchTradeRepository watchTradeRepository;
 
@@ -42,6 +44,21 @@ public class AiTraderV2Controller {
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             log.error("v2 scan failed for symbol={}: {}", symbol, e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Fires the nightly bundle-dump batch on demand. Same code path as the scheduled cron;
+     * useful for testing / running a fresh batch before the next 22:00 IST cycle.
+     */
+    @PostMapping("/batch/run")
+    public ResponseEntity<?> runBatch(Authentication auth) {
+        try {
+            NightlyBundleDumpService.Summary summary = nightlyBatch.runManual();
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            log.error("manual v2 batch fire failed: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }
