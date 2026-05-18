@@ -32,6 +32,8 @@ import java.util.Map;
 @Slf4j
 public class ScanContextWriter {
 
+    private static final int MEMSYS_MAX_CONTENT_CHARS = 32_500; // leave a small buffer below 32768
+
     private final MemsysClient memsys;
     private final ScanContextMarkdown markdown;
 
@@ -45,6 +47,14 @@ public class ScanContextWriter {
      */
     public String write(ScanContext ctx) {
         String body = markdown.render(ctx);
+        int originalLen = body.length();
+        if (body.length() > MEMSYS_MAX_CONTENT_CHARS) {
+            body = body.substring(0, MEMSYS_MAX_CONTENT_CHARS)
+                    + "\n\n…[truncated by ScanContextWriter — " + originalLen
+                    + " chars → " + MEMSYS_MAX_CONTENT_CHARS + "]";
+            log.warn("[scan-context] bundle for symbol={} truncated: {} → {} chars",
+                    ctx.getSymbol(), originalLen, body.length());
+        }
         List<String> tags = List.of(
                 "ai-trader-scan-context",
                 "ai-trader-v2",
@@ -64,13 +74,13 @@ public class ScanContextWriter {
 
         try {
             MemsysWriteResult result = memsys.writeMemory(
-                    body, "fact", tags, metadata, /*parentId*/ null, /*supersedes*/ null);
-            log.info("[scan-context] wrote memsys memory id={} for scan_id={} symbol={}",
-                    result.getId(), ctx.getScanId(), ctx.getSymbol());
+                    ctx.getUserId(), body, "fact", tags, metadata, /*parentId*/ null, /*supersedes*/ null);
+            log.info("[scan-context] wrote memsys memory id={} for scan_id={} symbol={} body_chars={}",
+                    result.getId(), ctx.getScanId(), ctx.getSymbol(), body.length());
             return result.getId();
         } catch (Exception e) {
-            log.error("[scan-context] failed to write to memsys for scan_id={} symbol={}: {}",
-                    ctx.getScanId(), ctx.getSymbol(), e.getMessage());
+            log.error("[scan-context] failed to write to memsys for scan_id={} symbol={} body_chars={}: {}",
+                    ctx.getScanId(), ctx.getSymbol(), originalLen, e.getMessage());
             return null;
         }
     }
@@ -79,11 +89,11 @@ public class ScanContextWriter {
      * After plan_groups are created, link them back into the scan-context memory's metadata
      * so morning review can navigate from a scan to its trades. Best-effort; logs and continues.
      */
-    public void linkPlanGroups(String scanContextMemoryId, List<Long> planGroupIds) {
+    public void linkPlanGroups(Long userId, String scanContextMemoryId, List<Long> planGroupIds) {
         if (scanContextMemoryId == null || scanContextMemoryId.isBlank()) return;
         try {
             Map<String, Object> patch = Map.of("plan_group_ids", planGroupIds);
-            memsys.updateMemory(scanContextMemoryId, null, null, patch, null);
+            memsys.updateMemory(userId, scanContextMemoryId, null, null, patch, null);
         } catch (Exception e) {
             log.warn("[scan-context] failed to back-link plan_groups to {}: {}",
                     scanContextMemoryId, e.getMessage());

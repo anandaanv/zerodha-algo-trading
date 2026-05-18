@@ -11,12 +11,18 @@ import java.util.Map;
  * tools/call endpoint exposed at memsys.dheemantech.in/mcp (or wherever configured) and
  * translate transport/JSON errors into {@link MemsysException}.
  *
- * Surface is the subset needed by the AI Trader v2 orchestrator and review flows
- * (see "AI Trader v2 — Implementation Plan v1.2" memory).
+ * <p>Every method takes {@code userId} so the implementation can resolve the right
+ * per-user OAuth access token via {@link com.dtech.aitrader.v2.memsys.auth.MemsysOAuthService}.
+ * memsys uses the token to identify the tenant (JWT.sub → tenant_identities → RLS) — we
+ * never pass user_id in the tool arguments.
+ *
+ * <p>{@code userId} can be {@code null} for system-level calls when a static
+ * {@code memsys.bearer-token} property is configured (operator scripts, smoke tests).
  */
 public interface MemsysClient {
 
     MemsysWriteResult writeMemory(
+            Long userId,
             String content,
             String type,
             List<String> tags,
@@ -25,17 +31,19 @@ public interface MemsysClient {
             /* nullable */ String supersedes);
 
     MemsysWriteResult updateMemory(
+            Long userId,
             String id,
             /* nullable */ String content,
             /* nullable */ List<String> tags,
             /* nullable */ Map<String, Object> metadata,
             /* nullable, "replace" | "add" | "remove" */ String tagsOp);
 
-    MemsysWriteResult supersedeMemory(String oldId, String newId);
+    MemsysWriteResult supersedeMemory(Long userId, String oldId, String newId);
 
-    MemsysMemory getMemory(String id);
+    MemsysMemory getMemory(Long userId, String id);
 
     List<MemsysMemory> searchMemories(
+            Long userId,
             String query,
             /* nullable */ List<String> tags,
             /* nullable */ String type,
@@ -46,16 +54,13 @@ public interface MemsysClient {
 
     /**
      * Get root + ordered replies for a threaded memory. Replies are sorted by created_at ASC.
-     * The result's first element is the root; subsequent elements are replies in chronological
-     * order. May return an empty list if the id doesn't exist.
      */
-    ThreadResult getThread(String rootId);
+    ThreadResult getThread(Long userId, String rootId);
 
     record ThreadResult(MemsysMemory root, List<MemsysMemory> replies) {
-        /** Returns true when the underlying lookup found nothing. */
         public boolean isEmpty() { return root == null; }
     }
 
-    /** Convenience: raw JSON-RPC tools/call passthrough — useful for tools we haven't typed yet. */
-    JsonNode rawToolCall(String toolName, Map<String, Object> arguments);
+    /** Raw JSON-RPC tools/call passthrough — useful for tools we haven't typed yet. */
+    JsonNode rawToolCall(Long userId, String toolName, Map<String, Object> arguments);
 }

@@ -1,5 +1,6 @@
 package com.dtech.aitrader.v2.memsys;
 
+import com.dtech.aitrader.v2.memsys.auth.MemsysOAuthService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -18,16 +19,15 @@ import java.util.*;
 /**
  * memsys MCP client over plain HTTPS JSON-RPC 2.0.
  *
- * Endpoint defaults to {@code https://memsys.dheemantech.in/mcp} but is overridable
- * via {@code memsys.endpoint} / {@code memsys.bearer-token} in application.properties.
+ * <p>Auth resolution:
+ * <ol>
+ *   <li>If {@code userId} is non-null: {@link MemsysOAuthService#getValidAccessToken(Long)}
+ *       returns the user's OAuth token; auto-refreshed when expiring.</li>
+ *   <li>Otherwise: falls back to {@code memsys.bearer-token} property (operator/script use).</li>
+ * </ol>
  *
- * Per JSON-RPC 2.0 + MCP semantics:
- *   POST endpoint
- *   body: {"jsonrpc":"2.0","id":<uuid>,"method":"tools/call","params":{"name":"memory_write","arguments":{...}}}
- *   200 response: {"jsonrpc":"2.0","id":<uuid>,"result":{"content":[{"type":"text","text":"<json>"}]}}
- *   on error: {"jsonrpc":"2.0","id":<uuid>,"error":{"code":<int>,"message":"<str>"}}
- *
- * The inner content[].text is itself JSON-encoded (the tool's return value). We unwrap one level.
+ * <p>On HTTP 401 from memsys: force a refresh via
+ * {@link MemsysOAuthService#forceRefresh(Long)} and retry the call once.
  */
 @Component
 @Slf4j
@@ -35,16 +35,19 @@ public class MemsysHttpClient implements MemsysClient {
 
     private final HttpClient http;
     private final ObjectMapper mapper;
+    private final MemsysOAuthService oauthService;
     private final String endpoint;
-    private final String bearerToken;
+    private final String fallbackBearer;
 
     public MemsysHttpClient(
             ObjectMapper mapper,
+            MemsysOAuthService oauthService,
             @Value("${memsys.endpoint:https://memsys.dheemantech.in/mcp}") String endpoint,
-            @Value("${memsys.bearer-token:}") String bearerToken) {
+            @Value("${memsys.bearer-token:}") String fallbackBearer) {
         this.mapper = mapper;
+        this.oauthService = oauthService;
         this.endpoint = endpoint;
-        this.bearerToken = bearerToken;
+        this.fallbackBearer = fallbackBearer;
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
@@ -53,7 +56,7 @@ public class MemsysHttpClient implements MemsysClient {
     // ── public surface ───────────────────────────────────────────────
 
     @Override
-    public MemsysWriteResult writeMemory(String content, String type, List<String> tags,
+    public MemsysWriteResult writeMemory(Long userId, String content, String type, List<String> tags,
                                           Map<String, Object> metadata,
                                           String parentId, String supersedes) {
         Map<String, Object> args = new LinkedHashMap<>();
@@ -63,12 +66,11 @@ public class MemsysHttpClient implements MemsysClient {
         if (metadata != null && !metadata.isEmpty()) args.put("metadata", metadata);
         if (parentId != null && !parentId.isBlank()) args.put("parent_id", parentId);
         if (supersedes != null && !supersedes.isBlank()) args.put("supersedes", supersedes);
-        JsonNode node = call("memory_write", args);
-        return mapper.convertValue(node, MemsysWriteResult.class);
+        return mapper.convertValue(call(userId, "memory_write", args), MemsysWriteResult.class);
     }
 
     @Override
-    public MemsysWriteResult updateMemory(String id, String content, List<String> tags,
+    public MemsysWriteResult updateMemory(Long userId, String id, String content, List<String> tags,
                                            Map<String, Object> metadata, String tagsOp) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("id", id);
@@ -76,26 +78,24 @@ public class MemsysHttpClient implements MemsysClient {
         if (tags != null) args.put("tags", tags);
         if (metadata != null) args.put("metadata", metadata);
         if (tagsOp != null) args.put("tags_op", tagsOp);
-        JsonNode node = call("memory_update", args);
-        return mapper.convertValue(node, MemsysWriteResult.class);
+        return mapper.convertValue(call(userId, "memory_update", args), MemsysWriteResult.class);
     }
 
     @Override
-    public MemsysWriteResult supersedeMemory(String oldId, String newId) {
-        Map<String, Object> args = Map.of("old_id", oldId, "new_id", newId);
-        JsonNode node = call("memory_supersede", args);
-        return mapper.convertValue(node, MemsysWriteResult.class);
+    public MemsysWriteResult supersedeMemory(Long userId, String oldId, String newId) {
+        return mapper.convertValue(call(userId, "memory_supersede", Map.of("old_id", oldId, "new_id", newId)),
+                MemsysWriteResult.class);
     }
 
     @Override
-    public MemsysMemory getMemory(String id) {
-        JsonNode node = call("memory_get", Map.of("id", id));
+    public MemsysMemory getMemory(Long userId, String id) {
+        JsonNode node = call(userId, "memory_get", Map.of("id", id));
         JsonNode memory = node.has("memory") ? node.get("memory") : node;
         return mapper.convertValue(memory, MemsysMemory.class);
     }
 
     @Override
-    public List<MemsysMemory> searchMemories(String query, List<String> tags, String type,
+    public List<MemsysMemory> searchMemories(Long userId, String query, List<String> tags, String type,
                                               String parentId, Instant since, Instant until, int limit) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("query", query);
@@ -105,7 +105,7 @@ public class MemsysHttpClient implements MemsysClient {
         if (since != null) args.put("since", since.toString());
         if (until != null) args.put("until", until.toString());
         args.put("limit", limit);
-        JsonNode node = call("memory_search", args);
+        JsonNode node = call(userId, "memory_search", args);
         JsonNode results = node.has("results") ? node.get("results") : node;
         List<MemsysMemory> out = new ArrayList<>();
         if (results != null && results.isArray()) {
@@ -117,8 +117,8 @@ public class MemsysHttpClient implements MemsysClient {
     }
 
     @Override
-    public ThreadResult getThread(String rootId) {
-        JsonNode node = call("memory_thread_get", Map.of("root_id", rootId));
+    public ThreadResult getThread(Long userId, String rootId) {
+        JsonNode node = call(userId, "memory_thread_get", Map.of("root_id", rootId));
         MemsysMemory root = node.has("root") && !node.get("root").isNull()
                 ? mapper.convertValue(node.get("root"), MemsysMemory.class)
                 : null;
@@ -132,13 +132,44 @@ public class MemsysHttpClient implements MemsysClient {
     }
 
     @Override
-    public JsonNode rawToolCall(String toolName, Map<String, Object> arguments) {
-        return call(toolName, arguments);
+    public JsonNode rawToolCall(Long userId, String toolName, Map<String, Object> arguments) {
+        return call(userId, toolName, arguments);
     }
 
-    // ── transport ────────────────────────────────────────────────────
+    // ── transport with retry-on-401 ──────────────────────────────────
 
-    private JsonNode call(String toolName, Map<String, Object> arguments) {
+    private JsonNode call(Long userId, String toolName, Map<String, Object> arguments) {
+        String token = resolveToken(userId);
+        try {
+            return doCall(token, toolName, arguments);
+        } catch (MemsysException e) {
+            // 401 → force refresh + retry once. Only when we have a userId to refresh against.
+            if (userId != null && e.getCode() == 401) {
+                log.info("[memsys] got 401 for tool={} userId={} — forcing refresh + retrying", toolName, userId);
+                Optional<String> fresh = oauthService.forceRefresh(userId);
+                if (fresh.isPresent()) {
+                    return doCall(fresh.get(), toolName, arguments);
+                }
+            }
+            throw e;
+        }
+    }
+
+    private String resolveToken(Long userId) {
+        if (userId != null) {
+            Optional<String> t = oauthService.getValidAccessToken(userId);
+            if (t.isPresent()) return t.get();
+            // No OAuth config for this user — fall through to fallback token if present
+            log.debug("[memsys] no OAuth config for userId={}, falling back to static bearer", userId);
+        }
+        if (fallbackBearer != null && !fallbackBearer.isBlank()) return fallbackBearer;
+        throw new MemsysException("no memsys credentials available — "
+                + (userId == null
+                ? "set memsys.bearer-token or call with userId"
+                : "user " + userId + " has not connected memsys"));
+    }
+
+    private JsonNode doCall(String bearer, String toolName, Map<String, Object> arguments) {
         String requestId = UUID.randomUUID().toString();
         ObjectNode rpc = mapper.createObjectNode();
         rpc.put("jsonrpc", "2.0");
@@ -161,8 +192,8 @@ public class MemsysHttpClient implements MemsysClient {
                 .header("Accept", "application/json")
                 .timeout(Duration.ofSeconds(30))
                 .POST(HttpRequest.BodyPublishers.ofString(body));
-        if (bearerToken != null && !bearerToken.isBlank()) {
-            req.header("Authorization", "Bearer " + bearerToken);
+        if (bearer != null && !bearer.isBlank()) {
+            req.header("Authorization", "Bearer " + bearer);
         }
 
         HttpResponse<String> res;
@@ -172,6 +203,9 @@ public class MemsysHttpClient implements MemsysClient {
             throw new MemsysException("memsys MCP transport failure for " + toolName, e);
         }
 
+        if (res.statusCode() == 401 || res.statusCode() == 403) {
+            throw new MemsysException(401, toolName + " — HTTP " + res.statusCode() + " unauthorized");
+        }
         if (res.statusCode() < 200 || res.statusCode() >= 300) {
             throw new MemsysException("memsys MCP HTTP " + res.statusCode() + " for " + toolName
                     + ": " + truncate(res.body(), 400));
@@ -189,7 +223,9 @@ public class MemsysHttpClient implements MemsysClient {
             JsonNode err = root.get("error");
             int code = err.path("code").asInt(0);
             String message = err.path("message").asText("(no message)");
-            throw new MemsysException(code, toolName + " — " + message);
+            JsonNode data = err.path("data");
+            String dataStr = (data.isMissingNode() || data.isNull()) ? "" : " · data=" + data.toString();
+            throw new MemsysException(code, toolName + " — " + message + dataStr);
         }
 
         // result.content[0].text is JSON-encoded tool output — unwrap one level.
@@ -204,7 +240,6 @@ public class MemsysHttpClient implements MemsysClient {
                 try {
                     return mapper.readTree(text);
                 } catch (Exception e) {
-                    // content[].text wasn't JSON — return raw object instead
                     return content.get(0);
                 }
             }

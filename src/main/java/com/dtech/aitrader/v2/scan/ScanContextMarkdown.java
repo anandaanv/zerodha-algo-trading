@@ -37,20 +37,19 @@ public class ScanContextMarkdown {
         appendListSection(sb, "Pivot labels", ctx.getPivotLabels());
         appendListSection(sb, "Journal notes (newest first)", ctx.getJournalNotes());
         appendListSection(sb, "Candle patterns (last 5 bars)", ctx.getCandlePatterns());
-        appendMapSection(sb, "Last-bar indicators", ctx.getIndicators());
         appendListSection(sb, "Playbook rules in scope", ctx.getPlaybookRules());
         appendListSection(sb, "Active flags", ctx.getActiveFlags());
         appendListSection(sb, "Recently resolved flags (last 30d)", ctx.getRecentlyResolvedFlags());
         appendListSection(sb, "Existing plan groups (WATCHING)", ctx.getExistingPlanGroups());
         appendListSection(sb, "User inputs since last scan", ctx.getUserInputsSinceLastScan());
-        appendListSection(sb, "OHLC bars", ctx.getOhlcBars());
 
-        if (ctx.getRenderedPromptText() != null && !ctx.getRenderedPromptText().isBlank()) {
-            sb.append("---\n\n## Rendered prompt sent to Agent 1\n\n```\n");
-            sb.append(ctx.getRenderedPromptText());
-            if (!ctx.getRenderedPromptText().endsWith("\n")) sb.append("\n");
-            sb.append("```\n");
-        }
+        sb.append("---\n\n");
+        sb.append("## Market data — fetch fresh\n\n");
+        sb.append("This bundle deliberately omits OHLC bars and indicators.\n");
+        sb.append("Routine consumer should call **Kite MCP** at run time:\n");
+        sb.append("- `kite_get_historical_data` for bars (use the symbol + timeframe above)\n");
+        sb.append("- `kite_get_quote` for live LTP\n");
+        sb.append("- `kite_get_holdings` / `kite_get_positions` for portfolio context\n");
 
         return sb.toString();
     }

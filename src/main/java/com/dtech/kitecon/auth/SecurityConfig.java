@@ -55,6 +55,11 @@ public class SecurityConfig {
                         // Kite connect redirect — browser navigation, no JWT
                         .requestMatchers("/api/admin/kite-configs/*/connect").permitAll()
 
+                        // memsys OAuth callback — Cognito redirects here with no JWT
+                        .requestMatchers("/memsys/callback").permitAll()
+                        // memsys connect redirect — browser navigation, no JWT
+                        .requestMatchers("/api/admin/memsys-configs/*/connect").permitAll()
+
                         // SPA frontend routes — served as index.html, React Router handles them.
                         // ALL non-API GET paths must be permitAll so the browser can load index.html
                         // even when unauthenticated; the React app itself enforces auth via ProtectedRoute.
@@ -69,6 +74,7 @@ public class SecurityConfig {
                                 "/settings",
                                 "/admin/kite-config",
                                 "/admin/groups",
+                                "/admin/memsys",
                                 "/debug/elliott",
                                 "/elliott-screener/*/status"
                         ).permitAll()
