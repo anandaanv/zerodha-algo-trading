@@ -71,4 +71,29 @@ public class WatchTrade {
 
     @Column(name = "user_id", nullable = false)
     private Long userId;
+
+    // ── v2 branch fields ─────────────────────────────────────────────
+    // Nullable so existing watch_trade rows (and any new ones still using the v1
+    // flat-list path) continue to function. A row becomes a "v2 branch" when
+    // plan_group_id is set — the orchestrator dual-writes plan_group + branches
+    // atomically at scan time.
+
+    /** FK to plan_group.id when this row is one branch of a multi-hypothesis structure. */
+    @Column(name = "plan_group_id")
+    private Long planGroupId;
+
+    /** Short label given by the agent to identify the branch (e.g. "long-breakout", "short-truncation"). */
+    @Column(name = "branch_label", length = 64)
+    private String branchLabel;
+
+    /** JSON array (text-serialized) of sibling watch_trade ids that should die when this one triggers. */
+    @Column(name = "sibling_kill_branch_ids", columnDefinition = "TEXT")
+    private String siblingKillBranchIdsJson;
+
+    /** Mirrored from the parent plan_group for fast indexable range queries by the trigger. */
+    @Column(name = "decision_zone_low", precision = 12, scale = 2)
+    private BigDecimal decisionZoneLow;
+
+    @Column(name = "decision_zone_high", precision = 12, scale = 2)
+    private BigDecimal decisionZoneHigh;
 }
