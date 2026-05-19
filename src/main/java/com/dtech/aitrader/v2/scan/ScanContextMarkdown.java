@@ -37,6 +37,7 @@ public class ScanContextMarkdown {
         appendListSection(sb, "Pivot labels", ctx.getPivotLabels());
         appendListSection(sb, "Journal notes (newest first)", ctx.getJournalNotes());
         appendListSection(sb, "Candle patterns (last 5 bars)", ctx.getCandlePatterns());
+        appendListSection(sb, "Zigzag pivots (last ~200 bars) — pre-computed indicators at each pivot", ctx.getZigzagPivots());
         appendListSection(sb, "Playbook rules in scope", ctx.getPlaybookRules());
         appendListSection(sb, "Active flags", ctx.getActiveFlags());
         appendListSection(sb, "Recently resolved flags (last 30d)", ctx.getRecentlyResolvedFlags());
@@ -44,12 +45,11 @@ public class ScanContextMarkdown {
         appendListSection(sb, "User inputs since last scan", ctx.getUserInputsSinceLastScan());
 
         sb.append("---\n\n");
-        sb.append("## Market data — fetch fresh\n\n");
-        sb.append("This bundle deliberately omits OHLC bars and indicators.\n");
-        sb.append("Routine consumer should call **Kite MCP** at run time:\n");
-        sb.append("- `kite_get_historical_data` for bars (use the symbol + timeframe above)\n");
-        sb.append("- `kite_get_quote` for live LTP\n");
-        sb.append("- `kite_get_holdings` / `kite_get_positions` for portfolio context\n");
+        sb.append("## Market data\n\n");
+        sb.append("Bundle ships zigzag pivots with per-pivot indicator snapshots (above).\n");
+        sb.append("OHLC bars + raw indicator series are NOT in the bundle — derive from the\n");
+        sb.append("pivots, or call `kite_get_quote` for live LTP and `kite_get_historical_data`\n");
+        sb.append("only if you need bar-level detail beyond the pivots.\n");
 
         return sb.toString();
     }

@@ -59,6 +59,10 @@ public class ScanContext {
     /** Last-5-bar candle pattern classifications (bearish_engulfing, hammer, …). */
     private List<Map<String, Object>> candlePatterns;
 
+    /** Zigzag pivots from the last N bars with per-pivot indicator snapshots
+     *  (replaces raw OHLC + indicator dump). */
+    private List<Map<String, Object>> zigzagPivots;
+
     /** All active playbook rules loaded from memsys at scan-start. */
     private List<Map<String, Object>> playbookRules;
 
