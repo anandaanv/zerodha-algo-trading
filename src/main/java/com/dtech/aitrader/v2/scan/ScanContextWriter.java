@@ -32,7 +32,7 @@ import java.util.Map;
 @Slf4j
 public class ScanContextWriter {
 
-    private static final int MEMSYS_MAX_CONTENT_CHARS = 32_500; // leave a small buffer below 32768
+    private static final int MEMSYS_MAX_CONTENT_CHARS = 256_000; // safety cap only — memsys is the authority on what fits
 
     private final MemsysClient memsys;
     private final ScanContextMarkdown markdown;
@@ -47,6 +47,12 @@ public class ScanContextWriter {
      */
     public String write(ScanContext ctx) {
         String body = markdown.render(ctx);
+        // DEBUG: always dump the rendered bundle to /tmp for inspection regardless of memsys outcome
+        try {
+            java.nio.file.Files.writeString(
+                    java.nio.file.Path.of("/tmp/bundle-" + safe(ctx.getSymbol()).toLowerCase() + ".md"),
+                    body);
+        } catch (Exception ignored) { /* best-effort */ }
         int originalLen = body.length();
         if (body.length() > MEMSYS_MAX_CONTENT_CHARS) {
             body = body.substring(0, MEMSYS_MAX_CONTENT_CHARS)
@@ -74,7 +80,7 @@ public class ScanContextWriter {
 
         try {
             MemsysWriteResult result = memsys.writeMemory(
-                    ctx.getUserId(), body, "fact", tags, metadata, /*parentId*/ null, /*supersedes*/ null);
+                    ctx.getUserId(), body, "fact", tags, metadata, /*parentId*/ null, /*supersedes*/ null, true);
             log.info("[scan-context] wrote memsys memory id={} for scan_id={} symbol={} body_chars={}",
                     result.getId(), ctx.getScanId(), ctx.getSymbol(), body.length());
             return result.getId();

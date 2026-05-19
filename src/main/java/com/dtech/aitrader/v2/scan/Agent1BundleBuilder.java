@@ -50,6 +50,93 @@ public class Agent1BundleBuilder {
     private final MarketStructureService marketStructureService;
     private final PivotIndicatorEnricher pivotIndicatorEnricher;
 
+    @org.springframework.beans.factory.annotation.Value("${agent1.batch.timeframes:Week,Day,OneHour}")
+    private String timeframesProp;
+
+    @org.springframework.beans.factory.annotation.Value("${agent1.bundle.weekly-lookback-bars:520}")
+    private int weeklyLookbackBars;
+
+    @org.springframework.beans.factory.annotation.Value("${agent1.bundle.daily-lookback-bars:500}")
+    private int dailyLookbackBars;
+
+    @org.springframework.beans.factory.annotation.Value("${agent1.bundle.hourly-lookback-bars:500}")
+    private int hourlyLookbackBars;
+
+    @org.springframework.beans.factory.annotation.Value("${agent1.bundle.weekly-recent-bars:0}")
+    private int weeklyRecentBars;
+
+    @org.springframework.beans.factory.annotation.Value("${agent1.bundle.daily-recent-bars:0}")
+    private int dailyRecentBars;
+
+    @org.springframework.beans.factory.annotation.Value("${agent1.bundle.hourly-recent-bars:5}")
+    private int hourlyRecentBars;
+
+    private int recentBarsForTf(String tf) {
+        switch (tf) {
+            case "Week":    return weeklyRecentBars;
+            case "Day":     return dailyRecentBars;
+            case "OneHour": return hourlyRecentBars;
+            default:        return 0;
+        }
+    }
+
+    private int lookbackForTf(String tf) {
+        switch (tf) {
+            case "Week":    return weeklyLookbackBars;
+            case "Day":     return dailyLookbackBars;
+            case "OneHour": return hourlyLookbackBars;
+            default:        return hourlyLookbackBars;
+        }
+    }
+
+    private ScanContext.TimeframeData buildTimeframeData(String symbol, String tf, int lookback) {
+        try {
+            List<OhlcBarDTO> all = chartDataService.getBars(symbol, tf, null, null, false);
+            if (all == null || all.size() < 20) {
+                log.warn("[v2-bundle] insufficient bars for symbol={} tf={} (got {})", symbol, tf, all == null ? 0 : all.size());
+                return null;
+            }
+            // Take last `lookback` bars for the zigzag run (or all if fewer).
+            int from = Math.max(0, all.size() - lookback);
+            List<OhlcBarDTO> zigBars = all.subList(from, all.size());
+
+            // Run zigzag + structure + indicator enrichment on the wide lookback window.
+            BarSeries series = buildBarSeries(zigBars);
+            com.dtech.algo.series.Interval interval = resolveInterval(tf);
+            com.dtech.chartpattern.zigzag.ZigZagParams params = zigZagService.resolveParams(symbol, interval);
+            java.util.List<com.dtech.chartpattern.zigzag.ZigZagPoint> pivots = zigZagService.detect(series, params);
+            com.dtech.kitecon.service.copilot.dto.MarketStructureData structure = marketStructureService.analyse(pivots, tf);
+            java.util.List<com.dtech.ta.elliott.EnrichedPivot> enriched = pivotIndicatorEnricher.enrich(pivots, structure, series);
+            List<Map<String, Object>> pivotMaps = enriched.stream().map(this::pivotToMap).toList();
+
+            int recFrom = Math.max(0, all.size() - recentBarsForTf(tf));
+            List<Map<String, Object>> recentBarsCompact = new ArrayList<>();
+            for (OhlcBarDTO b : all.subList(recFrom, all.size())) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("t", Instant.ofEpochSecond((long) b.getTime()).toString());
+                m.put("o", round2(b.getOpen()));
+                m.put("h", round2(b.getHigh()));
+                m.put("l", round2(b.getLow()));
+                m.put("c", round2(b.getClose()));
+                m.put("v", (long) b.getVolume());
+                recentBarsCompact.add(m);
+            }
+
+            log.info("[v2-bundle] {} pivots + {} recent bars for symbol={} tf={}",
+                    pivotMaps.size(), recentBarsCompact.size(), symbol, tf);
+            return ScanContext.TimeframeData.builder()
+                    .timeframe(tf)
+                    .zigzagLookbackBars(zigBars.size())
+                    .pivotCount(pivotMaps.size())
+                    .zigzagPivots(pivotMaps)
+                    .recentBars(recentBarsCompact)
+                    .build();
+        } catch (Exception e) {
+            log.warn("[v2-bundle] failed to build tf data for symbol={} tf={}: {}", symbol, tf, e.getMessage());
+            return null;
+        }
+    }
+
     /** Build the bundle. Side-effect-free; orchestrator decides what to do with the result. */
     public Built build(Long userId, String symbol, String timeframe, String tabUuid, String agentVersion) {
         Instant scanTimestamp = Instant.now();
@@ -103,6 +190,15 @@ public class Agent1BundleBuilder {
         List<Map<String, Object>> emptyList = List.of();
         Map<String, Object> emptyMap = Map.of();
 
+        // Build multi-timeframe data for all configured timeframes.
+        List<ScanContext.TimeframeData> multiTfData = new ArrayList<>();
+        for (String tf : timeframesProp.split(",")) {
+            tf = tf.trim();
+            if (tf.isEmpty()) continue;
+            ScanContext.TimeframeData td = buildTimeframeData(symbol, tf, lookbackForTf(tf));
+            if (td != null) multiTfData.add(td);
+        }
+
         ScanContext ctx = ScanContext.builder()
                 .scanId(scanId)
                 .userId(userId)
@@ -118,6 +214,7 @@ public class Agent1BundleBuilder {
                 .indicators(emptyMap) // replaced by zigzag pivots with per-pivot indicators
                 .candlePatterns(candlePatterns)
                 .zigzagPivots(zigzagPivots)
+                .timeframes(multiTfData)
                 .playbookRules(emptyList) // memsys-blocked
                 .activeFlags(emptyList) // memsys-blocked
                 .recentlyResolvedFlags(emptyList) // memsys-blocked

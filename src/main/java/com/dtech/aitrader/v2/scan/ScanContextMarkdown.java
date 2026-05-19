@@ -6,8 +6,10 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Renders a {@link ScanContext} as a Markdown document for memsys storage.
@@ -37,7 +39,32 @@ public class ScanContextMarkdown {
         appendListSection(sb, "Pivot labels", ctx.getPivotLabels());
         appendListSection(sb, "Journal notes (newest first)", ctx.getJournalNotes());
         appendListSection(sb, "Candle patterns (last 5 bars)", ctx.getCandlePatterns());
-        appendListSection(sb, "Zigzag pivots (last ~200 bars) — pre-computed indicators at each pivot", ctx.getZigzagPivots());
+
+        // Multi-timeframe blocks
+        if (ctx.getTimeframes() != null) {
+            for (ScanContext.TimeframeData td : ctx.getTimeframes()) {
+                String tfTitle = td.getTimeframe();
+
+                // Zigzag pivots — CSV
+                sb.append("## ").append(tfTitle).append(" — Zigzag pivots (last ").append(td.getZigzagLookbackBars()).append(" bars, ").append(td.getPivotCount()).append(" pivots)\n\n");
+                if (td.getZigzagPivots() == null || td.getZigzagPivots().isEmpty()) {
+                    sb.append("_(none)_\n\n");
+                } else {
+                    sb.append("```csv\n");
+                    sb.append(toCsv(td.getZigzagPivots()));
+                    sb.append("```\n\n");
+                }
+
+                // Recent OHLCV — emit only when bars are present.
+                if (td.getRecentBars() != null && !td.getRecentBars().isEmpty()) {
+                    sb.append("## ").append(tfTitle).append(" — Recent OHLCV (last ").append(td.getRecentBars().size()).append(" bars)\n\n");
+                    sb.append("```csv\n");
+                    sb.append(toCsv(td.getRecentBars()));
+                    sb.append("```\n\n");
+                }
+            }
+        }
+
         appendListSection(sb, "Playbook rules in scope", ctx.getPlaybookRules());
         appendListSection(sb, "Active flags", ctx.getActiveFlags());
         appendListSection(sb, "Recently resolved flags (last 30d)", ctx.getRecentlyResolvedFlags());
@@ -46,10 +73,9 @@ public class ScanContextMarkdown {
 
         sb.append("---\n\n");
         sb.append("## Market data\n\n");
-        sb.append("Bundle ships zigzag pivots with per-pivot indicator snapshots (above).\n");
-        sb.append("OHLC bars + raw indicator series are NOT in the bundle — derive from the\n");
-        sb.append("pivots, or call `kite_get_quote` for live LTP and `kite_get_historical_data`\n");
-        sb.append("only if you need bar-level detail beyond the pivots.\n");
+        sb.append("Bundle ships zigzag pivots + recent OHLCV bars for Week, Day, OneHour timeframes.\n");
+        sb.append("Use Week for Elliott macro anchor; Day for intermediate count; OneHour for trade execution.\n");
+        sb.append("For live LTP, call `kite_get_quote`; for any intraday detail not in bundle, `kite_get_historical_data`.\n");
 
         return sb.toString();
     }
@@ -76,6 +102,39 @@ public class ScanContextMarkdown {
         sb.append("```json\n");
         sb.append(toPretty(map));
         sb.append("\n```\n\n");
+    }
+
+    /**
+     * Emit a list of map-rows as a CSV table inside a fenced ```csv block.
+     * Column order: union of keys from all rows, preserving first-occurrence order.
+     * Missing values → empty cell. Numbers + strings stringified directly. Commas
+     * inside string values are wrapped in double quotes; existing double quotes
+     * are doubled (RFC 4180).
+     */
+    private String toCsv(List<Map<String, Object>> rows) {
+        if (rows == null || rows.isEmpty()) return "";
+        // Build column order from union of keys, preserving first-occurrence order.
+        Set<String> cols = new LinkedHashSet<>();
+        for (Map<String, Object> r : rows) cols.addAll(r.keySet());
+        StringBuilder out = new StringBuilder();
+        out.append(String.join(",", cols)).append("\n");
+        for (Map<String, Object> r : rows) {
+            boolean first = true;
+            for (String c : cols) {
+                if (!first) out.append(",");
+                first = false;
+                Object v = r.get(c);
+                if (v == null) continue; // empty cell
+                String s = String.valueOf(v);
+                if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+                    out.append("\"").append(s.replace("\"", "\"\"")).append("\"");
+                } else {
+                    out.append(s);
+                }
+            }
+            out.append("\n");
+        }
+        return out.toString();
     }
 
     private String toPretty(Object o) {

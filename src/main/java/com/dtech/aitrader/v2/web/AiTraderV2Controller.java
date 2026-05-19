@@ -53,9 +53,11 @@ public class AiTraderV2Controller {
      * useful for testing / running a fresh batch before the next 22:00 IST cycle.
      */
     @PostMapping("/batch/run")
-    public ResponseEntity<?> runBatch(Authentication auth) {
+    public ResponseEntity<?> runBatch(
+            @RequestParam(required = false) String symbols,
+            Authentication auth) {
         try {
-            NightlyBundleDumpService.Summary summary = nightlyBatch.runManual();
+            NightlyBundleDumpService.Summary summary = nightlyBatch.runManual(symbols);
             return ResponseEntity.ok(summary);
         } catch (Exception e) {
             log.error("manual v2 batch fire failed: {}", e.getMessage(), e);

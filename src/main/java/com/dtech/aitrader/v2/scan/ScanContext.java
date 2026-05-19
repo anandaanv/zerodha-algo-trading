@@ -63,6 +63,22 @@ public class ScanContext {
      *  (replaces raw OHLC + indicator dump). */
     private List<Map<String, Object>> zigzagPivots;
 
+    /** One TF's worth of data — zigzag pivots + recent OHLCV bars. */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TimeframeData {
+        private String timeframe;
+        private int zigzagLookbackBars;
+        private int pivotCount;
+        private List<Map<String, Object>> zigzagPivots;
+        private List<Map<String, Object>> recentBars;
+    }
+
+    /** Multi-timeframe scan data — Weekly + Daily + Hourly (or whatever was configured). */
+    private List<TimeframeData> timeframes;
+
     /** All active playbook rules loaded from memsys at scan-start. */
     private List<Map<String, Object>> playbookRules;
 
