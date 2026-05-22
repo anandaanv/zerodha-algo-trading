@@ -23,7 +23,13 @@ public enum IndicatorComponent {
   EMA50("ema50"),
   EMA100("ema100"),
   EMA200("ema200"),
-  EMA_STACK("ema_stack");
+  EMA_STACK("ema_stack"),
+  BB_MIDDLE("bb_middle"),
+  BB_UPPER("bb_upper"),
+  BB_LOWER("bb_lower"),
+  BB_WIDTH("bb_width"),
+  BB_PERCENT("bb_percent"),
+  BOLLINGER("bollinger");
 
   private final String jsonValue;
 
