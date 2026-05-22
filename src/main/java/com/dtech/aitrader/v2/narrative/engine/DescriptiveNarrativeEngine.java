@@ -583,7 +583,14 @@ public class DescriptiveNarrativeEngine {
             List<Beat> kept = new ArrayList<>();
             if (tier == Tier.PRESENT) {
                 for (Beat b : tBeats) {
-                    if (b.getWhat() != BeatVerb.CROSSED) kept.add(b);
+                    // Drop low-significance CROSSED beats (MACD signal-cross noise, etc.).
+                    // Keep high-significance CROSSED — Stochastic %K/%D in-zone crosses emit at
+                    // sig=1.0 and ARE the indicator's primary signal per Lane.
+                    if (b.getWhat() == BeatVerb.CROSSED
+                            && (b.getSignificance() == null || b.getSignificance() < 0.7)) {
+                        continue;
+                    }
+                    kept.add(b);
                 }
             } else if (tier == Tier.HISTORY) {
                 kept.addAll(topN(tBeats, BeatVerb.PEAKED, ep.getHistoryPeakedCap()));
@@ -607,6 +614,12 @@ public class DescriptiveNarrativeEngine {
                                 || b.getWhat() == BeatVerb.FAILED_ATTEMPT
                                 || b.getWhat() == BeatVerb.ENTERED_ZONE
                                 || b.getWhat() == BeatVerb.EXITED_ZONE)
+                        .collect(Collectors.toList()));
+                // High-significance CROSSED (Stochastic in-zone %K/%D, etc.) — same gate as PRESENT.
+                kept.addAll(tBeats.stream()
+                        .filter(b -> b.getWhat() == BeatVerb.CROSSED
+                                && b.getSignificance() != null
+                                && b.getSignificance() >= 0.7)
                         .collect(Collectors.toList()));
             }
             kept.sort(Comparator.comparingInt(Beat::getWhenBar));

@@ -8,7 +8,10 @@ public enum IndicatorComponent {
   HISTOGRAM("histogram"),
   MACD_ALL("macd_all"),
   RSI("rsi"),
-  RSI_ALL("rsi_all");
+  RSI_ALL("rsi_all"),
+  STOCH_K("stoch_k"),
+  STOCH_D("stoch_d"),
+  STOCH_ALL("stoch_all");
 
   private final String jsonValue;
 
