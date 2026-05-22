@@ -6,7 +6,9 @@ public enum IndicatorComponent {
   MACD_LINE("macd_line"),
   SIGNAL_LINE("signal_line"),
   HISTOGRAM("histogram"),
-  MACD_ALL("macd_all");
+  MACD_ALL("macd_all"),
+  RSI("rsi"),
+  RSI_ALL("rsi_all");
 
   private final String jsonValue;
 

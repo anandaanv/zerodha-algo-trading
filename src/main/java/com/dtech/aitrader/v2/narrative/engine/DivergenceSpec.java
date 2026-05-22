@@ -20,8 +20,21 @@ public class DivergenceSpec {
     IndicatorComponent component;
 
     /**
+     * Component label to put on emitted divergence beats. Conventionally an "<indicator>_all"
+     * value (e.g. {@code MACD_ALL} for MACD, {@code RSI_ALL} for RSI) to reflect that the beat
+     * spans the whole indicator. Defaults to {@link #component} if null.
+     */
+    IndicatorComponent beatComponent;
+
+    /**
      * Optional ref-prefix override (e.g. {@code "macd_div_"}). Defaults to {@code "<name>_div_"}
      * if null.
      */
     String refPrefix;
+
+    /**
+     * Label used in the beat's {@code note} field for the component being compared against price
+     * (e.g. "MACD", "RSI"). Defaults to "indicator" if null.
+     */
+    String componentLabel;
 }

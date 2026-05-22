@@ -115,6 +115,8 @@ public class MacdIndicatorConfig implements IndicatorConfig {
     public Optional<DivergenceSpec> getDivergence() {
         return Optional.of(DivergenceSpec.builder()
                 .component(IndicatorComponent.MACD_LINE)
+                .beatComponent(IndicatorComponent.MACD_ALL)
+                .componentLabel("MACD")
                 .refPrefix("macd_div_")
                 .build());
     }

@@ -2,9 +2,12 @@ package com.dtech.aitrader.v2.narrative.engine;
 
 import com.dtech.aitrader.v2.narrative.beat.Beat;
 import com.dtech.aitrader.v2.narrative.beat.Checkpoint;
+import com.dtech.aitrader.v2.narrative.beat.SwingState;
 import com.dtech.aitrader.v2.narrative.pivot.SeriesPivot;
 import com.dtech.chartdata.model.OhlcBarDTO;
+import com.dtech.chartpattern.zigzag.ZigZagPoint;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,6 +45,25 @@ public interface IndicatorConfig {
 
     /** Divergence detection rule (which component to pair with close price). Empty for ADX/EMA/etc. */
     Optional<DivergenceSpec> getDivergence();
+
+    /**
+     * Named zones for {@code entered_zone}/{@code exited_zone} beats. Empty for indicators
+     * without natural zones (MACD).
+     */
+    default List<ZoneSpec> getZones() {
+        return Collections.emptyList();
+    }
+
+    /**
+     * Escape hatch for indicator-specific beat logic that does not fit the shared verb emitters:
+     * RSI Brown-range regime classifier, EMA-stack lifecycle collapse, Cardwell reversals,
+     * failure-swings, etc. The engine appends the returned beats to the pool before tier
+     * filtering, so they take part in the same noise/tier rules as engine-emitted beats.
+     */
+    default List<Beat> emitCustomBeats(IndicatorSeries series, List<OhlcBarDTO> bars,
+                                       List<ZigZagPoint> pricePivots, List<SwingState> swingStates) {
+        return Collections.emptyList();
+    }
 
     /**
      * Build the present-tier "currently" beat at the last bar. Each indicator describes its

@@ -104,6 +104,15 @@ public class DescriptiveNarrativeEngine {
                 allBeats.addAll(buildDivergenceBeats(divSpec, pivotsByComponent.get(divSpec.getComponent()),
                         series, bars, pricePivots, swingStates, config.getIndicatorName())));
 
+        // 6a. Zone episodes (entered_zone / exited_zone)
+        for (ZoneSpec zone : config.getZones()) {
+            allBeats.addAll(buildZoneBeats(zone, series, bars, pricePivots, swingStates,
+                    config.getIndicatorName()));
+        }
+
+        // 6b. Indicator-specific custom beats (Brown regime, lifecycle collapse, failure swings)
+        allBeats.addAll(config.emitCustomBeats(series, bars, pricePivots, swingStates));
+
         // 7. Tier assignment + per-verb rank caps
         int lastIdx = series.length() - 1;
         Map<Tier, List<Beat>> tieredBeats = assignTiersAndFilter(allBeats, lastIdx, engineParams);
@@ -321,6 +330,10 @@ public class DescriptiveNarrativeEngine {
         List<Beat> beats = new ArrayList<>();
         String refPrefix = divSpec.getRefPrefix() != null ? divSpec.getRefPrefix() :
                 (indicatorName.toLowerCase() + "_div_");
+        IndicatorComponent beatComponent = divSpec.getBeatComponent() != null
+                ? divSpec.getBeatComponent() : divSpec.getComponent();
+        String componentLabel = divSpec.getComponentLabel() != null
+                ? divSpec.getComponentLabel() : "indicator";
 
         // --- BEARISH divergences (between peaks) ---
         List<SeriesPivot> peaks = pivots.stream()
@@ -363,7 +376,8 @@ public class DescriptiveNarrativeEngine {
                 if (priceLater > price2 && pLater.value() > p2.value()) {
                     consequence = Consequence.FAILED;
                     invalidatedNote = " [INVALIDATED at bar " + pLater.idx() + ": price " + priceLater
-                            + " and indicator " + pLater.value() + " both broke the divergence ceiling]";
+                            + " and " + componentLabel + " " + pLater.value()
+                            + " both broke the divergence ceiling]";
                     break;
                 }
             }
@@ -371,7 +385,7 @@ public class DescriptiveNarrativeEngine {
             PriceContext priceContext = PriceContextBuilder.buildAt(p2.idx(), bars, pricePivots, swingStates);
             beats.add(Beat.builder()
                     .what(BeatVerb.DIVERGED_FROM_PRICE)
-                    .component(IndicatorComponent.MACD_ALL) // TODO: indicator-specific "all" component
+                    .component(beatComponent)
                     .whenBar(p2.idx())
                     .whenDate(instantToDateString(series.getBarTimestamps()[p2.idx()]))
                     .value(p2.value())
@@ -383,7 +397,7 @@ public class DescriptiveNarrativeEngine {
                     .pivotPair(List.of(entry1, entry2))
                     .deeperAnchor(deeperAnchor)
                     .ref(refPrefix + p2.idx())
-                    .note("Price HH (" + price2 + " vs " + price1 + ") while indicator LH ("
+                    .note("Price HH (" + price2 + " vs " + price1 + ") while " + componentLabel + " LH ("
                             + p2.value() + " vs " + p1.value() + ") — bearish divergence" + invalidatedNote)
                     .build());
         }
@@ -428,7 +442,8 @@ public class DescriptiveNarrativeEngine {
                 if (priceLater < price2 && tLater.value() < t2.value()) {
                     consequence = Consequence.FAILED;
                     invalidatedNote = " [INVALIDATED at bar " + tLater.idx() + ": price " + priceLater
-                            + " and indicator " + tLater.value() + " both broke the divergence floor]";
+                            + " and " + componentLabel + " " + tLater.value()
+                            + " both broke the divergence floor]";
                     break;
                 }
             }
@@ -436,7 +451,7 @@ public class DescriptiveNarrativeEngine {
             PriceContext priceContext = PriceContextBuilder.buildAt(t2.idx(), bars, pricePivots, swingStates);
             beats.add(Beat.builder()
                     .what(BeatVerb.DIVERGED_FROM_PRICE)
-                    .component(IndicatorComponent.MACD_ALL)
+                    .component(beatComponent)
                     .whenBar(t2.idx())
                     .whenDate(instantToDateString(series.getBarTimestamps()[t2.idx()]))
                     .value(t2.value())
@@ -448,11 +463,88 @@ public class DescriptiveNarrativeEngine {
                     .pivotPair(List.of(entry1, entry2))
                     .deeperAnchor(deeperAnchor)
                     .ref(refPrefix + t2.idx())
-                    .note("Price LL (" + price2 + " vs " + price1 + ") while indicator HL ("
+                    .note("Price LL (" + price2 + " vs " + price1 + ") while " + componentLabel + " HL ("
                             + t2.value() + " vs " + t1.value() + ") — bullish divergence" + invalidatedNote)
                     .build());
         }
         return beats;
+    }
+
+    /**
+     * Emit {@code entered_zone} at the bar a stretch begins, {@code exited_zone} at the bar it
+     * ends (with {@code persisted_bars} = stay duration). Short pokes shorter than
+     * {@link ZoneSpec#getMinPersistenceBars()} are dropped.
+     *
+     * <p>If the series ends still in-zone, an {@code entered_zone} beat is emitted with
+     * {@code consequence=ongoing} (and no matching exit).
+     */
+    private List<Beat> buildZoneBeats(ZoneSpec zone, IndicatorSeries series, List<OhlcBarDTO> bars,
+                                       List<ZigZagPoint> pricePivots, List<SwingState> swingStates,
+                                       String indicatorName) {
+        double[] values = series.getComponent(zone.getComponent());
+        String refPrefix = zone.getRefPrefix() != null ? zone.getRefPrefix() :
+                (indicatorName.toLowerCase() + "_" + zone.getName() + "_");
+
+        List<Beat> beats = new ArrayList<>();
+        boolean inZone = false;
+        int entryBar = -1;
+
+        for (int i = 0; i < values.length; i++) {
+            boolean nowInZone = values[i] >= zone.getLower() && values[i] <= zone.getUpper();
+            if (nowInZone && !inZone) {
+                entryBar = i;
+                inZone = true;
+            } else if (!nowInZone && inZone) {
+                int persisted = i - entryBar;
+                if (persisted >= Math.max(1, zone.getMinPersistenceBars())) {
+                    beats.add(zoneBeat(BeatVerb.ENTERED_ZONE, zone, entryBar, values[entryBar],
+                            null, refPrefix + "in_" + entryBar,
+                            "Entered " + zone.getName(),
+                            series, bars, pricePivots, swingStates));
+                    beats.add(zoneBeat(BeatVerb.EXITED_ZONE, zone, i, values[i],
+                            persisted, refPrefix + "out_" + i,
+                            "Exited " + zone.getName() + " after " + persisted + " bars",
+                            series, bars, pricePivots, swingStates));
+                }
+                inZone = false;
+            }
+        }
+        // Series ends in-zone — emit the entry as an ongoing episode
+        if (inZone) {
+            int persisted = values.length - entryBar;
+            beats.add(Beat.builder()
+                    .what(BeatVerb.ENTERED_ZONE)
+                    .component(zone.getComponent())
+                    .whenBar(entryBar)
+                    .whenDate(instantToDateString(series.getBarTimestamps()[entryBar]))
+                    .value(values[entryBar])
+                    .significance(1.0)
+                    .persistedBars(persisted)
+                    .consequence(Consequence.ONGOING)
+                    .priceContext(PriceContextBuilder.buildAt(entryBar, bars, pricePivots, swingStates))
+                    .ref(refPrefix + "in_" + entryBar)
+                    .note("Entered " + zone.getName() + " (ongoing, held " + persisted + " bars)")
+                    .build());
+        }
+        return beats;
+    }
+
+    private Beat zoneBeat(BeatVerb verb, ZoneSpec zone, int bar, double value, Integer persisted,
+                          String ref, String note, IndicatorSeries series, List<OhlcBarDTO> bars,
+                          List<ZigZagPoint> pricePivots, List<SwingState> swingStates) {
+        return Beat.builder()
+                .what(verb)
+                .component(zone.getComponent())
+                .whenBar(bar)
+                .whenDate(instantToDateString(series.getBarTimestamps()[bar]))
+                .value(value)
+                .significance(1.0)
+                .persistedBars(persisted)
+                .consequence(Consequence.CONFIRMED)
+                .priceContext(PriceContextBuilder.buildAt(bar, bars, pricePivots, swingStates))
+                .ref(ref)
+                .note(note)
+                .build();
     }
 
     // ===== Tier assignment + filtering =====
@@ -507,7 +599,9 @@ public class DescriptiveNarrativeEngine {
                 kept.addAll(tBeats.stream()
                         .filter(b -> b.getWhat() == BeatVerb.DIVERGED_FROM_PRICE
                                 || b.getWhat() == BeatVerb.REGIME_CHANGE
-                                || b.getWhat() == BeatVerb.FAILED_ATTEMPT)
+                                || b.getWhat() == BeatVerb.FAILED_ATTEMPT
+                                || b.getWhat() == BeatVerb.ENTERED_ZONE
+                                || b.getWhat() == BeatVerb.EXITED_ZONE)
                         .collect(Collectors.toList()));
             }
             kept.sort(Comparator.comparingInt(Beat::getWhenBar));

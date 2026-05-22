@@ -10,6 +10,8 @@ public enum BeatVerb {
   FAILED_ATTEMPT("failed_attempt"),
   REGIME_CHANGE("regime_change"),
   DIVERGED_FROM_PRICE("diverged_from_price"),
+  ENTERED_ZONE("entered_zone"),
+  EXITED_ZONE("exited_zone"),
   CURRENTLY("currently");
 
   private final String jsonValue;
