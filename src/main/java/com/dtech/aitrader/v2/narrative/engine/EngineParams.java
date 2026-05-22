@@ -44,4 +44,12 @@ public class EngineParams {
     int recentPeakedCap;
     int recentTroughedCap;
     int recentThrustCap;
+
+    /**
+     * History-tier cap for {@code entered_zone}/{@code exited_zone} beats. Default 0 means
+     * zones don't survive into history (matches the FAST-decay rule from the RSI/Stoch deltas).
+     * ADX/EMA-stack regime-conditioner indicators should set this higher — their zone episodes
+     * are the indicator's whole point and decay SLOW-MEDIUM per the delta.
+     */
+    int historyZoneCap;
 }

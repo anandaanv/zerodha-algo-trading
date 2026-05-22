@@ -604,6 +604,17 @@ public class DescriptiveNarrativeEngine {
                 kept.addAll(tBeats.stream()
                         .filter(b -> b.getWhat() == BeatVerb.DIVERGED_FROM_PRICE)
                         .collect(Collectors.toList()));
+                // History-tier zone beats — only kept if the indicator config opts in (ADX/EMA
+                // regime-conditioners). Ranked by persisted_bars (longer = more structural).
+                if (ep.getHistoryZoneCap() > 0) {
+                    kept.addAll(tBeats.stream()
+                            .filter(b -> b.getWhat() == BeatVerb.ENTERED_ZONE
+                                    || b.getWhat() == BeatVerb.EXITED_ZONE)
+                            .sorted(Comparator.comparingInt(
+                                    (Beat b) -> -(b.getPersistedBars() == null ? 0 : b.getPersistedBars())))
+                            .limit(ep.getHistoryZoneCap())
+                            .collect(Collectors.toList()));
+                }
             } else { // RECENT
                 kept.addAll(topN(tBeats, BeatVerb.PEAKED, ep.getRecentPeakedCap()));
                 kept.addAll(topN(tBeats, BeatVerb.TROUGHED, ep.getRecentTroughedCap()));

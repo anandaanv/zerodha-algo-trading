@@ -14,7 +14,11 @@ public enum IndicatorComponent {
   STOCH_ALL("stoch_all"),
   STOCHRSI_K("stochrsi_k"),
   STOCHRSI_D("stochrsi_d"),
-  STOCHRSI_ALL("stochrsi_all");
+  STOCHRSI_ALL("stochrsi_all"),
+  ADX("adx"),
+  PLUS_DI("plus_di"),
+  MINUS_DI("minus_di"),
+  ADX_DMI("adx_dmi");
 
   private final String jsonValue;
 
