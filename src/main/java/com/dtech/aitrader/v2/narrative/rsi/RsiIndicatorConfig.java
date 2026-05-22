@@ -66,7 +66,13 @@ public class RsiIndicatorConfig implements IndicatorConfig {
                 .regimeChangePersistenceBars(params.getRegimeChangePersistenceBars())
                 .historyPeakedCap(2)
                 .historyTroughedCap(2)
-                .historyRegimeCap(3)
+                // RSI emits TWO kinds of regime_change beats: Brown range shifts (load-bearing
+                // regime context) and 50-centerline crosses (FAST-decay events per delta).
+                // The default cap of 3 ranks them together by persistedBars — and the 50-cross
+                // beats often outrank Brown beats on persistence, silently dropping the
+                // regime context the LLM needs. Raising the cap so both kinds survive.
+                // Per owner's "fix honesty, ignore precision" principle, more honest beats > tighter cap.
+                .historyRegimeCap(10)
                 .recentPeakedCap(4)
                 .recentTroughedCap(4)
                 .recentThrustCap(0) // RSI has no thrust verb (bounded)
@@ -165,10 +171,16 @@ public class RsiIndicatorConfig implements IndicatorConfig {
                     else break;
                 }
                 if (holdCount >= Math.min(persistence, n - i) && regimes[i] != Regime.NONE) {
-                    if (current != regimes[i] && current != Regime.UNDEFINED) {
+                    // Emit on every persistent commit, including the FIRST one. Silently
+                    // swallowing the UNDEFINED→BULL/BEAR transition (as the first cut did) is
+                    // dishonest: it makes the LLM think there is no regime when there is one.
+                    // SBIN was the symptom — bull_range at last bar with zero regime_change
+                    // beats.
+                    if (current != regimes[i]) {
                         int persistedBars = countForwardRegimeHold(regimes, i);
                         beats.add(buildBrownRegimeBeat(i, regimes[i], persistedBars, rsi, series, bars,
-                                pricePivots, swingStates));
+                                pricePivots, swingStates,
+                                current == Regime.UNDEFINED));
                     }
                     current = regimes[i];
                     committedRegime[i] = current;
@@ -356,7 +368,9 @@ public class RsiIndicatorConfig implements IndicatorConfig {
     private Beat buildBrownRegimeBeat(int bar, Regime newRegime, int persistedBars, double[] rsi,
                                        IndicatorSeries series, List<OhlcBarDTO> bars,
                                        List<ZigZagPoint> pricePivots,
-                                       List<com.dtech.aitrader.v2.narrative.beat.SwingState> swingStates) {
+                                       List<com.dtech.aitrader.v2.narrative.beat.SwingState> swingStates,
+                                       boolean isFirstCommit) {
+        String verb = isFirstCommit ? "entered" : "turned";
         return Beat.builder()
                 .what(BeatVerb.REGIME_CHANGE)
                 .component(IndicatorComponent.RSI)
@@ -368,7 +382,7 @@ public class RsiIndicatorConfig implements IndicatorConfig {
                 .consequence(Consequence.CONFIRMED)
                 .priceContext(PriceContextBuilder.buildAt(bar, bars, pricePivots, swingStates))
                 .ref("rsi_brown_" + newRegime.name().toLowerCase() + "_" + bar)
-                .note("Brown range regime turned " + newRegime.label
+                .note("Brown range regime " + verb + " " + newRegime.label
                         + " (held " + persistedBars + " bars, median RSI over " + params.getBrownRegimeWindowBars()
                         + "-bar window crossed " + (newRegime == Regime.BULL ?
                             "above " + params.getBrownBullMedianMin() :
