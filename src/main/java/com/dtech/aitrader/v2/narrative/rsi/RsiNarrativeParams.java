@@ -94,7 +94,9 @@ public class RsiNarrativeParams {
                 ))
                 .presentWindowBars(20)
                 .recentWindowBars(72)
-                .regimeChangePersistenceBars(5)
+                // FIX 3 (owner d3020077): raised from 5 to 8 — a sub-8-week reversal on a
+                // weekly chart isn't a real centerline regime attempt, so filtering is honest.
+                .regimeChangePersistenceBars(8)
                 .oversoldThreshold(30.0)
                 .overboughtThreshold(70.0)
                 .bullRegimeOsUpper(50.0)    // Brown bull-range support ~40-50

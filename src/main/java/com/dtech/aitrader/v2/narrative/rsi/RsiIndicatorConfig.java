@@ -78,6 +78,9 @@ public class RsiIndicatorConfig implements IndicatorConfig {
                 .recentPeakedCap(4)
                 .recentTroughedCap(4)
                 .recentThrustCap(0) // RSI has no thrust verb (bounded)
+                // FIX 3: only emit failed_attempt for crosses that persisted ≥4 weekly bars.
+                // Below that is RSI wobbling through 50 — not a real centerline attempt.
+                .failedAttemptMinBars(4)
                 .build();
     }
 
@@ -602,15 +605,17 @@ public class RsiIndicatorConfig implements IndicatorConfig {
         List<Checkpoint> checkpoints = new ArrayList<>();
         for (SeriesPivot pivot : primaryPivots) {
             if (pivot.idx() <= lastIdx - 100) {
+                // FIX 2 (owner d3020077): RSI value goes in the dedicated `rsi` field.
+                // The first cut mislabeled it under `macd_line`.
                 checkpoints.add(Checkpoint.builder()
                         .bar(pivot.idx())
-                        .macdLine(rsi[pivot.idx()]) // reusing the field for RSI value — schema is shared
+                        .rsi(rsi[pivot.idx()])
                         .build());
             }
         }
         checkpoints.add(Checkpoint.builder()
                 .bar(lastIdx)
-                .macdLine(rsi[lastIdx])
+                .rsi(rsi[lastIdx])
                 .build());
         return checkpoints;
     }

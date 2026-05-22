@@ -57,6 +57,9 @@ public class MacdIndicatorConfig implements IndicatorConfig {
                 .recentPeakedCap(4)
                 .recentTroughedCap(4)
                 .recentThrustCap(2)
+                // MACD: emit every failed zero-cross. Preserves pre-Fix-3 behavior — MACD's
+                // zero-cross is meaningful at any persistence because the line is unbounded.
+                .failedAttemptMinBars(0)
                 .build();
     }
 

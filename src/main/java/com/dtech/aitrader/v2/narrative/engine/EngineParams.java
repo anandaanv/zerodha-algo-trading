@@ -25,6 +25,18 @@ public class EngineParams {
     /** Bars a regime must persist to count as regime_change vs failed_attempt. */
     int regimeChangePersistenceBars;
 
+    /**
+     * Minimum bars a cross must persist before it's worth emitting as a {@code failed_attempt}.
+     * Crosses persisting below this are dropped entirely (non-event noise filter). Per owner
+     * memo d3020077 Fix 3 for RSI: a sub-8-week centerline reversal on weekly bars is not a
+     * real regime attempt — filtering is honest.
+     *
+     * <p>Default 0 preserves the original behavior (emit all failed crosses). MACD uses 0
+     * (zero-cross attempts are always worth a beat). RSI sets this higher (e.g. 4) so RSI's
+     * frequent centerline wobble doesn't clutter the narrative.
+     */
+    int failedAttemptMinBars;
+
     /** Per-tier rank caps for the structural pivot verbs. */
     int historyPeakedCap;
     int historyTroughedCap;

@@ -248,6 +248,11 @@ public class DescriptiveNarrativeEngine {
                                    "Cross " + belowLabel + "; regime turned negative, held ") + persistedBars + " bars")
                             .build());
                 } else if (enoughForwardBars) {
+                    // Drop sub-failedAttemptMinBars crosses entirely — they're not even an
+                    // attempt at a regime, just noise wobble. Owner memo d3020077 Fix 3.
+                    if (persistedBars < params.getFailedAttemptMinBars()) {
+                        continue;
+                    }
                     beats.add(Beat.builder()
                             .what(BeatVerb.FAILED_ATTEMPT)
                             .component(cx.getPrimary())
