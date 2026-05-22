@@ -1,5 +1,7 @@
 package com.dtech.aitrader.v2.narrative.macd;
 
+import com.dtech.aitrader.v2.narrative.beat.IndicatorComponent;
+import com.dtech.aitrader.v2.narrative.engine.IndicatorSeries;
 import lombok.Builder;
 import lombok.Value;
 
@@ -8,12 +10,12 @@ import java.time.Instant;
 /**
  * Immutable carrier for MACD computation results.
  *
- * Contains the MACD line, signal line, histogram, and associated metadata
- * (bar indices, timestamps, symbol, timeframe) for downstream processing.
+ * Implements the engine's {@link IndicatorSeries} contract so the generic narrative engine
+ * can read MACD components by name without knowing it is MACD.
  */
 @Value
 @Builder
-public class MacdSeries {
+public class MacdSeries implements IndicatorSeries {
     /** MACD line values: fastEma - slowEma */
     double[] macdLine;
 
@@ -34,4 +36,23 @@ public class MacdSeries {
 
     /** Timeframe (e.g., "Week") */
     String timeframe;
+
+    @Override
+    public int length() {
+        return macdLine.length;
+    }
+
+    @Override
+    public double[] getComponent(IndicatorComponent component) {
+        switch (component) {
+            case MACD_LINE:
+                return macdLine;
+            case SIGNAL_LINE:
+                return signalLine;
+            case HISTOGRAM:
+                return histogram;
+            default:
+                throw new IllegalArgumentException("MacdSeries has no component " + component);
+        }
+    }
 }

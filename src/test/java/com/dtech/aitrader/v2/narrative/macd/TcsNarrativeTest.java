@@ -85,7 +85,8 @@ class TcsNarrativeTest {
                     ).toList();
                 });
 
-        MacdNarrativeExtractor extractor = new MacdNarrativeExtractor(stub);
+        MacdNarrativeExtractor extractor = new MacdNarrativeExtractor(
+                new com.dtech.aitrader.v2.narrative.engine.DescriptiveNarrativeEngine(stub));
         Narrative narrative = extractor.extract(bars, "TCS", "Week", MacdNarrativeParams.ofDefaults());
 
         // Serialize for inspection

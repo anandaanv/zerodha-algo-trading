@@ -85,7 +85,8 @@ class Phase1dRendererTest {
                     org.ta4j.core.BarSeries series = inv.getArgument(0);
                     return buildPricePivotsFromBarSeries(series);
                 });
-        return new MacdNarrativeExtractor(stub);
+        return new MacdNarrativeExtractor(
+                new com.dtech.aitrader.v2.narrative.engine.DescriptiveNarrativeEngine(stub));
     }
 
     /** Tiny adaptation: detect price pivots on close series via DefaultSeriesPivotEngine. */

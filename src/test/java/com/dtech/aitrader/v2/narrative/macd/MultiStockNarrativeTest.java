@@ -85,7 +85,8 @@ class MultiStockNarrativeTest {
                         ).toList();
                     });
 
-            MacdNarrativeExtractor extractor = new MacdNarrativeExtractor(stub);
+            MacdNarrativeExtractor extractor = new MacdNarrativeExtractor(
+                    new com.dtech.aitrader.v2.narrative.engine.DescriptiveNarrativeEngine(stub));
             Narrative narrative = extractor.extract(bars, symbol, "Week", MacdNarrativeParams.ofDefaults());
 
             String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(narrative);
