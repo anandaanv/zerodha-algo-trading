@@ -18,7 +18,12 @@ public enum IndicatorComponent {
   ADX("adx"),
   PLUS_DI("plus_di"),
   MINUS_DI("minus_di"),
-  ADX_DMI("adx_dmi");
+  ADX_DMI("adx_dmi"),
+  EMA20("ema20"),
+  EMA50("ema50"),
+  EMA100("ema100"),
+  EMA200("ema200"),
+  EMA_STACK("ema_stack");
 
   private final String jsonValue;
 

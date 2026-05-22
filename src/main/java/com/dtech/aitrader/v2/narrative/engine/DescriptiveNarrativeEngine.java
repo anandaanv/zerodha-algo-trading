@@ -121,11 +121,13 @@ public class DescriptiveNarrativeEngine {
         Beat currentlyBeat = config.buildCurrentlyBeat(lastIdx, series, bars);
         tieredBeats.computeIfAbsent(Tier.PRESENT, k -> new ArrayList<>()).add(currentlyBeat);
 
-        // 9. Verification slices (delegated)
-        IndicatorComponent primary = config.getPivotComponents().get(0).getComponent();
+        // 9. Verification slices (delegated). Some configs (EMA-stack) have no pivot components.
+        List<SeriesPivot> primaryPivots = config.getPivotComponents().isEmpty()
+                ? Collections.emptyList()
+                : pivotsByComponent.get(config.getPivotComponents().get(0).getComponent());
         VerificationSlices verificationSlices = VerificationSlices.builder()
                 .comment("Checkpoints at history pivots and last bar for verification")
-                .checkpoints(config.buildVerificationCheckpoints(series, pivotsByComponent.get(primary), lastIdx))
+                .checkpoints(config.buildVerificationCheckpoints(series, primaryPivots, lastIdx))
                 .build();
 
         // 10. Assemble Narrative
