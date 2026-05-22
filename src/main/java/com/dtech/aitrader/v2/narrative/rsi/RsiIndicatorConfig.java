@@ -113,23 +113,10 @@ public class RsiIndicatorConfig implements IndicatorConfig {
 
     @Override
     public List<ZoneSpec> getZones() {
-        return List.of(
-                ZoneSpec.builder()
-                        .component(IndicatorComponent.RSI)
-                        .name("oversold")
-                        .lower(0.0)
-                        .upper(params.getOversoldThreshold())
-                        .minPersistenceBars(params.getZoneMinPersistenceBars())
-                        .refPrefix("rsi_os_")
-                        .build(),
-                ZoneSpec.builder()
-                        .component(IndicatorComponent.RSI)
-                        .name("overbought")
-                        .lower(params.getOverboughtThreshold())
-                        .upper(100.0)
-                        .minPersistenceBars(params.getZoneMinPersistenceBars())
-                        .refPrefix("rsi_ob_")
-                        .build());
+        // RSI zones are REGIME-RELATIVE per Brown — handled inside emitCustomBeats() where the
+        // active regime is known per bar. Returning empty here keeps the engine's absolute-zone
+        // emitter out of the way.
+        return List.of();
     }
 
     /**
@@ -162,11 +149,13 @@ public class RsiIndicatorConfig implements IndicatorConfig {
             else regimes[i] = Regime.NONE;
         }
 
-        // Find persistent regime transitions
+        // Find persistent regime transitions, emit regime_change beats, and remember the
+        // committed regime per bar so the zone emitter below can use the right thresholds.
         List<Beat> beats = new ArrayList<>();
         Regime current = Regime.UNDEFINED;
-        int currentStart = -1;
+        Regime[] committedRegime = new Regime[n];
         for (int i = 0; i < n; i++) {
+            committedRegime[i] = current;
             if (regimes[i] == Regime.UNDEFINED) continue;
             if (regimes[i] != current) {
                 // Candidate flip — check it persists
@@ -176,21 +165,182 @@ public class RsiIndicatorConfig implements IndicatorConfig {
                     else break;
                 }
                 if (holdCount >= Math.min(persistence, n - i) && regimes[i] != Regime.NONE) {
-                    // Confirmed regime; emit if it differs from prior confirmed regime
                     if (current != regimes[i] && current != Regime.UNDEFINED) {
                         int persistedBars = countForwardRegimeHold(regimes, i);
                         beats.add(buildBrownRegimeBeat(i, regimes[i], persistedBars, rsi, series, bars,
                                 pricePivots, swingStates));
-                    } else if (current == Regime.UNDEFINED) {
-                        // First confirmed regime; record the start but do not emit a "change" beat
-                        // (there was no prior regime to change from).
                     }
                     current = regimes[i];
-                    currentStart = i;
+                    committedRegime[i] = current;
                 }
             }
         }
+
+        // Regime-relative zone emission (FIX 1 from owner validation memo d3020077).
+        // Per Brown: zones are not absolute — they shift with the active regime. Bull-range
+        // support (~40-50) is the bull-regime OS line; bear-range resistance (~55-65) is the
+        // bear-regime OB line. UNDEFINED / NONE bars fall back to absolute 30/70.
+        beats.addAll(emitRegimeRelativeZoneBeats(rsi, committedRegime, series, bars, pricePivots, swingStates));
+
         return beats;
+    }
+
+    /**
+     * Walk the series with per-bar regime-aware zone thresholds. Emits {@code entered_zone} when
+     * RSI crosses INTO a zone (from outside), {@code exited_zone} when it leaves (with
+     * {@code persistedBars}). Each beat's note records the active regime so the LLM consumer
+     * sees the regime context the zone meaning depends on.
+     */
+    private List<Beat> emitRegimeRelativeZoneBeats(double[] rsi, Regime[] committedRegime,
+                                                    IndicatorSeries series, List<OhlcBarDTO> bars,
+                                                    List<ZigZagPoint> pricePivots,
+                                                    List<com.dtech.aitrader.v2.narrative.beat.SwingState> swingStates) {
+        List<Beat> beats = new ArrayList<>();
+        int n = rsi.length;
+
+        // OS and OB are tracked independently so we can have both kinds of episode in a single run.
+        boolean inOs = false;
+        int osEntry = -1;
+        Regime osEntryRegime = Regime.UNDEFINED;
+        boolean inOb = false;
+        int obEntry = -1;
+        Regime obEntryRegime = Regime.UNDEFINED;
+
+        for (int i = 0; i < n; i++) {
+            Regime regime = committedRegime[i];
+            double osUpper = regime == Regime.BULL ? params.getBullRegimeOsUpper()
+                    : regime == Regime.BEAR ? params.getBearRegimeOsUpper()
+                    : params.getOversoldThreshold();
+            double obLower = regime == Regime.BULL ? params.getBullRegimeObLower()
+                    : regime == Regime.BEAR ? params.getBearRegimeObLower()
+                    : params.getOverboughtThreshold();
+
+            boolean osNow = rsi[i] <= osUpper;
+            boolean obNow = rsi[i] >= obLower;
+
+            // OS transitions
+            if (osNow && !inOs) {
+                osEntry = i;
+                osEntryRegime = regime;
+                inOs = true;
+            } else if (!osNow && inOs) {
+                int persisted = i - osEntry;
+                if (persisted >= Math.max(1, params.getZoneMinPersistenceBars())) {
+                    beats.add(buildZoneBeat(BeatVerb.ENTERED_ZONE, osEntry, rsi[osEntry], null,
+                            "rsi_os_in_" + osEntry,
+                            zoneLabel("oversold", osEntryRegime, osUpperForRegime(osEntryRegime)),
+                            series, bars, pricePivots, swingStates));
+                    beats.add(buildZoneBeat(BeatVerb.EXITED_ZONE, i, rsi[i], persisted,
+                            "rsi_os_out_" + i,
+                            "Exited " + regimeOsName(osEntryRegime) + " after " + persisted + " bars",
+                            series, bars, pricePivots, swingStates));
+                }
+                inOs = false;
+            }
+
+            // OB transitions
+            if (obNow && !inOb) {
+                obEntry = i;
+                obEntryRegime = regime;
+                inOb = true;
+            } else if (!obNow && inOb) {
+                int persisted = i - obEntry;
+                if (persisted >= Math.max(1, params.getZoneMinPersistenceBars())) {
+                    beats.add(buildZoneBeat(BeatVerb.ENTERED_ZONE, obEntry, rsi[obEntry], null,
+                            "rsi_ob_in_" + obEntry,
+                            zoneLabel("overbought", obEntryRegime, obLowerForRegime(obEntryRegime)),
+                            series, bars, pricePivots, swingStates));
+                    beats.add(buildZoneBeat(BeatVerb.EXITED_ZONE, i, rsi[i], persisted,
+                            "rsi_ob_out_" + i,
+                            "Exited " + regimeObName(obEntryRegime) + " after " + persisted + " bars",
+                            series, bars, pricePivots, swingStates));
+                }
+                inOb = false;
+            }
+        }
+
+        // Series ends in-zone — emit the entry as an ongoing episode
+        if (inOs) {
+            int persisted = n - osEntry;
+            beats.add(Beat.builder()
+                    .what(BeatVerb.ENTERED_ZONE)
+                    .component(IndicatorComponent.RSI)
+                    .whenBar(osEntry)
+                    .whenDate(instantToDateString(series.getBarTimestamps()[osEntry]))
+                    .value(rsi[osEntry])
+                    .significance(1.0)
+                    .persistedBars(persisted)
+                    .consequence(Consequence.ONGOING)
+                    .priceContext(PriceContextBuilder.buildAt(osEntry, bars, pricePivots, swingStates))
+                    .ref("rsi_os_in_" + osEntry)
+                    .note("Entered " + regimeOsName(osEntryRegime) + " (ongoing, held " + persisted + " bars)")
+                    .build());
+        }
+        if (inOb) {
+            int persisted = n - obEntry;
+            beats.add(Beat.builder()
+                    .what(BeatVerb.ENTERED_ZONE)
+                    .component(IndicatorComponent.RSI)
+                    .whenBar(obEntry)
+                    .whenDate(instantToDateString(series.getBarTimestamps()[obEntry]))
+                    .value(rsi[obEntry])
+                    .significance(1.0)
+                    .persistedBars(persisted)
+                    .consequence(Consequence.ONGOING)
+                    .priceContext(PriceContextBuilder.buildAt(obEntry, bars, pricePivots, swingStates))
+                    .ref("rsi_ob_in_" + obEntry)
+                    .note("Entered " + regimeObName(obEntryRegime) + " (ongoing, held " + persisted + " bars)")
+                    .build());
+        }
+        return beats;
+    }
+
+    private double osUpperForRegime(Regime r) {
+        return r == Regime.BULL ? params.getBullRegimeOsUpper()
+                : r == Regime.BEAR ? params.getBearRegimeOsUpper()
+                : params.getOversoldThreshold();
+    }
+
+    private double obLowerForRegime(Regime r) {
+        return r == Regime.BULL ? params.getBullRegimeObLower()
+                : r == Regime.BEAR ? params.getBearRegimeObLower()
+                : params.getOverboughtThreshold();
+    }
+
+    private String regimeOsName(Regime r) {
+        return r == Regime.BULL ? "bull-regime oversold"
+                : r == Regime.BEAR ? "bear-regime oversold"
+                : "oversold";
+    }
+
+    private String regimeObName(Regime r) {
+        return r == Regime.BULL ? "bull-regime overbought"
+                : r == Regime.BEAR ? "bear-regime overbought"
+                : "overbought";
+    }
+
+    private String zoneLabel(String kind, Regime r, double threshold) {
+        String regimeNote = r == Regime.BULL ? "bull-regime " : r == Regime.BEAR ? "bear-regime " : "";
+        return "Entered " + regimeNote + kind + " (threshold=" + threshold + ", regime=" + r.label + ")";
+    }
+
+    private Beat buildZoneBeat(BeatVerb verb, int bar, double value, Integer persisted, String ref,
+                                String note, IndicatorSeries series, List<OhlcBarDTO> bars,
+                                List<ZigZagPoint> pricePivots,
+                                List<com.dtech.aitrader.v2.narrative.beat.SwingState> swingStates) {
+        return Beat.builder()
+                .what(verb)
+                .component(IndicatorComponent.RSI)
+                .whenBar(bar)
+                .whenDate(instantToDateString(series.getBarTimestamps()[bar]))
+                .value(value)
+                .significance(1.0)
+                .persistedBars(persisted)
+                .consequence(Consequence.CONFIRMED)
+                .priceContext(PriceContextBuilder.buildAt(bar, bars, pricePivots, swingStates))
+                .ref(ref)
+                .note(note)
+                .build();
     }
 
     private int countForwardRegimeHold(Regime[] regimes, int from) {
@@ -239,23 +389,27 @@ public class RsiIndicatorConfig implements IndicatorConfig {
         double[] rsi = series.getComponent(IndicatorComponent.RSI);
         double r = rsi[lastIdx];
 
-        String zoneLabel;
-        if (r <= params.getOversoldThreshold()) zoneLabel = "oversold";
-        else if (r >= params.getOverboughtThreshold()) zoneLabel = "overbought";
-        else zoneLabel = "neutral";
-
         // Current Brown regime (recompute at last bar)
         int window = params.getBrownRegimeWindowBars();
+        Regime regime = Regime.NONE;
         String regimeLabel = "transitioning";
         if (lastIdx >= window - 1) {
             double median = medianOfWindow(rsi, lastIdx - window + 1, lastIdx);
-            if (median > params.getBrownBullMedianMin()) regimeLabel = "bull_range";
-            else if (median < params.getBrownBearMedianMax()) regimeLabel = "bear_range";
-            else regimeLabel = "transitioning";
+            if (median > params.getBrownBullMedianMin()) { regime = Regime.BULL; regimeLabel = "bull_range"; }
+            else if (median < params.getBrownBearMedianMax()) { regime = Regime.BEAR; regimeLabel = "bear_range"; }
         }
 
-        String note = String.format("RSI posture at last bar: rsi=%.2f, zone=%s, brown_regime=%s",
-                r, zoneLabel, regimeLabel);
+        // Regime-relative zone classification
+        double osUpper = osUpperForRegime(regime);
+        double obLower = obLowerForRegime(regime);
+        String zoneLabel;
+        if (r <= osUpper) zoneLabel = regimeOsName(regime);
+        else if (r >= obLower) zoneLabel = regimeObName(regime);
+        else zoneLabel = "neutral";
+
+        String note = String.format(
+                "RSI posture at last bar: rsi=%.2f, brown_regime=%s, zone=%s (os_upper=%.1f, ob_lower=%.1f)",
+                r, regimeLabel, zoneLabel, osUpper, obLower);
 
         return Beat.builder()
                 .what(BeatVerb.CURRENTLY)

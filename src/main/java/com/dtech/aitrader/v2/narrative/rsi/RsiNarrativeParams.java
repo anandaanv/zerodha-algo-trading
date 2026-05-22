@@ -18,11 +18,35 @@ public class RsiNarrativeParams {
     int recentWindowBars;
     int regimeChangePersistenceBars;
 
-    /** Oversold zone upper bound (default 30). */
+    /** OS zone upper bound when Brown regime is transitioning/none (fallback to absolute). */
     double oversoldThreshold;
 
-    /** Overbought zone lower bound (default 70). */
+    /** OB zone lower bound when Brown regime is transitioning/none (fallback to absolute). */
     double overboughtThreshold;
+
+    /**
+     * BULL-regime "oversold" zone upper bound. Per Brown: bull-range support is ~40-50; a dip
+     * to ≤ this is the bull-regime OS event (continuation-buy setup).
+     */
+    double bullRegimeOsUpper;
+
+    /**
+     * BULL-regime "overbought" zone lower bound. Bull-range resistance is around ~90; OB events
+     * here are momentum-extension signals, not reversal.
+     */
+    double bullRegimeObLower;
+
+    /**
+     * BEAR-regime "oversold" zone upper bound. Bear-range floor is ~20; visits below this are
+     * deeply oversold even for the bear regime.
+     */
+    double bearRegimeOsUpper;
+
+    /**
+     * BEAR-regime "overbought" zone lower bound. Bear-range resistance is ~55-65; a visit here
+     * is the bear-regime OB event (continuation-sell setup).
+     */
+    double bearRegimeObLower;
 
     /** Minimum bars an OB/OS visit must last to register a beat (filters one-bar pokes). */
     int zoneMinPersistenceBars;
@@ -65,6 +89,10 @@ public class RsiNarrativeParams {
                 .regimeChangePersistenceBars(5)
                 .oversoldThreshold(30.0)
                 .overboughtThreshold(70.0)
+                .bullRegimeOsUpper(50.0)    // Brown bull-range support ~40-50
+                .bullRegimeObLower(80.0)    // Bull-range resistance ~90 (use 80 to catch the approach)
+                .bearRegimeOsUpper(30.0)    // Bear-range floor ~20 (use 30 to catch the approach)
+                .bearRegimeObLower(60.0)    // Bear-range resistance ~55-65
                 .zoneMinPersistenceBars(2)
                 .brownRegimeWindowBars(26)        // ~6 months on weekly bars
                 .brownBullMedianMin(55.0)
