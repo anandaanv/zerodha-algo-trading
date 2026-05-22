@@ -2,6 +2,7 @@ package com.dtech.aitrader.v2.narrative.rsi;
 
 import com.dtech.aitrader.v2.narrative.beat.*;
 import com.dtech.aitrader.v2.narrative.engine.*;
+import com.dtech.aitrader.v2.narrative.pivot.PivotKind;
 import com.dtech.aitrader.v2.narrative.pivot.SeriesPivot;
 import com.dtech.aitrader.v2.narrative.support.PriceContextBuilder;
 import com.dtech.chartdata.model.OhlcBarDTO;
@@ -15,6 +16,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -135,7 +137,8 @@ public class RsiIndicatorConfig implements IndicatorConfig {
      */
     @Override
     public List<Beat> emitCustomBeats(IndicatorSeries series, List<OhlcBarDTO> bars,
-                                       List<ZigZagPoint> pricePivots, List<com.dtech.aitrader.v2.narrative.beat.SwingState> swingStates) {
+                                       List<ZigZagPoint> pricePivots, List<com.dtech.aitrader.v2.narrative.beat.SwingState> swingStates,
+                                       Map<IndicatorComponent, List<SeriesPivot>> pivotsByComponent) {
         double[] rsi = series.getComponent(IndicatorComponent.RSI);
         int n = rsi.length;
         int window = params.getBrownRegimeWindowBars();
@@ -194,6 +197,158 @@ public class RsiIndicatorConfig implements IndicatorConfig {
         // bear-regime OB line. UNDEFINED / NONE bars fall back to absolute 30/70.
         beats.addAll(emitRegimeRelativeZoneBeats(rsi, committedRegime, series, bars, pricePivots, swingStates));
 
+        // Wilder failure-swing emission (owner d3020077 priority #2).
+        // RSI-INTERNAL (price-independent), Wilder's highest-reliability RSI signal.
+        List<SeriesPivot> rsiPivots = pivotsByComponent.get(IndicatorComponent.RSI);
+        if (rsiPivots != null && !rsiPivots.isEmpty()) {
+            beats.addAll(emitFailureSwings(rsiPivots, rsi, series, bars, pricePivots, swingStates));
+        }
+
+        return beats;
+    }
+
+    /**
+     * Wilder failure-swing detector (delta 39d06c2e section 3, priority promoted by owner memo
+     * d3020077).
+     *
+     * <p>Bullish (PATTERN_006): P1 trough &lt; oversold → P2 peak above oversold (recovery) →
+     * P3 higher-low trough above oversold (didn't re-enter OS) → break above P2 confirms the
+     * failure swing. The pattern's value is RSI-INTERNAL — no price comparison needed.
+     *
+     * <p>Bearish (PATTERN_007): mirror — P1 peak &gt; overbought → P2 trough below OB →
+     * P3 lower-high peak below OB → break below P2 confirms.
+     *
+     * <p>Emitted as {@link BeatVerb#FAILED_ATTEMPT} per the delta — the verb captures "the OS/OB
+     * extreme failed to continue, the structure inverted". Three RSI pivots (P1/P2/P3) carried
+     * as {@code pivotPair} so the LLM can see the exact pattern coordinates.
+     */
+    private List<Beat> emitFailureSwings(List<SeriesPivot> rsiPivots, double[] rsi, IndicatorSeries series,
+                                          List<OhlcBarDTO> bars, List<ZigZagPoint> pricePivots,
+                                          List<com.dtech.aitrader.v2.narrative.beat.SwingState> swingStates) {
+        List<Beat> beats = new ArrayList<>();
+        double osThresh = params.getOversoldThreshold();
+        double obThresh = params.getOverboughtThreshold();
+
+        // Bullish failure swing: trough below OS → peak above OS → higher-low trough above OS → break above peak.
+        for (int i = 0; i + 2 < rsiPivots.size(); i++) {
+            SeriesPivot p1 = rsiPivots.get(i);
+            SeriesPivot p2 = rsiPivots.get(i + 1);
+            SeriesPivot p3 = rsiPivots.get(i + 2);
+            if (p1.kind() != PivotKind.TROUGH || p2.kind() != PivotKind.PEAK || p3.kind() != PivotKind.TROUGH) continue;
+            if (p1.value() >= osThresh) continue;       // P1 must be below OS
+            if (p2.value() <= osThresh) continue;       // recovery must clear OS
+            if (p3.value() <= p1.value()) continue;     // P3 must be HIGHER low
+            if (p3.value() <= osThresh) continue;       // P3 must stay above OS (didn't re-enter)
+
+            // Walk forward from P3 looking for the confirming break above P2 — within a
+            // bounded window. Wilder's pattern is short-term: a 10-month-delayed break is a new
+            // setup, not the failure-swing confirmation. Also invalidate the pattern if RSI dips
+            // below P1 in the interim (re-entered OS and went deeper — the original OS low was
+            // not in fact "the failure").
+            int breakBar = -1;
+            int maxBar = Math.min(rsi.length, p3.idx() + 1 + params.getFailureSwingMaxBreakWindow());
+            for (int k = p3.idx() + 1; k < maxBar; k++) {
+                if (rsi[k] < p1.value()) break; // invalidated: went below the original OS low
+                if (rsi[k] > p2.value()) {
+                    breakBar = k;
+                    break;
+                }
+            }
+            if (breakBar < 0) continue; // pattern not yet confirmed or invalidated; skip
+
+            PivotPairEntry e1 = PivotPairEntry.builder()
+                    .bar(p1.idx()).date(instantToDateString(series.getBarTimestamps()[p1.idx()]))
+                    .price(bars.get(p1.idx()).getClose()).macd(p1.value()).build();
+            PivotPairEntry e2 = PivotPairEntry.builder()
+                    .bar(p2.idx()).date(instantToDateString(series.getBarTimestamps()[p2.idx()]))
+                    .price(bars.get(p2.idx()).getClose()).macd(p2.value()).build();
+            PivotPairEntry e3 = PivotPairEntry.builder()
+                    .bar(p3.idx()).date(instantToDateString(series.getBarTimestamps()[p3.idx()]))
+                    .price(bars.get(p3.idx()).getClose()).macd(p3.value()).build();
+
+            beats.add(Beat.builder()
+                    .what(BeatVerb.FAILED_ATTEMPT)
+                    .component(IndicatorComponent.RSI_ALL)
+                    .whenBar(breakBar)
+                    .whenDate(instantToDateString(series.getBarTimestamps()[breakBar]))
+                    .value(rsi[breakBar])
+                    .significance(1.0) // Wilder's highest-reliability signal
+                    .consequence(Consequence.CONFIRMED)
+                    .priceContext(PriceContextBuilder.buildAt(breakBar, bars, pricePivots, swingStates))
+                    .type("failure_swing")
+                    .direction("bullish")
+                    .pivotPair(List.of(e1, e2, e3))
+                    .ref("rsi_fs_bull_" + breakBar)
+                    .note(String.format(
+                            "Wilder bullish failure swing — P1 trough %.1f at bar %d (below OS %.0f), "
+                                    + "P2 recovery peak %.1f at bar %d, P3 higher-low %.1f at bar %d "
+                                    + "(holding above OS), break above P2 at bar %d (RSI=%.1f). "
+                                    + "RSI-INTERNAL pattern: structural sell-exhaustion.",
+                            p1.value(), p1.idx(), osThresh,
+                            p2.value(), p2.idx(),
+                            p3.value(), p3.idx(),
+                            breakBar, rsi[breakBar]))
+                    .build());
+        }
+
+        // Bearish failure swing: peak above OB → trough below OB → lower-high peak below OB → break below trough.
+        for (int i = 0; i + 2 < rsiPivots.size(); i++) {
+            SeriesPivot p1 = rsiPivots.get(i);
+            SeriesPivot p2 = rsiPivots.get(i + 1);
+            SeriesPivot p3 = rsiPivots.get(i + 2);
+            if (p1.kind() != PivotKind.PEAK || p2.kind() != PivotKind.TROUGH || p3.kind() != PivotKind.PEAK) continue;
+            if (p1.value() <= obThresh) continue;       // P1 must be above OB
+            if (p2.value() >= obThresh) continue;       // pullback must clear OB downwards
+            if (p3.value() >= p1.value()) continue;     // P3 must be LOWER high
+            if (p3.value() >= obThresh) continue;       // P3 must stay below OB (didn't re-enter)
+
+            // Same honesty constraints as bullish: bounded window + invalidate if RSI breaks
+            // above P1 (the original OB high) in the interim.
+            int breakBar = -1;
+            int maxBar = Math.min(rsi.length, p3.idx() + 1 + params.getFailureSwingMaxBreakWindow());
+            for (int k = p3.idx() + 1; k < maxBar; k++) {
+                if (rsi[k] > p1.value()) break; // invalidated: went above the original OB high
+                if (rsi[k] < p2.value()) {
+                    breakBar = k;
+                    break;
+                }
+            }
+            if (breakBar < 0) continue;
+
+            PivotPairEntry e1 = PivotPairEntry.builder()
+                    .bar(p1.idx()).date(instantToDateString(series.getBarTimestamps()[p1.idx()]))
+                    .price(bars.get(p1.idx()).getClose()).macd(p1.value()).build();
+            PivotPairEntry e2 = PivotPairEntry.builder()
+                    .bar(p2.idx()).date(instantToDateString(series.getBarTimestamps()[p2.idx()]))
+                    .price(bars.get(p2.idx()).getClose()).macd(p2.value()).build();
+            PivotPairEntry e3 = PivotPairEntry.builder()
+                    .bar(p3.idx()).date(instantToDateString(series.getBarTimestamps()[p3.idx()]))
+                    .price(bars.get(p3.idx()).getClose()).macd(p3.value()).build();
+
+            beats.add(Beat.builder()
+                    .what(BeatVerb.FAILED_ATTEMPT)
+                    .component(IndicatorComponent.RSI_ALL)
+                    .whenBar(breakBar)
+                    .whenDate(instantToDateString(series.getBarTimestamps()[breakBar]))
+                    .value(rsi[breakBar])
+                    .significance(1.0)
+                    .consequence(Consequence.CONFIRMED)
+                    .priceContext(PriceContextBuilder.buildAt(breakBar, bars, pricePivots, swingStates))
+                    .type("failure_swing")
+                    .direction("bearish")
+                    .pivotPair(List.of(e1, e2, e3))
+                    .ref("rsi_fs_bear_" + breakBar)
+                    .note(String.format(
+                            "Wilder bearish failure swing — P1 peak %.1f at bar %d (above OB %.0f), "
+                                    + "P2 pullback trough %.1f at bar %d, P3 lower-high %.1f at bar %d "
+                                    + "(holding below OB), break below P2 at bar %d (RSI=%.1f). "
+                                    + "RSI-INTERNAL pattern: structural buy-exhaustion.",
+                            p1.value(), p1.idx(), obThresh,
+                            p2.value(), p2.idx(),
+                            p3.value(), p3.idx(),
+                            breakBar, rsi[breakBar]))
+                    .build());
+        }
         return beats;
     }
 

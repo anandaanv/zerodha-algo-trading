@@ -71,6 +71,14 @@ public class RsiNarrativeParams {
     /** Required persistence (bars) before a new Brown regime is confirmed (kills whipsaw). */
     int brownRegimePersistenceBars;
 
+    /**
+     * Maximum bars from the P3 pivot to the confirming "break" for a Wilder failure swing.
+     * Wilder's pattern is short-term confirmation; delayed breaks (months later) are usually
+     * different setups, not a continuation of the failure-swing thesis. Default ~15 weekly bars
+     * (~3-4 months).
+     */
+    int failureSwingMaxBreakWindow;
+
     public static RsiNarrativeParams ofDefaults() {
         return RsiNarrativeParams.builder()
                 .period(14)
@@ -98,6 +106,7 @@ public class RsiNarrativeParams {
                 .brownBullMedianMin(55.0)
                 .brownBearMedianMax(45.0)
                 .brownRegimePersistenceBars(8)    // ~2 months on weekly bars
+                .failureSwingMaxBreakWindow(15)   // ~3.5 months on weekly bars
                 .build();
     }
 }

@@ -111,7 +111,7 @@ public class DescriptiveNarrativeEngine {
         }
 
         // 6b. Indicator-specific custom beats (Brown regime, lifecycle collapse, failure swings)
-        allBeats.addAll(config.emitCustomBeats(series, bars, pricePivots, swingStates));
+        allBeats.addAll(config.emitCustomBeats(series, bars, pricePivots, swingStates, pivotsByComponent));
 
         // 7. Tier assignment + per-verb rank caps
         int lastIdx = series.length() - 1;
