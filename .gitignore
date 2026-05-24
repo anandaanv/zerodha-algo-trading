@@ -181,3 +181,7 @@ deploy_artifacts/
 
 # TradingView charting library (licensed; not redistributable)
 ui/chart-draw-app/charting_library/
+
+# Python bytecode
+scripts/__pycache__/
+*.pyc

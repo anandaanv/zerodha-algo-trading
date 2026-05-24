@@ -2,22 +2,40 @@ package com.dtech.aitrader.v2.narrative.mtf;
 
 import com.dtech.aitrader.v2.narrative.adx.AdxIndicatorConfig;
 import com.dtech.aitrader.v2.narrative.adx.AdxNarrativeParams;
+import com.dtech.aitrader.v2.narrative.aroon.AroonIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.aroon.AroonNarrativeParams;
+import com.dtech.aitrader.v2.narrative.atr.AtrIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.atr.AtrNarrativeParams;
 import com.dtech.aitrader.v2.narrative.beat.Narrative;
+import com.dtech.aitrader.v2.narrative.bollinger.BollingerIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.bollinger.BollingerNarrativeParams;
+import com.dtech.aitrader.v2.narrative.donchian.DonchianIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.donchian.DonchianNarrativeParams;
 import com.dtech.aitrader.v2.narrative.ema.EmaIndicatorConfig;
 import com.dtech.aitrader.v2.narrative.ema.EmaNarrativeParams;
 import com.dtech.aitrader.v2.narrative.engine.CompactNarrativeRenderer;
 import com.dtech.aitrader.v2.narrative.engine.DescriptiveNarrativeEngine;
+import com.dtech.aitrader.v2.narrative.ichimoku.IchimokuIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.ichimoku.IchimokuNarrativeParams;
+import com.dtech.aitrader.v2.narrative.keltner.KeltnerIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.keltner.KeltnerNarrativeParams;
 import com.dtech.aitrader.v2.narrative.macd.MacdIndicatorConfig;
 import com.dtech.aitrader.v2.narrative.macd.MacdNarrativeParams;
+import com.dtech.aitrader.v2.narrative.obv.ObvIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.obv.ObvNarrativeParams;
 import com.dtech.aitrader.v2.narrative.pivot.DefaultSeriesPivotEngine;
 import com.dtech.aitrader.v2.narrative.pivot.PivotKind;
 import com.dtech.aitrader.v2.narrative.pivot.SignificanceParams;
+import com.dtech.aitrader.v2.narrative.roc.RocIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.roc.RocNarrativeParams;
 import com.dtech.aitrader.v2.narrative.rsi.RsiIndicatorConfig;
 import com.dtech.aitrader.v2.narrative.rsi.RsiNarrativeParams;
 import com.dtech.aitrader.v2.narrative.stoch.StochIndicatorConfig;
 import com.dtech.aitrader.v2.narrative.stoch.StochNarrativeParams;
 import com.dtech.aitrader.v2.narrative.stochrsi.StochRsiIndicatorConfig;
 import com.dtech.aitrader.v2.narrative.stochrsi.StochRsiNarrativeParams;
+import com.dtech.aitrader.v2.narrative.vwap.VwapIndicatorConfig;
+import com.dtech.aitrader.v2.narrative.vwap.VwapNarrativeParams;
 import com.dtech.chartdata.model.OhlcBarDTO;
 import com.dtech.chartpattern.zigzag.ZigZagParams;
 import com.dtech.chartpattern.zigzag.ZigZagPoint;
@@ -40,9 +58,30 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
- * Multi-TF narrative run: 15 stocks × 3 timeframes = 45 compact memory texts written to
- * {@code /tmp/mtf/{symbol}_{tf}.md}. Each combines the 6 indicator narratives in compact form
- * (~1-1.5KB) per owner spec.
+ * Multi-TF narrative run v2 (owner b3ff4ca0): 15 stocks × 4 timeframes × 14 indicators →
+ * 60 compact memory texts written to {@code /tmp/mtf/{symbol}_{tf}.md}.
+ *
+ * <p>Indicators (14, in render order):
+ * <ol>
+ *   <li>MACD (FULL_NARRATIVE)</li>
+ *   <li>RSI (FULL_NARRATIVE, Brown regime)</li>
+ *   <li>Stochastic (FULL_NARRATIVE)</li>
+ *   <li>StochRSI (FULL_NARRATIVE)</li>
+ *   <li>ROC (FULL_NARRATIVE, NEW v2)</li>
+ *   <li>OBV (FULL_NARRATIVE, NEW v2)</li>
+ *   <li>ADX_DMI (REGIME_EPISODE)</li>
+ *   <li>Aroon (REGIME_EPISODE, NEW v2)</li>
+ *   <li>Bollinger (REGIME_EPISODE, built but excluded in v1)</li>
+ *   <li>Keltner (REGIME_EPISODE, NEW v2)</li>
+ *   <li>Donchian (REGIME_EPISODE, NEW v2)</li>
+ *   <li>EMA_Stack (REGIME_EPISODE)</li>
+ *   <li>ATR (SNAPSHOT, NEW v2)</li>
+ *   <li>VWAP (SNAPSHOT, NEW v2)</li>
+ *   <li>Ichimoku (SNAPSHOT, NEW v2)</li>
+ * </ol>
+ * Williams %R excluded per owner — hard-dedup into Stochastic.
+ *
+ * <p>Cutoff: all 4 TFs aligned to last intraday date (2026-05-18) by the dump script.
  */
 class MtfNarrativeRunTest {
 
@@ -52,48 +91,63 @@ class MtfNarrativeRunTest {
             "RELIANCE,    weekly, Week",
             "RELIANCE,    daily,  Day",
             "RELIANCE,    hourly, OneHour",
+            "RELIANCE,    15min,  FifteenMinute",
             "HDFCBANK,    weekly, Week",
             "HDFCBANK,    daily,  Day",
             "HDFCBANK,    hourly, OneHour",
+            "HDFCBANK,    15min,  FifteenMinute",
             "TCS,         weekly, Week",
             "TCS,         daily,  Day",
             "TCS,         hourly, OneHour",
+            "TCS,         15min,  FifteenMinute",
             "INFY,        weekly, Week",
             "INFY,        daily,  Day",
             "INFY,        hourly, OneHour",
+            "INFY,        15min,  FifteenMinute",
             "TATASTEEL,   weekly, Week",
             "TATASTEEL,   daily,  Day",
             "TATASTEEL,   hourly, OneHour",
+            "TATASTEEL,   15min,  FifteenMinute",
             "SBIN,        weekly, Week",
             "SBIN,        daily,  Day",
             "SBIN,        hourly, OneHour",
+            "SBIN,        15min,  FifteenMinute",
             "ITC,         weekly, Week",
             "ITC,         daily,  Day",
             "ITC,         hourly, OneHour",
+            "ITC,         15min,  FifteenMinute",
             "ADANIENT,    weekly, Week",
             "ADANIENT,    daily,  Day",
             "ADANIENT,    hourly, OneHour",
+            "ADANIENT,    15min,  FifteenMinute",
             "HINDUNILVR,  weekly, Week",
             "HINDUNILVR,  daily,  Day",
             "HINDUNILVR,  hourly, OneHour",
+            "HINDUNILVR,  15min,  FifteenMinute",
             "BAJFINANCE,  weekly, Week",
             "BAJFINANCE,  daily,  Day",
             "BAJFINANCE,  hourly, OneHour",
+            "BAJFINANCE,  15min,  FifteenMinute",
             "ICICIBANK,   weekly, Week",
             "ICICIBANK,   daily,  Day",
             "ICICIBANK,   hourly, OneHour",
+            "ICICIBANK,   15min,  FifteenMinute",
             "LT,          weekly, Week",
             "LT,          daily,  Day",
             "LT,          hourly, OneHour",
+            "LT,          15min,  FifteenMinute",
             "BHARTIARTL,  weekly, Week",
             "BHARTIARTL,  daily,  Day",
             "BHARTIARTL,  hourly, OneHour",
+            "BHARTIARTL,  15min,  FifteenMinute",
             "MARUTI,      weekly, Week",
             "MARUTI,      daily,  Day",
             "MARUTI,      hourly, OneHour",
+            "MARUTI,      15min,  FifteenMinute",
             "SUNPHARMA,   weekly, Week",
             "SUNPHARMA,   daily,  Day",
             "SUNPHARMA,   hourly, OneHour",
+            "SUNPHARMA,   15min,  FifteenMinute",
     })
     void extractCompact(String symbolRaw, String tfLabelRaw, String tfFixture) throws Exception {
         String symbol = symbolRaw.trim();
@@ -120,17 +174,26 @@ class MtfNarrativeRunTest {
             ZigZagService stub = buildZigZagStub();
             DescriptiveNarrativeEngine engine = new DescriptiveNarrativeEngine(stub);
 
-            // Run all 6 indicator configs. Note: configs are reused across TFs — the engine's
-            // tier windows (present/recent) are bar-relative so they scale with whatever TF is
-            // in play. For tighter per-TF tuning, future work; first cut uses single set.
+            // 15 indicators per owner v2 spec (Williams %R excluded per hard dedup).
             List<Narrative> ns = new ArrayList<>();
+            // Full narrative (6)
             ns.add(engine.extract(bars, symbol, tfFixture, new MacdIndicatorConfig(MacdNarrativeParams.ofDefaults())));
             ns.add(engine.extract(bars, symbol, tfFixture, new RsiIndicatorConfig(RsiNarrativeParams.ofDefaults())));
             ns.add(engine.extract(bars, symbol, tfFixture, new StochIndicatorConfig(StochNarrativeParams.ofDefaults())));
             ns.add(engine.extract(bars, symbol, tfFixture, new StochRsiIndicatorConfig(StochRsiNarrativeParams.ofDefaults())));
+            ns.add(engine.extract(bars, symbol, tfFixture, new RocIndicatorConfig(RocNarrativeParams.ofDefaults())));
+            ns.add(engine.extract(bars, symbol, tfFixture, new ObvIndicatorConfig(ObvNarrativeParams.ofDefaults())));
+            // Regime episode (6)
             ns.add(engine.extract(bars, symbol, tfFixture, new AdxIndicatorConfig(AdxNarrativeParams.ofDefaults())));
+            ns.add(engine.extract(bars, symbol, tfFixture, new AroonIndicatorConfig(AroonNarrativeParams.ofDefaults())));
+            ns.add(engine.extract(bars, symbol, tfFixture, new BollingerIndicatorConfig(BollingerNarrativeParams.ofDefaults())));
+            ns.add(engine.extract(bars, symbol, tfFixture, new KeltnerIndicatorConfig(KeltnerNarrativeParams.ofDefaults())));
+            ns.add(engine.extract(bars, symbol, tfFixture, new DonchianIndicatorConfig(DonchianNarrativeParams.ofDefaults())));
             ns.add(engine.extract(bars, symbol, tfFixture, new EmaIndicatorConfig(EmaNarrativeParams.ofDefaults())));
-            // Bollinger NOT in the owner's six-indicator MTF spec — excluded.
+            // Snapshot (3)
+            ns.add(engine.extract(bars, symbol, tfFixture, new AtrIndicatorConfig(AtrNarrativeParams.ofDefaults())));
+            ns.add(engine.extract(bars, symbol, tfFixture, new VwapIndicatorConfig(VwapNarrativeParams.ofDefaults())));
+            ns.add(engine.extract(bars, symbol, tfFixture, new IchimokuIndicatorConfig(IchimokuNarrativeParams.ofDefaults())));
 
             CompactNarrativeRenderer renderer = new CompactNarrativeRenderer();
             String bar0 = ns.get(0).getBar0Date();

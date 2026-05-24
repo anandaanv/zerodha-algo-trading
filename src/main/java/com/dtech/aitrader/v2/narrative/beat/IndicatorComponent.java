@@ -29,7 +29,31 @@ public enum IndicatorComponent {
   BB_LOWER("bb_lower"),
   BB_WIDTH("bb_width"),
   BB_PERCENT("bb_percent"),
-  BOLLINGER("bollinger");
+  BOLLINGER("bollinger"),
+  ROC("roc"),
+  OBV("obv"),
+  AROON_UP("aroon_up"),
+  AROON_DOWN("aroon_down"),
+  AROON_OSC("aroon_osc"),
+  AROON("aroon"),
+  KELTNER_UPPER("keltner_upper"),
+  KELTNER_MIDDLE("keltner_middle"),
+  KELTNER_LOWER("keltner_lower"),
+  KELTNER_WIDTH("keltner_width"),
+  KELTNER("keltner"),
+  DONCHIAN_UPPER("donchian_upper"),
+  DONCHIAN_LOWER("donchian_lower"),
+  DONCHIAN_MIDDLE("donchian_middle"),
+  DONCHIAN_WIDTH("donchian_width"),
+  DONCHIAN("donchian"),
+  ICHIMOKU_TENKAN("ichimoku_tenkan"),
+  ICHIMOKU_KIJUN("ichimoku_kijun"),
+  ICHIMOKU_SENKOU_A("ichimoku_senkou_a"),
+  ICHIMOKU_SENKOU_B("ichimoku_senkou_b"),
+  ICHIMOKU_CHIKOU("ichimoku_chikou"),
+  ICHIMOKU("ichimoku"),
+  VWAP("vwap"),
+  ATR("atr");
 
   private final String jsonValue;
 

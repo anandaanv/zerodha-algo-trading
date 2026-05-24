@@ -84,7 +84,9 @@ public class RoutinePromptSeeder {
                             "resource", RESOURCE_PATH),
                     null,
                     null,
-                    false);
+                    false,
+                    /*indexable*/ null,
+                    /*expiresAt*/ null);
             log.info("[routine-seeder] published routine prompt id={} for userId={}",
                     result.getId(), seedUserId);
         } catch (Exception e) {

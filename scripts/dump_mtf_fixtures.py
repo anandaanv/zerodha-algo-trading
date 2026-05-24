@@ -1,29 +1,38 @@
 #!/usr/bin/env python3
 """
-Dump weekly/daily/hourly OHLC fixtures from local MySQL `candle` table for the 15-stock
-multi-TF narrative run.
+Dump weekly/daily/hourly/15-min OHLC fixtures from local MySQL `candle` table for the 15-stock
+multi-TF narrative run (mtf-runup-v2).
 
 Per owner instruction (2026-05-22): "local mysql. we want stale data." — pulls whatever is
 in the DB right now, no Kite calls. Writes per-stock-per-TF fixture JSONs to
 `src/test/resources/fixtures/mtf/{symbol}_{tf}.json`.
 
-Coverage caps (matches the Kite-limit framing in the owner spec):
-- Week: all available bars (~11yr at ~595 bars for these stocks)
-- Day:  last 2000 bars (~8 years on Day TF)
-- OneHour: last 2000 bars (~16 months on Hour TF)
+v2 changes (2026-05-23 per owner b3ff4ca0):
+- Added FifteenMinute TF (entry-timing TF; intraday history is short — state actual depth).
+- Cutoff alignment (owner: "avoid weekly leaking N days ahead of daily/hourly"):
+  the local DB has daily/hourly/15m max=2026-05-18 but weekly stamped 2026-05-20. We compute
+  the most-recent date present across daily+hourly+15m for the symbol, then drop any weekly
+  bar whose date exceeds it. This guarantees all 4 TFs share a forward-test cutoff.
+
+Coverage caps:
+- Week, Day, OneHour, FifteenMinute: 500 bars each per owner ("500 bars is good enough").
+  Older 15-min data goes back to 2015 for most symbols; newer listings (ADANIENT/LT/BHARTIARTL)
+  have shallower history — state actual depth in the summary.
 
 Schema notes (verified from `DESC candle` / `DESC instrument`):
-- candle.timeframe is an ENUM with values like 'Week','Day','OneHour'
+- candle.timeframe is an ENUM with values like 'Week','Day','OneHour','FifteenMinute'
 - candle is keyed by (id, instrument_instrument_token); join on instrument.instrument_token
-- timestamps are DATETIME in IST-ish naive datetime
+- timestamps are DATETIME stored as IST naive for daily/weekly, UTC naive for intraday
+  (verified: hourly/15m timestamps are 07:45-08:45 = 14:15 IST = end-of-session UTC).
+  We normalize all to IST when writing iso_ist + treat as IST for epoch_seconds.
 
 Output JSON shape (matches the format the existing MultiStockNarrativeTest readers expect):
 {
   "symbol": "RELIANCE",
   "timeframe": "Week",
   "instrument_token": 738561,
-  "bar_count": 595,
-  "date_range": ["2015-01-01", "2026-05-20"],
+  "bar_count": 500,
+  "date_range": ["2016-10-27", "2026-05-18"],
   "bars": [{"epoch_seconds": ..., "iso_ist": "...", "open": ..., "high": ..., "low": ..., "close": ..., "volume": ...}, ...]
 }
 
@@ -59,12 +68,18 @@ SYMBOLS = [
 
 # (timeframe enum value, output suffix, bar cap or None for all)
 # Owner instruction (2026-05-22): "500 bars is good enough for each tf" —
-# uniform cap across weekly/daily/hourly, keep memories light.
+# uniform cap. v2 adds 15-min per owner b3ff4ca0 (2026-05-23): entry-timing TF.
 TIMEFRAMES = [
-    ("Week",     "weekly",  500),
-    ("Day",      "daily",   500),
-    ("OneHour",  "hourly",  500),
+    ("Week",          "weekly",  500),
+    ("Day",           "daily",   500),
+    ("OneHour",       "hourly",  500),
+    ("FifteenMinute", "15min",   500),
 ]
+
+# TFs whose timestamps are forward-trustworthy (no leakage past the day they're stamped on).
+# Used to compute the symbol's effective forward cutoff; weekly bars past this date get
+# dropped to prevent leakage into the validation window (owner b3ff4ca0 cutoff-discipline).
+INTRADAY_TFS = {"Day", "OneHour", "FifteenMinute"}
 
 OUT_DIR = os.path.join(
     os.path.dirname(__file__), "..", "src", "test", "resources", "fixtures", "mtf"
@@ -146,12 +161,42 @@ def main():
         summary = []  # list of (sym, tf, count, first, last)
         for symbol in SYMBOLS:
             token = tokens[symbol]
+            # Pass 1: dump all TFs, collect bars + last-dates.
+            per_tf = {}  # tf_enum -> (tf_label, count, bars, first, last)
             for tf_enum, tf_label, cap in TIMEFRAMES:
                 count, bars, (first, last) = dump_one(conn, symbol, token, tf_enum, tf_label, cap)
+                per_tf[tf_enum] = (tf_label, count, bars, first, last)
+
+            # Compute forward cutoff = max last-date across intraday TFs (these don't leak).
+            intraday_lasts = [per_tf[tf][4] for tf in INTRADAY_TFS if per_tf.get(tf) and per_tf[tf][4]]
+            cutoff_date = max(intraday_lasts) if intraday_lasts else None
+            if cutoff_date:
+                print(f"  [{symbol}] forward cutoff = {cutoff_date} (max intraday last-date)")
+
+            # Pass 2: write per-TF JSONs, dropping weekly bars past the cutoff.
+            for tf_enum, tf_label, _ in TIMEFRAMES:
+                tf_label_x, count, bars, first, last = per_tf[tf_enum]
                 if count == 0:
                     print(f"  [{symbol} {tf_label}] no data — skipping")
                     summary.append((symbol, tf_label, 0, None, None, None))
                     continue
+                # Cutoff alignment: drop bars whose iso_ist date exceeds the forward cutoff.
+                # Applied to ALL non-intraday TFs (only Week here) — defensive in case future
+                # TFs (Month) are added.
+                if cutoff_date and tf_enum not in INTRADAY_TFS:
+                    pre = len(bars)
+                    bars = [b for b in bars if b["iso_ist"][:10] <= cutoff_date]
+                    dropped = pre - len(bars)
+                    if dropped > 0:
+                        print(f"    [{symbol} {tf_label}] dropped {dropped} bar(s) past cutoff "
+                              f"{cutoff_date} (latest was {last})")
+                    count = len(bars)
+                    last = bars[-1]["iso_ist"][:10] if bars else None
+                    first = bars[0]["iso_ist"][:10] if bars else None
+                    if count == 0:
+                        print(f"  [{symbol} {tf_label}] all bars dropped past cutoff — skipping")
+                        summary.append((symbol, tf_label, 0, None, None, None))
+                        continue
                 out_path = os.path.join(OUT_DIR, f"{symbol.lower()}_{tf_label}.json")
                 payload = {
                     "symbol": symbol,
@@ -159,6 +204,7 @@ def main():
                     "instrument_token": token,
                     "bar_count": count,
                     "date_range": [first, last],
+                    "forward_cutoff": cutoff_date,
                     "bars": bars,
                 }
                 with open(out_path, "w") as f:

@@ -6,7 +6,12 @@ import com.dtech.aitrader.data.WatchTrade;
 import com.dtech.aitrader.repository.PlanGroupRepository;
 import com.dtech.aitrader.repository.WatchTradeRepository;
 import com.dtech.aitrader.v2.batch.NightlyBundleDumpService;
+import com.dtech.aitrader.v2.narrative.bundle.NarrativeBundleDumpService;
 import com.dtech.aitrader.v2.orchestrator.OrchestratorV2Service;
+import com.dtech.aitrader.v2.pivots.PivotBundleDumpService;
+import com.dtech.aitrader.v2.regime.eval.GateEvalLoop;
+import com.dtech.aitrader.v2.regime.queue.NightlyQueueSeeder;
+import com.dtech.aitrader.v2.regime.reader.RegimeRecordReader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +34,11 @@ public class AiTraderV2Controller {
 
     private final OrchestratorV2Service orchestrator;
     private final NightlyBundleDumpService nightlyBatch;
+    private final NarrativeBundleDumpService narrativeBatch;
+    private final PivotBundleDumpService pivotBatch;
+    private final NightlyQueueSeeder queueSeeder;
+    private final RegimeRecordReader regimeReader;
+    private final GateEvalLoop gateEval;
     private final PlanGroupRepository planGroupRepository;
     private final WatchTradeRepository watchTradeRepository;
 
@@ -61,6 +71,112 @@ public class AiTraderV2Controller {
             return ResponseEntity.ok(summary);
         } catch (Exception e) {
             log.error("manual v2 batch fire failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Fires the narrative-bundle dump on demand — builds compact multi-indicator narratives for
+     * a list of symbols across multiple timeframes and writes one memsys memory per (symbol, TF)
+     * plus a summary memory. Mirrors {@link #runBatch} but uploads a different bundle type
+     * ({@code mtf-runup-v2} tag, see owner b3ff4ca0).
+     *
+     * <p>Query params (all optional):
+     * <ul>
+     *   <li>{@code symbols} — CSV override; defaults to {@code narrative.batch.symbols} property
+     *       (owner's 15 stocks).</li>
+     *   <li>{@code timeframes} — CSV TF override; defaults to {@code Week,Day,OneHour,FifteenMinute}.</li>
+     *   <li>{@code dateLabel} — ISO date used in the {@code date-} tag; defaults to today (IST).</li>
+     * </ul>
+     */
+    @PostMapping("/narrative-bundle/run")
+    public ResponseEntity<?> runNarrativeBatch(
+            @RequestParam(required = false) String symbols,
+            @RequestParam(required = false) String timeframes,
+            @RequestParam(required = false) String dateLabel,
+            Authentication auth) {
+        try {
+            NarrativeBundleDumpService.Summary summary =
+                    narrativeBatch.runManual(symbols, timeframes, dateLabel);
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            log.error("manual narrative-bundle fire failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Pivot-bundle sweep — for each symbol, runs ZigZagService over all 4 TFs, writes one
+     * {@code pivot-bundle} memsys memory per symbol with JSON body. Pass {@code symbols=__FNO__}
+     * to sweep the full FNO universe. Tag scheme:
+     * {@code [ai-trader-v2, pivot-bundle, symbol-<SYM>, date-<DATE>, asof-<DATE>]}.
+     */
+    @PostMapping("/pivot-bundle/run")
+    public ResponseEntity<?> runPivotBatch(
+            @RequestParam(required = false) String symbols,
+            @RequestParam(required = false) String timeframes,
+            @RequestParam(required = false) String dateLabel,
+            Authentication auth) {
+        try {
+            PivotBundleDumpService.Summary summary =
+                    pivotBatch.runManual(symbols, timeframes, dateLabel);
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            log.error("manual pivot-bundle fire failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Component 1 trigger — seed the F&O scan queue for the given date (defaults to today, IST).
+     * Idempotent: re-runs skip symbols that already have a pending marker.
+     * See {@code docs/regime-records.md} for the tag contract.
+     */
+    @PostMapping("/queue-seeder/run")
+    public ResponseEntity<?> runQueueSeeder(
+            @RequestParam(required = false) String dateLabel,
+            Authentication auth) {
+        try {
+            NightlyQueueSeeder.Summary summary = queueSeeder.runManual(dateLabel);
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            log.error("manual queue-seeder fire failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Component 2 trigger — read and validate today's regime records. Returns the validated
+     * watchlist + rejected-record details for audit. ADVISORY ONLY — strategy layer applies its
+     * own entry rule, sizing, and risk caps.
+     */
+    @GetMapping("/regime-reader/read")
+    public ResponseEntity<?> readRegime(
+            @RequestParam(required = false) String dateLabel,
+            @RequestParam(required = false) String sourceRun,
+            Authentication auth) {
+        try {
+            RegimeRecordReader.Result result = regimeReader.read(dateLabel, sourceRun);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("regime-reader read failed: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Component 3 trigger — score regime records from N days ago against subsequent price action,
+     * aggregate by (regime × conviction), write the aggregate as a memsys {@code gate-eval} memory.
+     */
+    @PostMapping("/gate-eval/run")
+    public ResponseEntity<?> runGateEval(
+            @RequestParam(required = false) String dateLabel,
+            Authentication auth) {
+        try {
+            GateEvalLoop.Summary summary = gateEval.runManual(dateLabel);
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            log.error("gate-eval run failed: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }

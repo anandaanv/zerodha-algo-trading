@@ -59,7 +59,9 @@ public class MemsysHttpClient implements MemsysClient {
     public MemsysWriteResult writeMemory(Long userId, String content, String type, List<String> tags,
                                           Map<String, Object> metadata,
                                           String parentId, String supersedes,
-                                          boolean forceNew) {
+                                          boolean forceNew,
+                                          Boolean indexable,
+                                          Instant expiresAt) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("content", content);
         if (type != null) args.put("type", type);
@@ -68,6 +70,8 @@ public class MemsysHttpClient implements MemsysClient {
         if (parentId != null && !parentId.isBlank()) args.put("parent_id", parentId);
         if (supersedes != null && !supersedes.isBlank()) args.put("supersedes", supersedes);
         if (forceNew) args.put("force_new", true);
+        if (indexable != null) args.put("indexable", indexable);
+        if (expiresAt != null) args.put("expires_at", expiresAt.toString());
         return mapper.convertValue(call(userId, "memory_write", args), MemsysWriteResult.class);
     }
 

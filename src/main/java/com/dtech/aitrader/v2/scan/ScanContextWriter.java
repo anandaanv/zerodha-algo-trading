@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -80,7 +82,11 @@ public class ScanContextWriter {
 
         try {
             MemsysWriteResult result = memsys.writeMemory(
-                    ctx.getUserId(), body, "fact", tags, metadata, /*parentId*/ null, /*supersedes*/ null, true);
+                    ctx.getUserId(), body, "fact", tags, metadata,
+                    /*parentId*/ null, /*supersedes*/ null,
+                    /*forceNew*/ true,
+                    /*indexable*/ false,
+                    /*expiresAt*/ Instant.now().plus(36, ChronoUnit.HOURS));
             log.info("[scan-context] wrote memsys memory id={} for scan_id={} symbol={} body_chars={}",
                     result.getId(), ctx.getScanId(), ctx.getSymbol(), body.length());
             return result.getId();
