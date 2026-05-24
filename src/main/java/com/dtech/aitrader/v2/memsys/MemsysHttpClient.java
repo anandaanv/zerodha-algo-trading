@@ -58,7 +58,10 @@ public class MemsysHttpClient implements MemsysClient {
     @Override
     public MemsysWriteResult writeMemory(Long userId, String content, String type, List<String> tags,
                                           Map<String, Object> metadata,
-                                          String parentId, String supersedes) {
+                                          String parentId, String supersedes,
+                                          boolean forceNew,
+                                          Boolean indexable,
+                                          Instant expiresAt) {
         Map<String, Object> args = new LinkedHashMap<>();
         args.put("content", content);
         if (type != null) args.put("type", type);
@@ -66,6 +69,9 @@ public class MemsysHttpClient implements MemsysClient {
         if (metadata != null && !metadata.isEmpty()) args.put("metadata", metadata);
         if (parentId != null && !parentId.isBlank()) args.put("parent_id", parentId);
         if (supersedes != null && !supersedes.isBlank()) args.put("supersedes", supersedes);
+        if (forceNew) args.put("force_new", true);
+        if (indexable != null) args.put("indexable", indexable);
+        if (expiresAt != null) args.put("expires_at", expiresAt.toString());
         return mapper.convertValue(call(userId, "memory_write", args), MemsysWriteResult.class);
     }
 
@@ -190,7 +196,7 @@ public class MemsysHttpClient implements MemsysClient {
         HttpRequest.Builder req = HttpRequest.newBuilder(URI.create(endpoint))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
-                .timeout(Duration.ofSeconds(30))
+                .timeout(Duration.ofSeconds(120))
                 .POST(HttpRequest.BodyPublishers.ofString(body));
         if (bearer != null && !bearer.isBlank()) {
             req.header("Authorization", "Bearer " + bearer);

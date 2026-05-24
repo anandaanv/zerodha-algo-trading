@@ -83,7 +83,10 @@ public class RoutinePromptSeeder {
                             "source", "algotrade-startup",
                             "resource", RESOURCE_PATH),
                     null,
-                    null);
+                    null,
+                    false,
+                    /*indexable*/ null,
+                    /*expiresAt*/ null);
             log.info("[routine-seeder] published routine prompt id={} for userId={}",
                     result.getId(), seedUserId);
         } catch (Exception e) {

@@ -28,7 +28,10 @@ public interface MemsysClient {
             List<String> tags,
             Map<String, Object> metadata,
             /* nullable */ String parentId,
-            /* nullable */ String supersedes);
+            /* nullable */ String supersedes,
+            boolean forceNew,
+            /* nullable */ Boolean indexable,
+            /* nullable */ Instant expiresAt);
 
     MemsysWriteResult updateMemory(
             Long userId,

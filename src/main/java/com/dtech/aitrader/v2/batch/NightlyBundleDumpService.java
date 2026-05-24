@@ -80,32 +80,45 @@ public class NightlyBundleDumpService {
             log.debug("[v2-batch] skipped: agent1.batch.enabled=false");
             return;
         }
-        run("scheduled");
+        run("scheduled", null);
     }
 
     /** Manual fire entrypoint — invoked by the controller's POST /batch/run endpoint. */
-    public Summary runManual() {
-        return run("manual");
+    public Summary runManual(String symbols) {
+        return run("manual", symbols);
     }
 
-    private Summary run(String trigger) {
+    private Summary run(String trigger, String requestedSymbols) {
         Instant start = Instant.now();
         log.info("[v2-batch] start trigger={} userId={} index={} timeframe={} skipEmpty={}",
                 trigger, batchUserId, batchIndex, batchTimeframe, skipEmptyContext);
 
-        List<String> symbols;
+        List<String> allSymbols;
         try {
-            symbols = indexSymbolRepository.findAllSymbolsByIndexName(batchIndex);
+            allSymbols = indexSymbolRepository.findAllSymbolsByIndexName(batchIndex);
         } catch (Exception e) {
             log.error("[v2-batch] failed to fetch symbol list for index '{}': {}", batchIndex, e.getMessage(), e);
             return new Summary(trigger, 0, 0, 0, 0, Duration.between(start, Instant.now()).toMillis(),
                     "symbol-list-fetch-failed: " + e.getMessage());
         }
 
-        if (symbols == null || symbols.isEmpty()) {
+        if (allSymbols == null || allSymbols.isEmpty()) {
             log.warn("[v2-batch] symbol list for index '{}' is empty — nothing to do", batchIndex);
             return new Summary(trigger, 0, 0, 0, 0, Duration.between(start, Instant.now()).toMillis(),
                     "empty-symbol-list");
+        }
+
+        // Filter to requested symbols if provided
+        List<String> symbols = allSymbols;
+        if (requestedSymbols != null && !requestedSymbols.isBlank()) {
+            java.util.Set<String> requested = java.util.Arrays.stream(requestedSymbols.split(","))
+                    .map(String::trim)
+                    .map(String::toUpperCase)
+                    .collect(java.util.stream.Collectors.toSet());
+            symbols = allSymbols.stream()
+                    .filter(s -> requested.contains(s.toUpperCase()))
+                    .toList();
+            log.info("[v2-batch] filtered {} → {} symbols based on request", allSymbols.size(), symbols.size());
         }
 
         int cap = Math.min(symbols.size(), maxSymbols);
