@@ -40,6 +40,7 @@ public class MarketStructurePoint {
     private double atrAtPivot;
     private Double retracementPct;
     private Double extensionPct;
+    private Double rsiAtPivot;
 
     /** Whether this pivot represents a confirmed structure break */
     private boolean isStructureBreak;
