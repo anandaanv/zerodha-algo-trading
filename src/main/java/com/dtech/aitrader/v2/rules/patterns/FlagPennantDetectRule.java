@@ -116,6 +116,11 @@ public class FlagPennantDetectRule implements Rule {
                 List<PivotRef> windowHighs = consHighsAll.subList(rHi - kHighs + 1, rHi + 1);
                 List<PivotRef> windowLows = consLowsAll.subList(rLi - kLows + 1, rLi + 1);
 
+                // Minimum-structure floor per owner fbab9223 + 07c6fbf8: consolidation pivots
+                // must alternate H-L-H-L-... A cluster + excursion masquerading as flag/pennant
+                // is rejected here.
+                if (!alternates(windowHighs, windowLows)) continue;
+
                 int consStart = pole.endIdx;
                 int consEnd = Math.max(lastIdx(windowHighs), lastIdx(windowLows));
                 int consBars = consEnd - consStart;
@@ -341,6 +346,21 @@ public class FlagPennantDetectRule implements Rule {
     }
 
     private static int lastIdx(List<PivotRef> sorted) { return sorted.get(sorted.size() - 1).idx; }
+
+    /** Owner minimum-structure floor (fbab9223 + 07c6fbf8): pivot sequence must alternate types. */
+    private static boolean alternates(List<PivotRef> windowHighs, List<PivotRef> windowLows) {
+        int hI = 0, lI = 0;
+        Boolean prevWasHigh = null;
+        while (hI < windowHighs.size() || lI < windowLows.size()) {
+            int hIdx = hI < windowHighs.size() ? windowHighs.get(hI).idx : Integer.MAX_VALUE;
+            int lIdx = lI < windowLows.size() ? windowLows.get(lI).idx : Integer.MAX_VALUE;
+            boolean takeHigh = hIdx < lIdx;
+            if (prevWasHigh != null && prevWasHigh.booleanValue() == takeHigh) return false;
+            prevWasHigh = takeHigh;
+            if (takeHigh) hI++; else lI++;
+        }
+        return true;
+    }
 
     private static Map<Instant, Integer> indexer(BarSeries series) {
         Map<Instant, Integer> m = new HashMap<>(series.getBarCount() * 2);

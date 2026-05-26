@@ -81,6 +81,9 @@ public class ChannelDetectRule implements Rule {
                 List<PivotRef> windowHighs = highs.subList(rHi - kHighs + 1, rHi + 1);
                 List<PivotRef> windowLows = lows.subList(rLi - kLows + 1, rLi + 1);
 
+                // Minimum-structure floor per owner fbab9223 + 07c6fbf8 — pivots must alternate.
+                if (!alternates(windowHighs, windowLows)) continue;
+
                 int spanStart = Math.min(firstIdx(windowHighs), firstIdx(windowLows));
                 int spanEnd = Math.max(lastIdx(windowHighs), lastIdx(windowLows));
                 int spanBars = spanEnd - spanStart;
@@ -278,6 +281,21 @@ public class ChannelDetectRule implements Rule {
 
     private static int firstIdx(List<PivotRef> sorted) { return sorted.get(0).idx; }
     private static int lastIdx(List<PivotRef> sorted) { return sorted.get(sorted.size() - 1).idx; }
+
+    /** Owner minimum-structure floor (fbab9223 + 07c6fbf8): pivot sequence must alternate types. */
+    private static boolean alternates(List<PivotRef> windowHighs, List<PivotRef> windowLows) {
+        int hI = 0, lI = 0;
+        Boolean prevWasHigh = null;
+        while (hI < windowHighs.size() || lI < windowLows.size()) {
+            int hIdx = hI < windowHighs.size() ? windowHighs.get(hI).idx : Integer.MAX_VALUE;
+            int lIdx = lI < windowLows.size() ? windowLows.get(lI).idx : Integer.MAX_VALUE;
+            boolean takeHigh = hIdx < lIdx;
+            if (prevWasHigh != null && prevWasHigh.booleanValue() == takeHigh) return false;
+            prevWasHigh = takeHigh;
+            if (takeHigh) hI++; else lI++;
+        }
+        return true;
+    }
 
     private static List<PivotRef> sortedPivotsOfType(List<MarketStructurePoint> pivots,
                                                        Map<Instant, Integer> indexer,

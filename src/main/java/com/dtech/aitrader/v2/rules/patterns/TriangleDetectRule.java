@@ -93,6 +93,12 @@ public class TriangleDetectRule implements Rule {
                 List<PivotRef> windowHighs = highs.subList(rHi - kHighs + 1, rHi + 1);
                 List<PivotRef> windowLows = lows.subList(rLi - kLows + 1, rLi + 1);
 
+                // Minimum-structure floor per owner fbab9223 + 07c6fbf8: pivots in the window
+                // must INTERLEAVE in time as H-L-H-L-... A 4-pivot window with two consecutive
+                // same-type pivots is cluster+excursion (cluster retest), NOT a triangle.
+                // Runs BEFORE geometry fit, completion, and discrimination.
+                if (!alternates(windowHighs, windowLows)) continue;
+
                 int spanStart = Math.min(firstIdx(windowHighs), firstIdx(windowLows));
                 int spanEnd = Math.max(lastIdx(windowHighs), lastIdx(windowLows));
                 int spanBars = spanEnd - spanStart;
@@ -329,6 +335,26 @@ public class TriangleDetectRule implements Rule {
 
     private static int firstIdx(List<PivotRef> sorted) { return sorted.get(0).idx; }
     private static int lastIdx(List<PivotRef> sorted) { return sorted.get(sorted.size() - 1).idx; }
+
+    /**
+     * Owner minimum-structure floor (fbab9223 + 07c6fbf8): the union of windowHighs +
+     * windowLows sorted by bar idx must alternate types (H-L-H-L-... or L-H-L-H-...).
+     * Two consecutive same-type pivots indicate a cluster (multiple touches of one level),
+     * not distinct swings — sub-minimum structure for triangle.
+     */
+    private static boolean alternates(List<PivotRef> windowHighs, List<PivotRef> windowLows) {
+        int hI = 0, lI = 0;
+        Boolean prevWasHigh = null;
+        while (hI < windowHighs.size() || lI < windowLows.size()) {
+            int hIdx = hI < windowHighs.size() ? windowHighs.get(hI).idx : Integer.MAX_VALUE;
+            int lIdx = lI < windowLows.size() ? windowLows.get(lI).idx : Integer.MAX_VALUE;
+            boolean takeHigh = hIdx < lIdx;
+            if (prevWasHigh != null && prevWasHigh.booleanValue() == takeHigh) return false;
+            prevWasHigh = takeHigh;
+            if (takeHigh) hI++; else lI++;
+        }
+        return true;
+    }
 
     private static List<PivotRef> sortedPivotsOfType(List<MarketStructurePoint> pivots,
                                                        Map<Instant, Integer> indexer,
