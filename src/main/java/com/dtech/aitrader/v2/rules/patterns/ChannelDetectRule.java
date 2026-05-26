@@ -41,7 +41,13 @@ public class ChannelDetectRule implements Rule {
     private static final int MAX_TOUCHES_PER_LINE = 4;
     private static final int MAX_CHANNEL_SPAN_BARS = 250;
     private static final int MIN_CHANNEL_SPAN_BARS = 6;
-    private static final double MIN_CHANNEL_SLOPE_PCT_PER_BAR = 0.0005;
+    /**
+     * Owner slope-hysteresis fix per `aee70944`: channel's minimum sloped gate is raised so a
+     * barely-sloped line no longer qualifies as BOTH rectangle (flat) AND channel (sloped).
+     * Was 0.0005. Combined with Rectangle's FLAT_SLOPE_PCT_PER_BAR=0.0004 this leaves a
+     * dead-band [0.0004, 0.0008] where neither rule fires — gate-boundary artifact eliminated.
+     */
+    private static final double MIN_CHANNEL_SLOPE_PCT_PER_BAR = 0.0008;
     private static final double MAX_SLOPE_DIFF_PCT_PER_BAR = 0.0005;
     private static final double MAX_CONVERGENCE_PCT = 0.20;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;

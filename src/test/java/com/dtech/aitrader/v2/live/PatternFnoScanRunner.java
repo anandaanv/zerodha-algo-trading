@@ -136,6 +136,7 @@ class PatternFnoScanRunner {
                         "pole_height", "pole_pct_move",
                         "upper_line_at_now", "lower_line_at_now",
                         "upper_touches", "lower_touches",
+                        "span_start_idx", "span_end_idx",
                         "span_bars", "consolidation_bars");
                 byRule.computeIfAbsent(pf.getRuleId(), k -> new ArrayList<>()).add(row);
             }
