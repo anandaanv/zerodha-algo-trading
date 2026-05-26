@@ -27,6 +27,17 @@ class WedgeDetectRuleTest {
 
     private final WedgeDetectRule rule = new WedgeDetectRule();
 
+    private static Firing latest(List<Firing> out) {
+        assertFalse(out.isEmpty(), "expected at least one firing");
+        Firing best = out.get(0);
+        int bestSpanEnd = ((Number) best.getPayload().get("span_end_idx")).intValue();
+        for (Firing f : out) {
+            int spanEnd = ((Number) f.getPayload().get("span_end_idx")).intValue();
+            if (spanEnd > bestSpanEnd) { best = f; bestSpanEnd = spanEnd; }
+        }
+        return best;
+    }
+
     @Test
     void rising_wedge_detected_when_both_rising_lower_faster_converging() {
         // Highs rising slowly: 1400→1408→1416→1424 (slope +0.8/bar)
@@ -44,8 +55,7 @@ class WedgeDetectRuleTest {
                 /*closePrev=*/ 1415.0);
 
         List<Firing> out = rule.evaluate(ctx, List.of());
-        assertEquals(1, out.size());
-        Map<String, Object> p = out.get(0).getPayload();
+        Map<String, Object> p = latest(out).getPayload();
         assertEquals("rising", p.get("wedge_type"));
         assertEquals("SHORT", p.get("bias"));
     }
@@ -66,7 +76,7 @@ class WedgeDetectRuleTest {
                 /*closeAtEnd=*/ 1400.0,
                 /*closePrev=*/ 1395.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("falling", p.get("wedge_type"));
         assertEquals("LONG", p.get("bias"));
@@ -87,7 +97,7 @@ class WedgeDetectRuleTest {
                 /*closeAtEnd=*/ 1370.0,    // breaks below extrapolated lower line ≈ 1410
                 /*closePrev=*/ 1418.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("confirmed", p.get("status"));
         assertEquals("below_lower", p.get("confirmed_direction"));

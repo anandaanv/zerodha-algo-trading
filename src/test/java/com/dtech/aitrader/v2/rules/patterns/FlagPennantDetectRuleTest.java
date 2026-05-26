@@ -28,6 +28,17 @@ class FlagPennantDetectRuleTest {
 
     private final FlagPennantDetectRule rule = new FlagPennantDetectRule();
 
+    private static Firing latest(List<Firing> out) {
+        assertFalse(out.isEmpty(), "expected at least one firing");
+        Firing best = out.get(0);
+        int bestSpanEnd = ((Number) best.getPayload().get("span_end_idx")).intValue();
+        for (Firing f : out) {
+            int spanEnd = ((Number) f.getPayload().get("span_end_idx")).intValue();
+            if (spanEnd > bestSpanEnd) { best = f; bestSpanEnd = spanEnd; }
+        }
+        return best;
+    }
+
     @Test
     void bull_flag_detected_with_up_pole_and_down_sloped_parallel_consolidation() {
         // Pole: 1200 → 1450 over 8 bars (+20.8%).
@@ -46,8 +57,7 @@ class FlagPennantDetectRuleTest {
                 /*closePrev=*/ 1385.0);
 
         List<Firing> out = rule.evaluate(ctx, List.of());
-        assertEquals(1, out.size());
-        Map<String, Object> p = out.get(0).getPayload();
+        Map<String, Object> p = latest(out).getPayload();
         assertEquals("up", p.get("pole_direction"));
         assertEquals("LONG", p.get("bias"));
         assertEquals("flag", p.get("pattern_type"));
@@ -69,7 +79,7 @@ class FlagPennantDetectRuleTest {
                 /*closeAtEnd=*/ 1260.0,
                 /*closePrev=*/ 1262.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("down", p.get("pole_direction"));
         assertEquals("SHORT", p.get("bias"));
@@ -91,7 +101,7 @@ class FlagPennantDetectRuleTest {
                         new Pivot(45, 1449.0, PivotType.HIGH)),
                 1420.0, 1418.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("up", p.get("pole_direction"));
         assertEquals("pennant", p.get("pattern_type"));
@@ -111,7 +121,7 @@ class FlagPennantDetectRuleTest {
                 /*closeAtEnd=*/ 1450.0,    // breaks above extrapolated upper line
                 /*closePrev=*/ 1410.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("confirmed", p.get("status"));
         assertEquals("broken_up", p.get("consolidation_state"));
@@ -164,7 +174,7 @@ class FlagPennantDetectRuleTest {
                         new Pivot(40, 1390.0, PivotType.LOW),
                         new Pivot(45, 1420.0, PivotType.HIGH)),
                 1450.0, 1410.0);
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         double upper = ((Number) p.get("upper_line_at_now")).doubleValue();
         double target = ((Number) p.get("target_price")).doubleValue();

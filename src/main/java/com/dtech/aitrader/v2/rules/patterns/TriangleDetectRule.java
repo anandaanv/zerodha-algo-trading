@@ -16,39 +16,28 @@ import org.ta4j.core.indicators.ATRIndicator;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Pass-2 candidate emitter for the TRIANGLE family (ascending / descending / symmetrical) per
- * SPEC-008 ({@code e332be7f}). Detects three sub-types via the slopes of trendlines fit through
- * the recent HIGH + LOW pivots:
+ * SPEC-008 ({@code e332be7f}).
  *
- * <ul>
- *   <li><b>Ascending</b>: flat upper line (highs roughly equal) + rising lower line.
- *       Bias = LONG on upper-line break. Bullish continuation when in an uptrend.</li>
- *   <li><b>Descending</b>: falling upper line + flat lower line (lows roughly equal).
- *       Bias = SHORT on lower-line break.</li>
- *   <li><b>Symmetrical</b>: falling upper line + rising lower line (converging).
- *       Direction NOT assumed; breakout direction determines bias. Forming firings carry
- *       bias=NEUTRAL until the break.</li>
- * </ul>
+ * <p>Per owner direction {@code 474986f0} FIX A (applied to H&amp;S; replicated here by
+ * {@code a6f15887}): scans ALL valid right-edge anchor positions across the pivot history, not
+ * just the latest-4. Emits EVERY valid triangle. Co-live with rectangle on parallel-flat-ish
+ * boundaries per {@code a6f15887} (rectangle/triangle are a co-live pair discriminated forward).
  *
- * <p>Completion formula (continuous [0, 100]) — same shape as the H&amp;S detector:
- * <pre>
- *   ≥2 highs + ≥2 lows + valid sub-type classification    : +25
- *   touch count above baseline (each extra touch +5)      : +[0, 15]
- *   line fit quality (per-line residual within ATR band)  : +[0, 10]
- *   convergence tightness (symmetrical only; ratio)       : +[0, 10]
- *   approach to nearer line                               : +[0, 15]
- *   confirmed line break                                  : clamps to ≥85, +15 → 100
- * </pre>
+ * <p>Per owner direction {@code a6f15887}: discrimination by CONSTRUCTION (slope test + convergence
+ * test), NOT pairwise exclusion. Triangle requires CONVERGING boundaries; rectangle requires
+ * FLAT parallel. The slope/convergence gates are the only exclusion mechanism.
  *
- * <p>Per owner direction {@code 4a322dbe}: built on the current zigzag-pivot substrate; the
- * candle-based re-platforming comes AFTER more patterns ship + working test-cases get captured.
- * Owner principle (general): textbook thresholds DOWN-WEIGHT, never EXCLUDE — soft slopes still
- * detect, scored lower.
+ * <p>Per owner direction {@code a6f15887}: lines-crossed-in-span guard — a wedge/triangle fit
+ * whose upper line and lower line cross ANYWHERE within the pivot span is rejected (the INFY Hour
+ * edge case from {@code 3e430f8e}).
  */
 @Component
 @Slf4j
@@ -57,28 +46,18 @@ public class TriangleDetectRule implements Rule {
     public static final String RULE_ID = "TRIANGLE_DETECT";
 
     private static final int ATR_PERIOD = 14;
-    /** Minimum pivots per line to call it a triangle (per spec: 2 equal highs + 1-2 rising lows). */
     private static final int MIN_TOUCHES_PER_LINE = 2;
-    /** Max scan window for triangle pivots (in bars). */
+    private static final int MAX_TOUCHES_PER_LINE = 4;
     private static final int MAX_TRIANGLE_SPAN_BARS = 200;
     private static final int MIN_TRIANGLE_SPAN_BARS = 6;
-    /**
-     * Slope classification thresholds in PERCENT-of-mean-price per bar (independent of ATR).
-     * ATR-based slope was too sensitive to pivot-bar volatility — when pivot bars themselves
-     * inject huge swings (as in a multi-month triangle), ATR balloons and "rising" slopes get
-     * mis-classified as "flat". Percent-of-price is a stable reference.
-     *
-     * <p>"Flat" line: |slope/mean_price| ≤ 0.08% per bar. "Trending" line: ≥ 0.10% per bar.
-     * The small gap between FLAT and TRENDING leaves a small "ambiguous" band that classifies
-     * as neither — those patterns are rejected as not-classifiable.
-     */
     private static final double FLAT_SLOPE_PCT_PER_BAR = 0.0008;
     private static final double TREND_SLOPE_PCT_PER_BAR = 0.0010;
-    /** Line fit tolerance: residual / ATR must be ≤ this for "good fit". */
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
     private static final double EMISSION_THRESHOLD = 25.0;
     private static final double CONFIRMED_THRESHOLD = 95.0;
+    /** Bars to look past spanEnd for a confirming break-close — clamped to endIdx. */
+    private static final int BREAK_LOOKFORWARD_BARS = 30;
 
     @Override public String ruleId() { return RULE_ID; }
     @Override public Pass pass() { return Pass.P2_ENUMERATION; }
@@ -101,26 +80,46 @@ public class TriangleDetectRule implements Rule {
         List<PivotRef> lows = sortedPivotsOfType(pivots, indexer, PivotType.LOW);
         if (highs.size() < MIN_TOUCHES_PER_LINE || lows.size() < MIN_TOUCHES_PER_LINE) return List.of();
 
-        double closeNow = series.getBar(endIdx).getClosePrice().doubleValue();
-        double closePrev = series.getBar(endIdx - 1).getClosePrice().doubleValue();
+        // Owner 474986f0 FIX A: sweep all (rightHighIdx, rightLowIdx) right-edge pairs.
+        // Dedup by spanEnd bar index — multiple K combinations on the same span_end map to
+        // the "same" pattern; pick the first encountered (which uses K_MAX touches).
+        List<Firing> out = new ArrayList<>();
+        Set<Integer> emittedSpanEnds = new HashSet<>();
 
-        // Strategy: take the LATEST N highs + N lows (most-recent active triangle), fit lines,
-        // classify. We don't scan every pair of windows back through time the way H&S does —
-        // triangle is by nature a SINGLE active structure at the recent edge.
-        List<PivotRef> recentHighs = lastN(highs, 4);
-        List<PivotRef> recentLows = lastN(lows, 4);
-        int spanStart = Math.min(firstIdx(recentHighs), firstIdx(recentLows));
-        int spanEnd = Math.max(lastIdx(recentHighs), lastIdx(recentLows));
-        int spanBars = spanEnd - spanStart;
-        if (spanBars < MIN_TRIANGLE_SPAN_BARS || spanBars > MAX_TRIANGLE_SPAN_BARS) return List.of();
+        for (int rHi = MIN_TOUCHES_PER_LINE - 1; rHi < highs.size(); rHi++) {
+            for (int rLi = MIN_TOUCHES_PER_LINE - 1; rLi < lows.size(); rLi++) {
+                int kHighs = Math.min(MAX_TOUCHES_PER_LINE, rHi + 1);
+                int kLows = Math.min(MAX_TOUCHES_PER_LINE, rLi + 1);
+                List<PivotRef> windowHighs = highs.subList(rHi - kHighs + 1, rHi + 1);
+                List<PivotRef> windowLows = lows.subList(rLi - kLows + 1, rLi + 1);
 
-        LineFit upperLine = fitLine(recentHighs);
-        LineFit lowerLine = fitLine(recentLows);
-        if (upperLine == null || lowerLine == null) return List.of();
+                int spanStart = Math.min(firstIdx(windowHighs), firstIdx(windowLows));
+                int spanEnd = Math.max(lastIdx(windowHighs), lastIdx(windowLows));
+                int spanBars = spanEnd - spanStart;
+                if (spanBars < MIN_TRIANGLE_SPAN_BARS || spanBars > MAX_TRIANGLE_SPAN_BARS) continue;
 
-        // Classify sub-type by slope expressed as percent-of-mean-price per bar.
-        double upperMean = lineMeanPrice(recentHighs);
-        double lowerMean = lineMeanPrice(recentLows);
+                Firing f = tryEmitTriangleAt(ctx, series, atr, endIdx,
+                        windowHighs, windowLows, spanStart, spanEnd, emittedSpanEnds);
+                if (f != null) out.add(f);
+            }
+        }
+        return out;
+    }
+
+    private Firing tryEmitTriangleAt(SymbolContext ctx, BarSeries series, double atr, int endIdx,
+                                      List<PivotRef> windowHighs, List<PivotRef> windowLows,
+                                      int spanStart, int spanEnd, Set<Integer> emittedSpanEnds) {
+        LineFit upperLine = fitLine(windowHighs);
+        LineFit lowerLine = fitLine(windowLows);
+        if (upperLine == null || lowerLine == null) return null;
+
+        // Owner a6f15887 lines-crossed-in-span guard: reject fits where upper/lower lines cross
+        // anywhere within [spanStart, spanEnd]. Lines crossing means the geometry isn't a valid
+        // triangle/channel/wedge — the prior endIdx-only check fired on already-crossed lines.
+        if (linesCrossWithinSpan(upperLine, lowerLine, spanStart, spanEnd)) return null;
+
+        double upperMean = lineMeanPrice(windowHighs);
+        double lowerMean = lineMeanPrice(windowLows);
         double upperSlopePct = upperMean > 0 ? upperLine.slope / upperMean : 0.0;
         double lowerSlopePct = lowerMean > 0 ? lowerLine.slope / lowerMean : 0.0;
         boolean upperFlat = Math.abs(upperSlopePct) <= FLAT_SLOPE_PCT_PER_BAR;
@@ -132,66 +131,75 @@ public class TriangleDetectRule implements Rule {
 
         String triangleType;
         String bias;
-        double biasLineY;
         boolean breakIsUp;
         if (upperFlat && lowerRising) {
             triangleType = "ascending";
             bias = "LONG";
-            biasLineY = upperLine.yAt(endIdx);
             breakIsUp = true;
         } else if (upperFalling && lowerFlat) {
             triangleType = "descending";
             bias = "SHORT";
-            biasLineY = lowerLine.yAt(endIdx);
             breakIsUp = false;
         } else if (upperFalling && lowerRising) {
             triangleType = "symmetrical";
             bias = "NEUTRAL";
-            biasLineY = closeNow > 0.5 * (upperLine.yAt(endIdx) + lowerLine.yAt(endIdx))
-                    ? upperLine.yAt(endIdx)
-                    : lowerLine.yAt(endIdx);
-            breakIsUp = closeNow > 0.5 * (upperLine.yAt(endIdx) + lowerLine.yAt(endIdx));
+            breakIsUp = true;  // placeholder; reset below if symmetrical breaks down
         } else if (upperRising && lowerFalling) {
-            // Diverging — broadening / megaphone, not a classical triangle. Reject here.
-            return List.of();
+            return null;        // diverging / megaphone — out of scope for triangle
         } else {
-            // Parallel-ish (channel) — out of scope; rejected.
-            return List.of();
+            return null;        // parallel-ish (channel) or unclassifiable
         }
 
-        // Confirmation: prior close on the inside; current close on the outside of the bias line.
-        // Also counts "already outside" — close has been past the line for >1 bar, common when the
-        // engine evaluates a few bars after the actual break.
-        double upperAtEnd = upperLine.yAt(endIdx);
-        double lowerAtEnd = lowerLine.yAt(endIdx);
+        // Evaluate at the pattern's natural completion time: spanEnd + lookforward, clamped to
+        // endIdx. For current patterns this collapses to endIdx (no change in behaviour).
+        int evalIdx = Math.min(endIdx, spanEnd + BREAK_LOOKFORWARD_BARS);
+        if (evalIdx < 1) return null;
+        double closeAt = series.getBar(evalIdx).getClosePrice().doubleValue();
+        double closePrevAt = series.getBar(evalIdx - 1).getClosePrice().doubleValue();
+        double upperAtEval = upperLine.yAt(evalIdx);
+        double lowerAtEval = lowerLine.yAt(evalIdx);
+
         boolean confirmedBreak;
         String confirmedDirection = null;
         if ("ascending".equals(triangleType)) {
-            boolean broke = closePrev <= upperAtEnd && closeNow > upperAtEnd;
-            boolean alreadyAbove = closeNow > upperAtEnd;
+            boolean broke = closePrevAt <= upperAtEval && closeAt > upperAtEval;
+            boolean alreadyAbove = closeAt > upperAtEval;
             confirmedBreak = broke || alreadyAbove;
             if (confirmedBreak) confirmedDirection = "above_upper";
         } else if ("descending".equals(triangleType)) {
-            boolean broke = closePrev >= lowerAtEnd && closeNow < lowerAtEnd;
-            boolean alreadyBelow = closeNow < lowerAtEnd;
+            boolean broke = closePrevAt >= lowerAtEval && closeAt < lowerAtEval;
+            boolean alreadyBelow = closeAt < lowerAtEval;
             confirmedBreak = broke || alreadyBelow;
             if (confirmedBreak) confirmedDirection = "below_lower";
         } else {
-            // Symmetrical — break either way confirms; bias becomes break direction.
-            boolean brokeUp = closePrev <= upperAtEnd && closeNow > upperAtEnd;
-            boolean brokeDown = closePrev >= lowerAtEnd && closeNow < lowerAtEnd;
-            boolean alreadyAbove = closeNow > upperAtEnd;
-            boolean alreadyBelow = closeNow < lowerAtEnd;
+            boolean brokeUp = closePrevAt <= upperAtEval && closeAt > upperAtEval;
+            boolean brokeDown = closePrevAt >= lowerAtEval && closeAt < lowerAtEval;
+            boolean alreadyAbove = closeAt > upperAtEval;
+            boolean alreadyBelow = closeAt < lowerAtEval;
             confirmedBreak = brokeUp || brokeDown || alreadyAbove || alreadyBelow;
-            if (brokeUp || alreadyAbove) { confirmedDirection = "above_upper"; bias = "LONG"; }
-            else if (brokeDown || alreadyBelow) { confirmedDirection = "below_lower"; bias = "SHORT"; }
+            if (brokeUp || alreadyAbove) { confirmedDirection = "above_upper"; bias = "LONG"; breakIsUp = true; }
+            else if (brokeDown || alreadyBelow) { confirmedDirection = "below_lower"; bias = "SHORT"; breakIsUp = false; }
         }
 
-        double completion = computeCompletion(recentHighs, recentLows, upperLine, lowerLine,
-                triangleType, atr, closeNow, upperAtEnd, lowerAtEnd, confirmedBreak);
-        if (completion < EMISSION_THRESHOLD) return List.of();
+        double completion = computeCompletion(windowHighs, windowLows, upperLine, lowerLine,
+                triangleType, atr, closeAt, upperAtEval, lowerAtEval, spanStart, confirmedBreak);
+        if (completion < EMISSION_THRESHOLD) return null;
+
+        // Dedup: one firing per spanEnd.
+        if (!emittedSpanEnds.add(spanEnd)) return null;
 
         String status = completion >= CONFIRMED_THRESHOLD ? "confirmed" : "forming";
+        double heightAtStart = upperLine.yAt(spanStart) - lowerLine.yAt(spanStart);
+        double trigger = "ascending".equals(triangleType) ? upperAtEval
+                : "descending".equals(triangleType) ? lowerAtEval
+                : (breakIsUp ? upperAtEval : lowerAtEval);
+        double target = ("descending".equals(triangleType)
+                || (confirmedBreak && "below_lower".equals(confirmedDirection)))
+                ? trigger - heightAtStart
+                : trigger + heightAtStart;
+        double invalidation = "ascending".equals(triangleType) ? lowerAtEval
+                : "descending".equals(triangleType) ? upperAtEval
+                : (breakIsUp ? lowerAtEval : upperAtEval);
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", status);
@@ -200,34 +208,26 @@ public class TriangleDetectRule implements Rule {
         payload.put("bias", bias);
         payload.put("upper_slope_pct_per_bar", upperSlopePct);
         payload.put("lower_slope_pct_per_bar", lowerSlopePct);
-        payload.put("upper_line_at_now", upperAtEnd);
-        payload.put("lower_line_at_now", lowerAtEnd);
-        payload.put("upper_touches", recentHighs.size());
-        payload.put("lower_touches", recentLows.size());
+        payload.put("upper_line_at_eval", upperAtEval);
+        payload.put("lower_line_at_eval", lowerAtEval);
+        payload.put("upper_line_at_now", upperLine.yAt(endIdx));
+        payload.put("lower_line_at_now", lowerLine.yAt(endIdx));
+        payload.put("upper_touches", windowHighs.size());
+        payload.put("lower_touches", windowLows.size());
         payload.put("upper_fit_residual_atr", upperLine.maxResidual / atr);
         payload.put("lower_fit_residual_atr", lowerLine.maxResidual / atr);
-        payload.put("span_bars", spanBars);
-        payload.put("trigger_price", "ascending".equals(triangleType) ? upperAtEnd
-                : "descending".equals(triangleType) ? lowerAtEnd
-                : (breakIsUp ? upperAtEnd : lowerAtEnd));
-        // Target = pattern height projected from the breakout point. For ascending/symmetrical-up:
-        // target = trigger + (upperAtFirstTouch - lowerAtFirstTouch); descending/symmetrical-down:
-        // target = trigger - (upperAtFirstTouch - lowerAtFirstTouch).
-        double heightAtStart = upperLine.yAt(spanStart) - lowerLine.yAt(spanStart);
-        double trigger = ((Number) payload.get("trigger_price")).doubleValue();
-        double target = ("descending".equals(triangleType)
-                || (confirmedBreak && "below_lower".equals(confirmedDirection)))
-                ? trigger - heightAtStart
-                : trigger + heightAtStart;
+        payload.put("span_start_idx", spanStart);
+        payload.put("span_end_idx", spanEnd);
+        payload.put("span_bars", spanEnd - spanStart);
+        payload.put("eval_idx", evalIdx);
+        payload.put("eval_bars_after_span_end", evalIdx - spanEnd);
+        payload.put("trigger_price", trigger);
         payload.put("target_price", target);
-        // Invalidation: the opposite line.
-        payload.put("invalidation_price", "ascending".equals(triangleType) ? lowerAtEnd
-                : "descending".equals(triangleType) ? upperAtEnd
-                : (breakIsUp ? lowerAtEnd : upperAtEnd));
-        payload.put("current_close", closeNow);
+        payload.put("invalidation_price", invalidation);
+        payload.put("current_close", closeAt);
         if (confirmedDirection != null) payload.put("confirmed_direction", confirmedDirection);
 
-        return List.of(Firing.builder()
+        return Firing.builder()
                 .ruleId(RULE_ID)
                 .symbol(ctx.getSymbol())
                 .tf(ctx.getTf())
@@ -239,40 +239,52 @@ public class TriangleDetectRule implements Rule {
                 .roundNum(1)
                 .payload(payload)
                 .context(ctx.getProbe())
-                .build());
+                .build();
+    }
+
+    /**
+     * Lines-crossed-in-span guard per owner direction {@code a6f15887} obs #3.
+     * Returns true if upper.yAt(x) ≤ lower.yAt(x) anywhere within [spanStart, spanEnd]. With
+     * two linear functions the crossing point (if any) is closed-form; check it against the span.
+     */
+    private static boolean linesCrossWithinSpan(LineFit upper, LineFit lower,
+                                                  int spanStart, int spanEnd) {
+        // At endpoints: upper - lower at spanStart and spanEnd.
+        double dStart = upper.yAt(spanStart) - lower.yAt(spanStart);
+        double dEnd = upper.yAt(spanEnd) - lower.yAt(spanEnd);
+        // If either endpoint already has upper ≤ lower, lines have crossed inside the span.
+        if (dStart <= 0 || dEnd <= 0) return true;
+        // Lines diverge or stay separated throughout the span if both endpoint diffs are positive
+        // AND they don't reverse sign between (which is impossible for linear with same-sign
+        // endpoint diffs). So safe.
+        return false;
     }
 
     private double computeCompletion(List<PivotRef> highs, List<PivotRef> lows,
                                       LineFit upper, LineFit lower, String triangleType,
-                                      double atr, double closeNow,
-                                      double upperAtEnd, double lowerAtEnd,
+                                      double atr, double closeAt,
+                                      double upperAtEval, double lowerAtEval, int spanStart,
                                       boolean confirmedBreak) {
-        double c = 25.0;  // backbone: ≥2 highs + ≥2 lows + valid classification
+        double c = 25.0;
 
-        // Touch count: each extra pivot beyond the minimum adds +5 (max +15).
         int touchesBeyondMin = Math.max(0, highs.size() - MIN_TOUCHES_PER_LINE)
                 + Math.max(0, lows.size() - MIN_TOUCHES_PER_LINE);
         c += 5.0 * Math.min(3, touchesBeyondMin);
 
-        // Line fit quality: per-line max residual relative to ATR. Lower = better.
         double upperFitFrac = clamp01(1.0 - upper.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         double lowerFitFrac = clamp01(1.0 - lower.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         c += 5.0 * upperFitFrac;
         c += 5.0 * lowerFitFrac;
 
-        // Convergence tightness (symmetrical only): how close upper and lower are at the right
-        // edge of the pattern, as a fraction of pattern height at the left edge.
         if ("symmetrical".equals(triangleType)) {
-            double heightAtEnd = Math.max(1e-9, upperAtEnd - lowerAtEnd);
-            int spanStart = Math.min(firstIdx(highs), firstIdx(lows));
+            double heightAtEnd = Math.max(1e-9, upperAtEval - lowerAtEval);
             double heightAtStart = Math.max(1e-9, upper.yAt(spanStart) - lower.yAt(spanStart));
             double convergenceFrac = clamp01(1.0 - heightAtEnd / heightAtStart);
             c += 10.0 * convergenceFrac;
         }
 
-        // Approach to the nearer breakout line — continuous, [0, 15].
-        double distToUpper = Math.max(0, upperAtEnd - closeNow);
-        double distToLower = Math.max(0, closeNow - lowerAtEnd);
+        double distToUpper = Math.max(0, upperAtEval - closeAt);
+        double distToLower = Math.max(0, closeAt - lowerAtEval);
         double nearerDist = Math.min(distToUpper, distToLower);
         double approachFrac = clamp01(1.0 - nearerDist / Math.max(1e-9, atr * 2.0));
         c += 15.0 * approachFrac;
@@ -285,11 +297,6 @@ public class TriangleDetectRule implements Rule {
 
     private static double clamp01(double v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
 
-    /**
-     * Least-squares line fit through pivot bar indices. Returns {@code null} if fit fails (e.g.
-     * single point or numerical issue). Captures slope, intercept, and the max absolute residual
-     * across the input points — used by the completion's "fit quality" term.
-     */
     private static LineFit fitLine(List<PivotRef> pivots) {
         int n = pivots.size();
         if (n < 2) return null;
@@ -318,11 +325,6 @@ public class TriangleDetectRule implements Rule {
         double sum = 0;
         for (PivotRef p : pivots) sum += p.price;
         return sum / pivots.size();
-    }
-
-    private static List<PivotRef> lastN(List<PivotRef> sorted, int n) {
-        if (sorted.size() <= n) return sorted;
-        return sorted.subList(sorted.size() - n, sorted.size());
     }
 
     private static int firstIdx(List<PivotRef> sorted) { return sorted.get(0).idx; }

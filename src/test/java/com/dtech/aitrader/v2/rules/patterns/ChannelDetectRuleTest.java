@@ -28,6 +28,17 @@ class ChannelDetectRuleTest {
 
     private final ChannelDetectRule rule = new ChannelDetectRule();
 
+    private static Firing latest(List<Firing> out) {
+        assertFalse(out.isEmpty(), "expected at least one firing");
+        Firing best = out.get(0);
+        int bestSpanEnd = ((Number) best.getPayload().get("span_end_idx")).intValue();
+        for (Firing f : out) {
+            int spanEnd = ((Number) f.getPayload().get("span_end_idx")).intValue();
+            if (spanEnd > bestSpanEnd) { best = f; bestSpanEnd = spanEnd; }
+        }
+        return best;
+    }
+
     @Test
     void up_channel_detected_when_both_rising_parallel() {
         // Highs rising at +2.0/bar: 1400→1410→1420→1430→1440
@@ -43,8 +54,7 @@ class ChannelDetectRuleTest {
                 /*closePrev=*/ 1415.0);
 
         List<Firing> out = rule.evaluate(ctx, List.of());
-        assertEquals(1, out.size());
-        Map<String, Object> p = out.get(0).getPayload();
+        Map<String, Object> p = latest(out).getPayload();
         assertEquals("up", p.get("channel_direction"));
         assertEquals("LONG", p.get("bias"));
         assertEquals("inside", p.get("channel_state"));
@@ -64,7 +74,7 @@ class ChannelDetectRuleTest {
                 /*closeAtEnd=*/ 1350.0,
                 /*closePrev=*/ 1360.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("down", p.get("channel_direction"));
         assertEquals("SHORT", p.get("bias"));
@@ -84,7 +94,7 @@ class ChannelDetectRuleTest {
                 /*closeAtEnd=*/ 1320.0,    // well below lower-line extrapolated to bar 59
                 /*closePrev=*/ 1360.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("up", p.get("channel_direction"));
         assertEquals("exited_below", p.get("channel_state"));
@@ -104,7 +114,7 @@ class ChannelDetectRuleTest {
                 /*closeAtEnd=*/ 1500.0,    // breaks above upper line extrapolated
                 /*closePrev=*/ 1450.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("down", p.get("channel_direction"));
         assertEquals("exited_above", p.get("channel_state"));

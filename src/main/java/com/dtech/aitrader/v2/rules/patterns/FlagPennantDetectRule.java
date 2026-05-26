@@ -16,25 +16,21 @@ import org.ta4j.core.indicators.ATRIndicator;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Pass-2 candidate emitter for the FLAG / PENNANT family per SPEC-008 ({@code e332be7f}):
- * a fast directional <b>pole</b> followed by a counter-trend <b>consolidation</b>.
+ * Pass-2 candidate emitter for the FLAG / PENNANT family per SPEC-008 ({@code e332be7f}).
  *
- * <ul>
- *   <li><b>Flag</b>: consolidation lines parallel + counter-sloped to the pole.</li>
- *   <li><b>Pennant</b>: consolidation lines converge (symmetric triangle after the pole).</li>
- * </ul>
- *
- * <p>Bias = pole direction (continuation trade). Confirmation = close breaks the consolidation
- * boundary in the pole direction.
- *
- * <p><b>Zigzag-substrate caveat:</b> pole detection on pivots is approximate — we treat the
- * largest single pivot-to-pivot move within the lookback window as the pole. Candle-based
- * detection (deferred re-platform per owner direction {@code 4a322dbe}) will resolve this.
+ * <p>Per owner direction {@code 474986f0} FIX A + {@code a6f15887}: scans ALL valid poles
+ * (one-leg %moves ≥ {@link #MIN_POLE_PCT} within MIN..MAX_POLE_BARS); for each pole, scans the
+ * consolidation that follows. Discrimination by CONSTRUCTION: <b>flag requires a detectable
+ * pole</b> per owner a6f15887 (the spurious "flag without pole" on RELIANCE Hr is killed by a
+ * stricter pole gate). Pole gate now requires both %move ≥ MIN_POLE_PCT AND avg-per-bar move
+ * ≥ MIN_POLE_AVG_PCT_PER_BAR — slow drifts of ≥5% over many bars no longer count as poles.
  */
 @Component
 @Slf4j
@@ -45,18 +41,25 @@ public class FlagPennantDetectRule implements Rule {
     private static final int ATR_PERIOD = 14;
     private static final int MIN_POLE_BARS = 2;
     private static final int MAX_POLE_BARS = 12;
-    /** Pole must be a strong directional move — at least 5% on the pivot leg. */
+    /** Pole total %-move floor. */
     private static final double MIN_POLE_PCT = 0.05;
+    /**
+     * Owner origin-gate per {@code a6f15887}: a real pole is an IMPULSIVE leg — fast %move per
+     * bar, not a slow drift. Requires avg %-move per bar ≥ this floor. Kills the spurious
+     * RELIANCE Hour "flag-LONG" firing whose "pole" was a slow zigzag drift.
+     */
+    private static final double MIN_POLE_AVG_PCT_PER_BAR = 0.008;   // 0.8% per bar
     private static final int MIN_CONSOLIDATION_TOUCHES = 2;
+    private static final int MAX_TOUCHES_PER_LINE = 4;
     private static final int MAX_CONSOLIDATION_BARS = 80;
-    /** Consolidation lines must be counter-sloped to the pole — magnitude floor. */
+    private static final int MIN_CONSOLIDATION_BARS = 4;
     private static final double MIN_CONSOLIDATION_SLOPE_PCT_PER_BAR = 0.0003;
-    /** Flag vs pennant classification: slope diff < this = flag, else pennant. */
     private static final double FLAG_SLOPE_DIFF_PCT_PER_BAR = 0.0008;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
     private static final double EMISSION_THRESHOLD = 25.0;
     private static final double CONFIRMED_THRESHOLD = 95.0;
+    private static final int BREAK_LOOKFORWARD_BARS = 30;
 
     @Override public String ruleId() { return RULE_ID; }
     @Override public Pass pass() { return Pass.P2_ENUMERATION; }
@@ -78,34 +81,67 @@ public class FlagPennantDetectRule implements Rule {
         List<PivotRef> sorted = sortAllPivots(pivots, indexer);
         if (sorted.size() < 5) return List.of();
 
-        double closeNow = series.getBar(endIdx).getClosePrice().doubleValue();
-        double closePrev = series.getBar(endIdx - 1).getClosePrice().doubleValue();
+        // Per FIX A + owner origin gate: scan ALL valid poles in the lookback. Each pole spawns
+        // its own consolidation window scanned via sub-loop.
+        List<PoleRef> poles = detectAllPoles(sorted);
+        if (poles.isEmpty()) return List.of();
 
-        // 1. Find the pole — the largest single pivot-to-pivot move within recent history.
-        PoleRef pole = detectPole(sorted);
-        if (pole == null) return List.of();
+        List<Firing> out = new ArrayList<>();
+        Set<Integer> emittedSpanEnds = new HashSet<>();
+        for (PoleRef pole : poles) {
+            List<Firing> emissions = tryEmitsForPole(ctx, series, atr, endIdx, sorted, pole, emittedSpanEnds);
+            out.addAll(emissions);
+        }
+        return out;
+    }
 
-        // 2. Consolidation pivots = those AFTER pole.endIdx.
-        List<PivotRef> consHighs = new ArrayList<>();
-        List<PivotRef> consLows = new ArrayList<>();
-        for (PivotRef p : sorted) {
+    private List<Firing> tryEmitsForPole(SymbolContext ctx, BarSeries series, double atr, int endIdx,
+                                           List<PivotRef> sortedAll, PoleRef pole,
+                                           Set<Integer> emittedSpanEnds) {
+        List<PivotRef> consHighsAll = new ArrayList<>();
+        List<PivotRef> consLowsAll = new ArrayList<>();
+        for (PivotRef p : sortedAll) {
             if (p.idx <= pole.endIdx) continue;
-            if (p.type == PivotType.HIGH) consHighs.add(p);
-            else consLows.add(p);
+            if (p.type == PivotType.HIGH) consHighsAll.add(p);
+            else consLowsAll.add(p);
         }
-        if (consHighs.size() < MIN_CONSOLIDATION_TOUCHES || consLows.size() < MIN_CONSOLIDATION_TOUCHES) {
-            return List.of();
+        if (consHighsAll.size() < MIN_CONSOLIDATION_TOUCHES
+                || consLowsAll.size() < MIN_CONSOLIDATION_TOUCHES) return List.of();
+
+        List<Firing> out = new ArrayList<>();
+        for (int rHi = MIN_CONSOLIDATION_TOUCHES - 1; rHi < consHighsAll.size(); rHi++) {
+            for (int rLi = MIN_CONSOLIDATION_TOUCHES - 1; rLi < consLowsAll.size(); rLi++) {
+                int kHighs = Math.min(MAX_TOUCHES_PER_LINE, rHi + 1);
+                int kLows = Math.min(MAX_TOUCHES_PER_LINE, rLi + 1);
+                List<PivotRef> windowHighs = consHighsAll.subList(rHi - kHighs + 1, rHi + 1);
+                List<PivotRef> windowLows = consLowsAll.subList(rLi - kLows + 1, rLi + 1);
+
+                int consStart = pole.endIdx;
+                int consEnd = Math.max(lastIdx(windowHighs), lastIdx(windowLows));
+                int consBars = consEnd - consStart;
+                if (consBars < MIN_CONSOLIDATION_BARS || consBars > MAX_CONSOLIDATION_BARS) continue;
+
+                Firing f = tryEmitFlagOrPennant(ctx, series, atr, endIdx, pole,
+                        windowHighs, windowLows, consStart, consEnd, emittedSpanEnds);
+                if (f != null) out.add(f);
+            }
         }
+        return out;
+    }
 
-        int consStart = pole.endIdx;
-        int consEnd = Math.max(consHighs.get(consHighs.size() - 1).idx,
-                consLows.get(consLows.size() - 1).idx);
-        int consBars = consEnd - consStart;
-        if (consBars > MAX_CONSOLIDATION_BARS) return List.of();
-
+    private Firing tryEmitFlagOrPennant(SymbolContext ctx, BarSeries series, double atr, int endIdx,
+                                          PoleRef pole, List<PivotRef> consHighs, List<PivotRef> consLows,
+                                          int consStart, int consEnd, Set<Integer> emittedSpanEnds) {
         LineFit upperLine = fitLine(consHighs);
         LineFit lowerLine = fitLine(consLows);
-        if (upperLine == null || lowerLine == null) return List.of();
+        if (upperLine == null || lowerLine == null) return null;
+
+        // Lines-crossed-in-span guard (a6f15887 obs #3).
+        double upperAtConsStart = upperLine.yAt(consStart);
+        double lowerAtConsStart = lowerLine.yAt(consStart);
+        double upperAtConsEnd = upperLine.yAt(consEnd);
+        double lowerAtConsEnd = lowerLine.yAt(consEnd);
+        if (upperAtConsStart <= lowerAtConsStart || upperAtConsEnd <= lowerAtConsEnd) return null;
 
         double upperMean = lineMeanPrice(consHighs);
         double lowerMean = lineMeanPrice(consLows);
@@ -118,61 +154,44 @@ public class FlagPennantDetectRule implements Rule {
         boolean lowerDown = lowerSlopePct <= -MIN_CONSOLIDATION_SLOPE_PCT_PER_BAR;
         boolean lowerUp = lowerSlopePct >= MIN_CONSOLIDATION_SLOPE_PCT_PER_BAR;
 
-        // 3. Classify pattern by consolidation geometry + pole direction:
-        //    • Flag: BOTH lines slope counter to pole (parallel counter-channel).
-        //    • Pennant: upper falls + lower rises (symmetric triangle after pole, same shape
-        //      regardless of pole direction).
         boolean isFlag = false;
         boolean isPennant = false;
         if (upperDown && lowerUp) {
-            isPennant = true;                                  // converging triangle = pennant
+            isPennant = true;
         } else if (upPole && upperDown && lowerDown) {
-            isFlag = true;                                     // bull flag — both down (parallel)
+            isFlag = true;
         } else if (!upPole && upperUp && lowerUp) {
-            isFlag = true;                                     // bear flag — both up (parallel)
+            isFlag = true;
         }
-        if (!isFlag && !isPennant) return List.of();
+        if (!isFlag && !isPennant) return null;
 
         double slopeDiff = Math.abs(upperSlopePct - lowerSlopePct);
-        if (isFlag && slopeDiff > FLAG_SLOPE_DIFF_PCT_PER_BAR) {
-            // Counter-sloped but not parallel — flag fails the parallelism gate.
-            return List.of();
-        }
+        if (isFlag && slopeDiff > FLAG_SLOPE_DIFF_PCT_PER_BAR) return null;
         String patternType = isFlag ? "flag" : "pennant";
 
-        double upperAtEnd = upperLine.yAt(endIdx);
-        double lowerAtEnd = lowerLine.yAt(endIdx);
-        if (upperAtEnd <= lowerAtEnd) return List.of();
+        int evalIdx = Math.min(endIdx, consEnd + BREAK_LOOKFORWARD_BARS);
+        if (evalIdx < 1) return null;
+        double closeAt = series.getBar(evalIdx).getClosePrice().doubleValue();
+        double upperAtEval = upperLine.yAt(evalIdx);
+        double lowerAtEval = lowerLine.yAt(evalIdx);
 
-        // 5. Bias = pole direction; confirmation = close breaks consolidation in pole direction.
         String bias = upPole ? "LONG" : "SHORT";
         String consolidationState;
         boolean confirmed = false;
         if (upPole) {
-            if (closeNow > upperAtEnd) {
-                consolidationState = "broken_up";
-                confirmed = true;
-            } else if (closeNow < lowerAtEnd) {
-                consolidationState = "broken_down"; // counter to pole → failed flag
-                bias = "NEUTRAL";
-            } else {
-                consolidationState = "inside";
-            }
+            if (closeAt > upperAtEval) { consolidationState = "broken_up"; confirmed = true; }
+            else if (closeAt < lowerAtEval) { consolidationState = "broken_down"; bias = "NEUTRAL"; }
+            else consolidationState = "inside";
         } else {
-            if (closeNow < lowerAtEnd) {
-                consolidationState = "broken_down";
-                confirmed = true;
-            } else if (closeNow > upperAtEnd) {
-                consolidationState = "broken_up"; // counter to pole → failed flag
-                bias = "NEUTRAL";
-            } else {
-                consolidationState = "inside";
-            }
+            if (closeAt < lowerAtEval) { consolidationState = "broken_down"; confirmed = true; }
+            else if (closeAt > upperAtEval) { consolidationState = "broken_up"; bias = "NEUTRAL"; }
+            else consolidationState = "inside";
         }
 
         double completion = computeCompletion(consHighs, consLows, upperLine, lowerLine,
-                atr, closeNow, upperAtEnd, lowerAtEnd, confirmed);
-        if (completion < EMISSION_THRESHOLD) return List.of();
+                atr, closeAt, upperAtEval, lowerAtEval, confirmed);
+        if (completion < EMISSION_THRESHOLD) return null;
+        if (!emittedSpanEnds.add(consEnd)) return null;
 
         String status = completion >= CONFIRMED_THRESHOLD ? "confirmed" : "forming";
         double poleHeight = Math.abs(pole.endPrice - pole.startPrice);
@@ -188,10 +207,13 @@ public class FlagPennantDetectRule implements Rule {
         payload.put("pole_end_price", pole.endPrice);
         payload.put("pole_height", poleHeight);
         payload.put("pole_pct_move", pole.pctMove);
+        payload.put("pole_avg_pct_per_bar", pole.avgPctPerBar);
         payload.put("consolidation_state", consolidationState);
         payload.put("bias", bias);
-        payload.put("upper_line_at_now", upperAtEnd);
-        payload.put("lower_line_at_now", lowerAtEnd);
+        payload.put("upper_line_at_eval", upperAtEval);
+        payload.put("lower_line_at_eval", lowerAtEval);
+        payload.put("upper_line_at_now", upperLine.yAt(endIdx));
+        payload.put("lower_line_at_now", lowerLine.yAt(endIdx));
         payload.put("upper_slope_pct_per_bar", upperSlopePct);
         payload.put("lower_slope_pct_per_bar", lowerSlopePct);
         payload.put("slope_diff_pct_per_bar", slopeDiff);
@@ -199,20 +221,23 @@ public class FlagPennantDetectRule implements Rule {
         payload.put("lower_touches", consLows.size());
         payload.put("upper_fit_residual_atr", upperLine.maxResidual / atr);
         payload.put("lower_fit_residual_atr", lowerLine.maxResidual / atr);
-        payload.put("consolidation_bars", consBars);
-        // Trigger = pole-direction edge; invalidation = opposite edge; target = pole height.
+        payload.put("span_start_idx", consStart);
+        payload.put("span_end_idx", consEnd);
+        payload.put("consolidation_bars", consEnd - consStart);
+        payload.put("eval_idx", evalIdx);
+        payload.put("eval_bars_after_span_end", evalIdx - consEnd);
         if (upPole) {
-            payload.put("trigger_price", upperAtEnd);
-            payload.put("invalidation_price", lowerAtEnd);
-            payload.put("target_price", upperAtEnd + poleHeight);
+            payload.put("trigger_price", upperAtEval);
+            payload.put("invalidation_price", lowerAtEval);
+            payload.put("target_price", upperAtEval + poleHeight);
         } else {
-            payload.put("trigger_price", lowerAtEnd);
-            payload.put("invalidation_price", upperAtEnd);
-            payload.put("target_price", lowerAtEnd - poleHeight);
+            payload.put("trigger_price", lowerAtEval);
+            payload.put("invalidation_price", upperAtEval);
+            payload.put("target_price", lowerAtEval - poleHeight);
         }
-        payload.put("current_close", closeNow);
+        payload.put("current_close", closeAt);
 
-        return List.of(Firing.builder()
+        return Firing.builder()
                 .ruleId(RULE_ID)
                 .symbol(ctx.getSymbol())
                 .tf(ctx.getTf())
@@ -224,15 +249,16 @@ public class FlagPennantDetectRule implements Rule {
                 .roundNum(1)
                 .payload(payload)
                 .context(ctx.getProbe())
-                .build());
+                .build();
     }
 
     /**
-     * Detect the most prominent pole among adjacent pivot pairs — the longest %move
-     * over an acceptable span. Picks the most recent qualifying pole if multiple exist.
+     * Owner a6f15887 origin gate: detect ALL valid poles (adjacent opposite-type pivot pairs) in
+     * the lookback. A pole must clear BOTH thresholds — total %-move ≥ MIN_POLE_PCT AND
+     * average %-per-bar ≥ MIN_POLE_AVG_PCT_PER_BAR (impulsive, not drifting).
      */
-    private PoleRef detectPole(List<PivotRef> sorted) {
-        PoleRef best = null;
+    private List<PoleRef> detectAllPoles(List<PivotRef> sorted) {
+        List<PoleRef> poles = new ArrayList<>();
         for (int i = 0; i < sorted.size() - 1; i++) {
             PivotRef a = sorted.get(i);
             PivotRef b = sorted.get(i + 1);
@@ -241,37 +267,32 @@ public class FlagPennantDetectRule implements Rule {
             if (span < MIN_POLE_BARS || span > MAX_POLE_BARS) continue;
             double pct = Math.abs(b.price - a.price) / a.price;
             if (pct < MIN_POLE_PCT) continue;
+            double avgPctPerBar = pct / span;
+            if (avgPctPerBar < MIN_POLE_AVG_PCT_PER_BAR) continue;
             boolean up = b.price > a.price;
-            PoleRef candidate = new PoleRef(a.idx, b.idx, a.price, b.price, pct, up);
-            // Keep the most recent qualifying pole — gives us the leg that just printed.
-            if (best == null || candidate.endIdx > best.endIdx) best = candidate;
+            poles.add(new PoleRef(a.idx, b.idx, a.price, b.price, pct, avgPctPerBar, up));
         }
-        return best;
+        return poles;
     }
 
     private double computeCompletion(List<PivotRef> highs, List<PivotRef> lows,
                                       LineFit upper, LineFit lower,
-                                      double atr, double closeNow,
-                                      double upperAtEnd, double lowerAtEnd,
+                                      double atr, double closeAt,
+                                      double upperAtEval, double lowerAtEval,
                                       boolean confirmedBreak) {
         double c = 25.0;
-
         int touchesBeyondMin = Math.max(0, highs.size() - MIN_CONSOLIDATION_TOUCHES)
                 + Math.max(0, lows.size() - MIN_CONSOLIDATION_TOUCHES);
         c += 5.0 * Math.min(3, touchesBeyondMin);
-
         double upperFitFrac = clamp01(1.0 - upper.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         double lowerFitFrac = clamp01(1.0 - lower.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         c += 5.0 * upperFitFrac;
         c += 5.0 * lowerFitFrac;
-
-        // Approach to nearer line — continuous, [0, 15].
-        double distToUpper = Math.max(0, upperAtEnd - closeNow);
-        double distToLower = Math.max(0, closeNow - lowerAtEnd);
+        double distToUpper = Math.max(0, upperAtEval - closeAt);
+        double distToLower = Math.max(0, closeAt - lowerAtEval);
         double nearerDist = Math.min(distToUpper, distToLower);
         double approachFrac = clamp01(1.0 - nearerDist / Math.max(1e-9, atr * 2.0));
         c += 15.0 * approachFrac;
-
         if (confirmedBreak) {
             c = Math.max(c, 85.0) + 15.0;
         }
@@ -285,10 +306,8 @@ public class FlagPennantDetectRule implements Rule {
         if (n < 2) return null;
         double sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
         for (PivotRef p : pivots) {
-            sumX += p.idx;
-            sumY += p.price;
-            sumXY += p.idx * p.price;
-            sumXX += p.idx * (double) p.idx;
+            sumX += p.idx; sumY += p.price;
+            sumXY += p.idx * p.price; sumXX += p.idx * (double) p.idx;
         }
         double denom = n * sumXX - sumX * sumX;
         if (denom == 0) return null;
@@ -321,6 +340,8 @@ public class FlagPennantDetectRule implements Rule {
         return collected;
     }
 
+    private static int lastIdx(List<PivotRef> sorted) { return sorted.get(sorted.size() - 1).idx; }
+
     private static Map<Instant, Integer> indexer(BarSeries series) {
         Map<Instant, Integer> m = new HashMap<>(series.getBarCount() * 2);
         for (int i = series.getBeginIndex(); i <= series.getEndIndex(); i++) {
@@ -329,14 +350,12 @@ public class FlagPennantDetectRule implements Rule {
         return m;
     }
 
-    private record PivotRef(int idx, double price, PivotType type) {
-        PivotRef(int idx, double price) { this(idx, price, null); }
-    }
+    private record PivotRef(int idx, double price, PivotType type) { }
 
     private record LineFit(double slope, double intercept, double maxResidual) {
         double yAt(int idx) { return slope * idx + intercept; }
     }
 
     private record PoleRef(int startIdx, int endIdx, double startPrice, double endPrice,
-                            double pctMove, boolean up) { }
+                            double pctMove, double avgPctPerBar, boolean up) { }
 }

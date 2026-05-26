@@ -16,21 +16,21 @@ import org.ta4j.core.indicators.ATRIndicator;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Pass-2 candidate emitter for the RECTANGLE / RANGE family per SPEC-008 ({@code e332be7f}):
- * both upper and lower trendlines are essentially flat (|slope| below the flat gate), and the
- * range height is meaningful (≥ {@link #MIN_RECT_HEIGHT_ATR} ATR).
+ * Pass-2 candidate emitter for the RECTANGLE / RANGE family per SPEC-008 ({@code e332be7f}).
  *
- * <p>Bias = NEUTRAL inside the range; LONG on close above the upper line, SHORT on close below
- * the lower line. Confirmation also catches the already-broken case (close already beyond
- * either edge on prior bars).
- *
- * <p>Distinguishes from triangle (≥1 line sloped), channel (both sloped same direction) and
- * wedge (both sloped + converging) by requiring BOTH lines flat.
+ * <p>Per owner direction {@code 474986f0} FIX A + {@code a6f15887}: scans ALL valid right-edge
+ * anchor positions; emits every valid rectangle. Discrimination by CONSTRUCTION — both lines
+ * must be flat (|slope| below the flat gate). Sloped lines → Channel or Triangle. The "rectangle
+ * vs triangle" co-live pair at ~4 swings is handled by both rules firing on parallel-flat-ish
+ * geometry (rectangle's flat-flat passes here; triangle's converging gate stays a separate
+ * test in TriangleDetectRule).
  */
 @Component
 @Slf4j
@@ -40,16 +40,16 @@ public class RectangleDetectRule implements Rule {
 
     private static final int ATR_PERIOD = 14;
     private static final int MIN_TOUCHES_PER_LINE = 2;
+    private static final int MAX_TOUCHES_PER_LINE = 4;
     private static final int MAX_RECT_SPAN_BARS = 250;
     private static final int MIN_RECT_SPAN_BARS = 6;
-    /** Flat gate — both lines' |slope| must be BELOW this for "rectangle" classification. */
     private static final double FLAT_SLOPE_PCT_PER_BAR = 0.0008;
-    /** Rectangle range height must be at least this many ATR to be a tradeable range. */
     private static final double MIN_RECT_HEIGHT_ATR = 1.5;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
     private static final double EMISSION_THRESHOLD = 25.0;
     private static final double CONFIRMED_THRESHOLD = 95.0;
+    private static final int BREAK_LOOKFORWARD_BARS = 30;
 
     @Override public String ruleId() { return RULE_ID; }
     @Override public Pass pass() { return Pass.P2_ENUMERATION; }
@@ -72,63 +72,74 @@ public class RectangleDetectRule implements Rule {
         List<PivotRef> lows = sortedPivotsOfType(pivots, indexer, PivotType.LOW);
         if (highs.size() < MIN_TOUCHES_PER_LINE || lows.size() < MIN_TOUCHES_PER_LINE) return List.of();
 
-        double closeNow = series.getBar(endIdx).getClosePrice().doubleValue();
-        double closePrev = series.getBar(endIdx - 1).getClosePrice().doubleValue();
+        List<Firing> out = new ArrayList<>();
+        Set<Integer> emittedSpanEnds = new HashSet<>();
 
-        List<PivotRef> recentHighs = lastN(highs, 4);
-        List<PivotRef> recentLows = lastN(lows, 4);
-        int spanStart = Math.min(firstIdx(recentHighs), firstIdx(recentLows));
-        int spanEnd = Math.max(lastIdx(recentHighs), lastIdx(recentLows));
-        int spanBars = spanEnd - spanStart;
-        if (spanBars < MIN_RECT_SPAN_BARS || spanBars > MAX_RECT_SPAN_BARS) return List.of();
+        for (int rHi = MIN_TOUCHES_PER_LINE - 1; rHi < highs.size(); rHi++) {
+            for (int rLi = MIN_TOUCHES_PER_LINE - 1; rLi < lows.size(); rLi++) {
+                int kHighs = Math.min(MAX_TOUCHES_PER_LINE, rHi + 1);
+                int kLows = Math.min(MAX_TOUCHES_PER_LINE, rLi + 1);
+                List<PivotRef> windowHighs = highs.subList(rHi - kHighs + 1, rHi + 1);
+                List<PivotRef> windowLows = lows.subList(rLi - kLows + 1, rLi + 1);
 
-        LineFit upperLine = fitLine(recentHighs);
-        LineFit lowerLine = fitLine(recentLows);
-        if (upperLine == null || lowerLine == null) return List.of();
+                int spanStart = Math.min(firstIdx(windowHighs), firstIdx(windowLows));
+                int spanEnd = Math.max(lastIdx(windowHighs), lastIdx(windowLows));
+                int spanBars = spanEnd - spanStart;
+                if (spanBars < MIN_RECT_SPAN_BARS || spanBars > MAX_RECT_SPAN_BARS) continue;
 
-        double upperMean = lineMeanPrice(recentHighs);
-        double lowerMean = lineMeanPrice(recentLows);
+                Firing f = tryEmitRectangleAt(ctx, series, atr, endIdx,
+                        windowHighs, windowLows, spanStart, spanEnd, emittedSpanEnds);
+                if (f != null) out.add(f);
+            }
+        }
+        return out;
+    }
+
+    private Firing tryEmitRectangleAt(SymbolContext ctx, BarSeries series, double atr, int endIdx,
+                                        List<PivotRef> windowHighs, List<PivotRef> windowLows,
+                                        int spanStart, int spanEnd, Set<Integer> emittedSpanEnds) {
+        LineFit upperLine = fitLine(windowHighs);
+        LineFit lowerLine = fitLine(windowLows);
+        if (upperLine == null || lowerLine == null) return null;
+
+        double upperMean = lineMeanPrice(windowHighs);
+        double lowerMean = lineMeanPrice(windowLows);
         double upperSlopePct = upperMean > 0 ? upperLine.slope / upperMean : 0.0;
         double lowerSlopePct = lowerMean > 0 ? lowerLine.slope / lowerMean : 0.0;
-
-        // BOTH lines must be flat.
         boolean upperFlat = Math.abs(upperSlopePct) < FLAT_SLOPE_PCT_PER_BAR;
         boolean lowerFlat = Math.abs(lowerSlopePct) < FLAT_SLOPE_PCT_PER_BAR;
-        if (!upperFlat || !lowerFlat) return List.of();
+        if (!upperFlat || !lowerFlat) return null;
 
-        double upperAtEnd = upperLine.yAt(endIdx);
-        double lowerAtEnd = lowerLine.yAt(endIdx);
-        double rectHeight = upperAtEnd - lowerAtEnd;
-        if (rectHeight <= 0) return List.of();
-        // Must be a meaningful tradeable range.
-        if (rectHeight < MIN_RECT_HEIGHT_ATR * atr) return List.of();
+        int evalIdx = Math.min(endIdx, spanEnd + BREAK_LOOKFORWARD_BARS);
+        if (evalIdx < 1) return null;
+        double closeAt = series.getBar(evalIdx).getClosePrice().doubleValue();
+        double closePrevAt = series.getBar(evalIdx - 1).getClosePrice().doubleValue();
+        double upperAtEval = upperLine.yAt(evalIdx);
+        double lowerAtEval = lowerLine.yAt(evalIdx);
+        double rectHeight = upperAtEval - lowerAtEval;
+        if (rectHeight <= 0) return null;
+        if (rectHeight < MIN_RECT_HEIGHT_ATR * atr) return null;
 
-        // Range state — inside / broken above / broken below.
         String rangeState;
         String bias;
         boolean broken = false;
-        boolean brokenUp = closeNow > upperAtEnd;
-        boolean brokenDown = closeNow < lowerAtEnd;
-        boolean alreadyAbove = closePrev > upperAtEnd && brokenUp;
-        boolean alreadyBelow = closePrev < lowerAtEnd && brokenDown;
+        boolean brokenUp = closeAt > upperAtEval;
+        boolean brokenDown = closeAt < lowerAtEval;
+        boolean alreadyAbove = closePrevAt > upperAtEval && brokenUp;
+        boolean alreadyBelow = closePrevAt < lowerAtEval && brokenDown;
         if (brokenUp) {
-            rangeState = "broken_up";
-            bias = "LONG";
-            broken = true;
+            rangeState = "broken_up"; bias = "LONG"; broken = true;
         } else if (brokenDown) {
-            rangeState = "broken_down";
-            bias = "SHORT";
-            broken = true;
+            rangeState = "broken_down"; bias = "SHORT"; broken = true;
         } else {
-            rangeState = "inside";
-            bias = "NEUTRAL";
+            rangeState = "inside"; bias = "NEUTRAL";
         }
-
         boolean confirmedBreak = broken || alreadyAbove || alreadyBelow;
 
-        double completion = computeCompletion(recentHighs, recentLows, upperLine, lowerLine,
-                upperSlopePct, lowerSlopePct, atr, closeNow, upperAtEnd, lowerAtEnd, confirmedBreak);
-        if (completion < EMISSION_THRESHOLD) return List.of();
+        double completion = computeCompletion(windowHighs, windowLows, upperLine, lowerLine,
+                upperSlopePct, lowerSlopePct, atr, closeAt, upperAtEval, lowerAtEval, confirmedBreak);
+        if (completion < EMISSION_THRESHOLD) return null;
+        if (!emittedSpanEnds.add(spanEnd)) return null;
 
         String status = completion >= CONFIRMED_THRESHOLD ? "confirmed" : "forming";
 
@@ -137,34 +148,39 @@ public class RectangleDetectRule implements Rule {
         payload.put("completion_pct", completion);
         payload.put("range_state", rangeState);
         payload.put("bias", bias);
-        payload.put("upper_line_at_now", upperAtEnd);
-        payload.put("lower_line_at_now", lowerAtEnd);
+        payload.put("upper_line_at_eval", upperAtEval);
+        payload.put("lower_line_at_eval", lowerAtEval);
+        payload.put("upper_line_at_now", upperLine.yAt(endIdx));
+        payload.put("lower_line_at_now", lowerLine.yAt(endIdx));
         payload.put("rect_height", rectHeight);
         payload.put("rect_height_atr", rectHeight / atr);
         payload.put("upper_slope_pct_per_bar", upperSlopePct);
         payload.put("lower_slope_pct_per_bar", lowerSlopePct);
-        payload.put("upper_touches", recentHighs.size());
-        payload.put("lower_touches", recentLows.size());
+        payload.put("upper_touches", windowHighs.size());
+        payload.put("lower_touches", windowLows.size());
         payload.put("upper_fit_residual_atr", upperLine.maxResidual / atr);
         payload.put("lower_fit_residual_atr", lowerLine.maxResidual / atr);
-        payload.put("span_bars", spanBars);
-        // Trigger/target/invalidation depend on state.
+        payload.put("span_start_idx", spanStart);
+        payload.put("span_end_idx", spanEnd);
+        payload.put("span_bars", spanEnd - spanStart);
+        payload.put("eval_idx", evalIdx);
+        payload.put("eval_bars_after_span_end", evalIdx - spanEnd);
         if ("inside".equals(rangeState)) {
-            payload.put("trigger_price", upperAtEnd);   // upper break is the canonical trigger
-            payload.put("invalidation_price", lowerAtEnd);
-            payload.put("target_price", upperAtEnd + rectHeight); // measured move on break-up
+            payload.put("trigger_price", upperAtEval);
+            payload.put("invalidation_price", lowerAtEval);
+            payload.put("target_price", upperAtEval + rectHeight);
         } else if ("broken_up".equals(rangeState)) {
-            payload.put("trigger_price", upperAtEnd);
-            payload.put("invalidation_price", lowerAtEnd);
-            payload.put("target_price", upperAtEnd + rectHeight);
-        } else { // broken_down
-            payload.put("trigger_price", lowerAtEnd);
-            payload.put("invalidation_price", upperAtEnd);
-            payload.put("target_price", lowerAtEnd - rectHeight);
+            payload.put("trigger_price", upperAtEval);
+            payload.put("invalidation_price", lowerAtEval);
+            payload.put("target_price", upperAtEval + rectHeight);
+        } else {
+            payload.put("trigger_price", lowerAtEval);
+            payload.put("invalidation_price", upperAtEval);
+            payload.put("target_price", lowerAtEval - rectHeight);
         }
-        payload.put("current_close", closeNow);
+        payload.put("current_close", closeAt);
 
-        return List.of(Firing.builder()
+        return Firing.builder()
                 .ruleId(RULE_ID)
                 .symbol(ctx.getSymbol())
                 .tf(ctx.getTf())
@@ -176,39 +192,32 @@ public class RectangleDetectRule implements Rule {
                 .roundNum(1)
                 .payload(payload)
                 .context(ctx.getProbe())
-                .build());
+                .build();
     }
 
     private double computeCompletion(List<PivotRef> highs, List<PivotRef> lows,
                                       LineFit upper, LineFit lower,
                                       double upperSlopePct, double lowerSlopePct,
-                                      double atr, double closeNow,
-                                      double upperAtEnd, double lowerAtEnd,
+                                      double atr, double closeAt,
+                                      double upperAtEval, double lowerAtEval,
                                       boolean confirmedBreak) {
         double c = 25.0;
-
         int touchesBeyondMin = Math.max(0, highs.size() - MIN_TOUCHES_PER_LINE)
                 + Math.max(0, lows.size() - MIN_TOUCHES_PER_LINE);
         c += 5.0 * Math.min(3, touchesBeyondMin);
-
         double upperFitFrac = clamp01(1.0 - upper.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         double lowerFitFrac = clamp01(1.0 - lower.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         c += 5.0 * upperFitFrac;
         c += 5.0 * lowerFitFrac;
-
-        // Flatness quality — closer to zero slope on BOTH lines = higher rectangle quality.
         double upperFlatFrac = clamp01(1.0 - Math.abs(upperSlopePct) / FLAT_SLOPE_PCT_PER_BAR);
         double lowerFlatFrac = clamp01(1.0 - Math.abs(lowerSlopePct) / FLAT_SLOPE_PCT_PER_BAR);
         c += 7.5 * upperFlatFrac;
         c += 7.5 * lowerFlatFrac;
-
-        // Approach to nearer edge — continuous, [0, 15].
-        double distToUpper = Math.max(0, upperAtEnd - closeNow);
-        double distToLower = Math.max(0, closeNow - lowerAtEnd);
+        double distToUpper = Math.max(0, upperAtEval - closeAt);
+        double distToLower = Math.max(0, closeAt - lowerAtEval);
         double nearerDist = Math.min(distToUpper, distToLower);
         double approachFrac = clamp01(1.0 - nearerDist / Math.max(1e-9, atr * 2.0));
         c += 15.0 * approachFrac;
-
         if (confirmedBreak) {
             c = Math.max(c, 85.0) + 15.0;
         }
@@ -222,10 +231,8 @@ public class RectangleDetectRule implements Rule {
         if (n < 2) return null;
         double sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
         for (PivotRef p : pivots) {
-            sumX += p.idx;
-            sumY += p.price;
-            sumXY += p.idx * p.price;
-            sumXX += p.idx * (double) p.idx;
+            sumX += p.idx; sumY += p.price;
+            sumXY += p.idx * p.price; sumXX += p.idx * (double) p.idx;
         }
         double denom = n * sumXX - sumX * sumX;
         if (denom == 0) return null;
@@ -244,11 +251,6 @@ public class RectangleDetectRule implements Rule {
         double sum = 0;
         for (PivotRef p : pivots) sum += p.price;
         return sum / pivots.size();
-    }
-
-    private static List<PivotRef> lastN(List<PivotRef> sorted, int n) {
-        if (sorted.size() <= n) return sorted;
-        return sorted.subList(sorted.size() - n, sorted.size());
     }
 
     private static int firstIdx(List<PivotRef> sorted) { return sorted.get(0).idx; }

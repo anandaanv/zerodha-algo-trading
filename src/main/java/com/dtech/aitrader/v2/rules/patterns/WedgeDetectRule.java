@@ -16,26 +16,19 @@ import org.ta4j.core.indicators.ATRIndicator;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
- * Pass-2 candidate emitter for the WEDGE family per SPEC-008 ({@code e332be7f}):
+ * Pass-2 candidate emitter for the WEDGE family per SPEC-008 ({@code e332be7f}).
  *
- * <ul>
- *   <li><b>Rising wedge (bearish)</b>: both upper + lower lines rising, but converging — lower
- *       rises faster than upper. Confirmation = breakdown below lower line. Bias = SHORT.</li>
- *   <li><b>Falling wedge (bullish)</b>: both lines falling, converging — upper falls faster.
- *       Confirmation = breakout above upper line. Bias = LONG.</li>
- * </ul>
- *
- * <p>Distinguishes from triangle (≥1 line flat) and channel (lines roughly parallel) by
- * requiring BOTH lines trending in the same direction AND meaningful convergence
- * ({@value #MIN_CONVERGENCE_PCT} narrowing across the span).
- *
- * <p>Per owner direction {@code 4a322dbe}: built on the current zigzag-pivot substrate;
- * candle-based re-platforming follows once enough patterns + test-cases land.
+ * <p>Per owner direction {@code 474986f0} FIX A + {@code a6f15887}: scans ALL valid right-edge
+ * anchor positions, emits every valid wedge. Discrimination by CONSTRUCTION — both lines must
+ * trend same direction with measurable convergence and slope-diff above the channel-parallel
+ * gate. Lines-crossed-in-span guard rejects degenerate fits.
  */
 @Component
 @Slf4j
@@ -45,23 +38,17 @@ public class WedgeDetectRule implements Rule {
 
     private static final int ATR_PERIOD = 14;
     private static final int MIN_TOUCHES_PER_LINE = 2;
+    private static final int MAX_TOUCHES_PER_LINE = 4;
     private static final int MAX_WEDGE_SPAN_BARS = 200;
     private static final int MIN_WEDGE_SPAN_BARS = 6;
-    /**
-     * Slope threshold (percent-of-mean-price per bar) for "rising"/"falling" classification.
-     * Lower than the triangle equivalent because a rising wedge's UPPER line is naturally
-     * slow-rising by definition — if it were as fast as the lower line, it'd be a channel.
-     * 0.02% per bar captures the slow side of the wedge while still excluding pure noise.
-     */
     private static final double TREND_SLOPE_PCT_PER_BAR = 0.0002;
-    /** Minimum convergence (1 - heightAtEnd/heightAtStart) for "wedge" vs "channel". */
     private static final double MIN_CONVERGENCE_PCT = 0.20;
-    /** Slope difference between upper and lower (absolute pct/bar). Above = wedge; below = channel. */
     private static final double WEDGE_SLOPE_DIFF_PCT_PER_BAR = 0.0005;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
     private static final double EMISSION_THRESHOLD = 25.0;
     private static final double CONFIRMED_THRESHOLD = 95.0;
+    private static final int BREAK_LOOKFORWARD_BARS = 30;
 
     @Override public String ruleId() { return RULE_ID; }
     @Override public Pass pass() { return Pass.P2_ENUMERATION; }
@@ -84,84 +71,91 @@ public class WedgeDetectRule implements Rule {
         List<PivotRef> lows = sortedPivotsOfType(pivots, indexer, PivotType.LOW);
         if (highs.size() < MIN_TOUCHES_PER_LINE || lows.size() < MIN_TOUCHES_PER_LINE) return List.of();
 
-        double closeNow = series.getBar(endIdx).getClosePrice().doubleValue();
-        double closePrev = series.getBar(endIdx - 1).getClosePrice().doubleValue();
+        List<Firing> out = new ArrayList<>();
+        Set<Integer> emittedSpanEnds = new HashSet<>();
 
-        List<PivotRef> recentHighs = lastN(highs, 4);
-        List<PivotRef> recentLows = lastN(lows, 4);
-        int spanStart = Math.min(firstIdx(recentHighs), firstIdx(recentLows));
-        int spanEnd = Math.max(lastIdx(recentHighs), lastIdx(recentLows));
-        int spanBars = spanEnd - spanStart;
-        if (spanBars < MIN_WEDGE_SPAN_BARS || spanBars > MAX_WEDGE_SPAN_BARS) return List.of();
+        for (int rHi = MIN_TOUCHES_PER_LINE - 1; rHi < highs.size(); rHi++) {
+            for (int rLi = MIN_TOUCHES_PER_LINE - 1; rLi < lows.size(); rLi++) {
+                int kHighs = Math.min(MAX_TOUCHES_PER_LINE, rHi + 1);
+                int kLows = Math.min(MAX_TOUCHES_PER_LINE, rLi + 1);
+                List<PivotRef> windowHighs = highs.subList(rHi - kHighs + 1, rHi + 1);
+                List<PivotRef> windowLows = lows.subList(rLi - kLows + 1, rLi + 1);
 
-        LineFit upperLine = fitLine(recentHighs);
-        LineFit lowerLine = fitLine(recentLows);
-        if (upperLine == null || lowerLine == null) return List.of();
+                int spanStart = Math.min(firstIdx(windowHighs), firstIdx(windowLows));
+                int spanEnd = Math.max(lastIdx(windowHighs), lastIdx(windowLows));
+                int spanBars = spanEnd - spanStart;
+                if (spanBars < MIN_WEDGE_SPAN_BARS || spanBars > MAX_WEDGE_SPAN_BARS) continue;
 
-        double upperMean = lineMeanPrice(recentHighs);
-        double lowerMean = lineMeanPrice(recentLows);
+                Firing f = tryEmitWedgeAt(ctx, series, atr, endIdx,
+                        windowHighs, windowLows, spanStart, spanEnd, emittedSpanEnds);
+                if (f != null) out.add(f);
+            }
+        }
+        return out;
+    }
+
+    private Firing tryEmitWedgeAt(SymbolContext ctx, BarSeries series, double atr, int endIdx,
+                                    List<PivotRef> windowHighs, List<PivotRef> windowLows,
+                                    int spanStart, int spanEnd, Set<Integer> emittedSpanEnds) {
+        LineFit upperLine = fitLine(windowHighs);
+        LineFit lowerLine = fitLine(windowLows);
+        if (upperLine == null || lowerLine == null) return null;
+
+        if (linesCrossWithinSpan(upperLine, lowerLine, spanStart, spanEnd)) return null;
+
+        double upperMean = lineMeanPrice(windowHighs);
+        double lowerMean = lineMeanPrice(windowLows);
         double upperSlopePct = upperMean > 0 ? upperLine.slope / upperMean : 0.0;
         double lowerSlopePct = lowerMean > 0 ? lowerLine.slope / lowerMean : 0.0;
 
-        boolean upperRising = upperSlopePct >= TREND_SLOPE_PCT_PER_BAR;
-        boolean lowerRising = lowerSlopePct >= TREND_SLOPE_PCT_PER_BAR;
-        boolean upperFalling = upperSlopePct <= -TREND_SLOPE_PCT_PER_BAR;
-        boolean lowerFalling = lowerSlopePct <= -TREND_SLOPE_PCT_PER_BAR;
+        boolean bothRising = upperSlopePct >= TREND_SLOPE_PCT_PER_BAR
+                && lowerSlopePct >= TREND_SLOPE_PCT_PER_BAR;
+        boolean bothFalling = upperSlopePct <= -TREND_SLOPE_PCT_PER_BAR
+                && lowerSlopePct <= -TREND_SLOPE_PCT_PER_BAR;
+        if (!bothRising && !bothFalling) return null;
 
-        // Convergence check: height shrinks across the span.
+        double slopeDiff = Math.abs(upperSlopePct - lowerSlopePct);
+        if (slopeDiff < WEDGE_SLOPE_DIFF_PCT_PER_BAR) return null;
+
         double heightAtStart = upperLine.yAt(spanStart) - lowerLine.yAt(spanStart);
-        double heightAtEnd = upperLine.yAt(spanEnd) - lowerLine.yAt(spanEnd);
-        if (heightAtStart <= 0 || heightAtEnd <= 0) return List.of();
-        double convergenceFrac = 1.0 - heightAtEnd / heightAtStart;
-        if (convergenceFrac < MIN_CONVERGENCE_PCT) return List.of();
+        double heightAtSpanEnd = upperLine.yAt(spanEnd) - lowerLine.yAt(spanEnd);
+        if (heightAtStart <= 0 || heightAtSpanEnd <= 0) return null;
+        double convergence = 1.0 - heightAtSpanEnd / heightAtStart;
+        if (convergence < MIN_CONVERGENCE_PCT) return null;
 
-        // Slope-difference check: ensure we're not mis-classifying a channel as a wedge.
-        double slopeDiffPct = Math.abs(upperSlopePct - lowerSlopePct);
-        if (slopeDiffPct < WEDGE_SLOPE_DIFF_PCT_PER_BAR) return List.of();
+        String wedgeType = bothRising ? "rising" : "falling";
+        String bias = bothRising ? "SHORT" : "LONG";
 
-        String wedgeType;
-        String bias;
-        if (upperRising && lowerRising && lowerSlopePct > upperSlopePct) {
-            wedgeType = "rising";
-            bias = "SHORT";
-        } else if (upperFalling && lowerFalling && upperSlopePct < lowerSlopePct) {
-            wedgeType = "falling";
-            bias = "LONG";
-        } else {
-            return List.of();   // neither rising nor falling wedge geometry
-        }
+        int evalIdx = Math.min(endIdx, spanEnd + BREAK_LOOKFORWARD_BARS);
+        if (evalIdx < 1) return null;
+        double closeAt = series.getBar(evalIdx).getClosePrice().doubleValue();
+        double closePrevAt = series.getBar(evalIdx - 1).getClosePrice().doubleValue();
+        double upperAtEval = upperLine.yAt(evalIdx);
+        double lowerAtEval = lowerLine.yAt(evalIdx);
 
-        double upperAtEnd = upperLine.yAt(endIdx);
-        double lowerAtEnd = lowerLine.yAt(endIdx);
-        double trigger;
-        double invalidation;
         boolean confirmedBreak;
         String confirmedDirection = null;
         if ("rising".equals(wedgeType)) {
-            trigger = lowerAtEnd;
-            invalidation = upperAtEnd;
-            boolean broke = closePrev >= lowerAtEnd && closeNow < lowerAtEnd;
-            boolean alreadyBelow = closeNow < lowerAtEnd;
+            boolean broke = closePrevAt >= lowerAtEval && closeAt < lowerAtEval;
+            boolean alreadyBelow = closeAt < lowerAtEval;
             confirmedBreak = broke || alreadyBelow;
             if (confirmedBreak) confirmedDirection = "below_lower";
         } else {
-            trigger = upperAtEnd;
-            invalidation = lowerAtEnd;
-            boolean broke = closePrev <= upperAtEnd && closeNow > upperAtEnd;
-            boolean alreadyAbove = closeNow > upperAtEnd;
+            boolean broke = closePrevAt <= upperAtEval && closeAt > upperAtEval;
+            boolean alreadyAbove = closeAt > upperAtEval;
             confirmedBreak = broke || alreadyAbove;
             if (confirmedBreak) confirmedDirection = "above_upper";
         }
 
-        double completion = computeCompletion(recentHighs, recentLows, upperLine, lowerLine,
-                convergenceFrac, atr, closeNow, upperAtEnd, lowerAtEnd, confirmedBreak);
-        if (completion < EMISSION_THRESHOLD) return List.of();
+        double completion = computeCompletion(windowHighs, windowLows, upperLine, lowerLine,
+                convergence, atr, closeAt, upperAtEval, lowerAtEval, confirmedBreak);
+        if (completion < EMISSION_THRESHOLD) return null;
+        if (!emittedSpanEnds.add(spanEnd)) return null;
 
         String status = completion >= CONFIRMED_THRESHOLD ? "confirmed" : "forming";
-        // Target = wedge height at the start projected from breakout point.
-        double target = "rising".equals(wedgeType)
-                ? trigger - heightAtStart
-                : trigger + heightAtStart;
+        double trigger = "rising".equals(wedgeType) ? lowerAtEval : upperAtEval;
+        double invalidation = "rising".equals(wedgeType) ? upperAtEval : lowerAtEval;
+        double target = "rising".equals(wedgeType) ? trigger - heightAtStart : trigger + heightAtStart;
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", status);
@@ -170,21 +164,28 @@ public class WedgeDetectRule implements Rule {
         payload.put("bias", bias);
         payload.put("upper_slope_pct_per_bar", upperSlopePct);
         payload.put("lower_slope_pct_per_bar", lowerSlopePct);
-        payload.put("upper_line_at_now", upperAtEnd);
-        payload.put("lower_line_at_now", lowerAtEnd);
-        payload.put("convergence_pct", convergenceFrac);
-        payload.put("upper_touches", recentHighs.size());
-        payload.put("lower_touches", recentLows.size());
+        payload.put("slope_diff_pct_per_bar", slopeDiff);
+        payload.put("convergence_pct", convergence);
+        payload.put("upper_line_at_eval", upperAtEval);
+        payload.put("lower_line_at_eval", lowerAtEval);
+        payload.put("upper_line_at_now", upperLine.yAt(endIdx));
+        payload.put("lower_line_at_now", lowerLine.yAt(endIdx));
+        payload.put("upper_touches", windowHighs.size());
+        payload.put("lower_touches", windowLows.size());
         payload.put("upper_fit_residual_atr", upperLine.maxResidual / atr);
         payload.put("lower_fit_residual_atr", lowerLine.maxResidual / atr);
-        payload.put("span_bars", spanBars);
+        payload.put("span_start_idx", spanStart);
+        payload.put("span_end_idx", spanEnd);
+        payload.put("span_bars", spanEnd - spanStart);
+        payload.put("eval_idx", evalIdx);
+        payload.put("eval_bars_after_span_end", evalIdx - spanEnd);
         payload.put("trigger_price", trigger);
         payload.put("invalidation_price", invalidation);
         payload.put("target_price", target);
-        payload.put("current_close", closeNow);
+        payload.put("current_close", closeAt);
         if (confirmedDirection != null) payload.put("confirmed_direction", confirmedDirection);
 
-        return List.of(Firing.builder()
+        return Firing.builder()
                 .ruleId(RULE_ID)
                 .symbol(ctx.getSymbol())
                 .tf(ctx.getTf())
@@ -196,37 +197,35 @@ public class WedgeDetectRule implements Rule {
                 .roundNum(1)
                 .payload(payload)
                 .context(ctx.getProbe())
-                .build());
+                .build();
+    }
+
+    private static boolean linesCrossWithinSpan(LineFit upper, LineFit lower,
+                                                  int spanStart, int spanEnd) {
+        double dStart = upper.yAt(spanStart) - lower.yAt(spanStart);
+        double dEnd = upper.yAt(spanEnd) - lower.yAt(spanEnd);
+        return dStart <= 0 || dEnd <= 0;
     }
 
     private double computeCompletion(List<PivotRef> highs, List<PivotRef> lows,
-                                      LineFit upper, LineFit lower, double convergenceFrac,
-                                      double atr, double closeNow,
-                                      double upperAtEnd, double lowerAtEnd,
+                                      LineFit upper, LineFit lower, double convergence,
+                                      double atr, double closeAt,
+                                      double upperAtEval, double lowerAtEval,
                                       boolean confirmedBreak) {
-        double c = 25.0;   // backbone established
-
+        double c = 25.0;
         int touchesBeyondMin = Math.max(0, highs.size() - MIN_TOUCHES_PER_LINE)
                 + Math.max(0, lows.size() - MIN_TOUCHES_PER_LINE);
         c += 5.0 * Math.min(3, touchesBeyondMin);
-
         double upperFitFrac = clamp01(1.0 - upper.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         double lowerFitFrac = clamp01(1.0 - lower.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         c += 5.0 * upperFitFrac;
         c += 5.0 * lowerFitFrac;
-
-        // Convergence quality: tighter wedge = higher score. Linear from MIN_CONVERGENCE_PCT
-        // (the gate, 0 score) to 0.80 (max score).
-        double convQuality = clamp01((convergenceFrac - MIN_CONVERGENCE_PCT) / (0.80 - MIN_CONVERGENCE_PCT));
-        c += 15.0 * convQuality;
-
-        // Approach to break line (lower for rising, upper for falling).
-        double distToUpper = Math.max(0, upperAtEnd - closeNow);
-        double distToLower = Math.max(0, closeNow - lowerAtEnd);
+        c += 10.0 * clamp01(convergence);
+        double distToUpper = Math.max(0, upperAtEval - closeAt);
+        double distToLower = Math.max(0, closeAt - lowerAtEval);
         double nearerDist = Math.min(distToUpper, distToLower);
         double approachFrac = clamp01(1.0 - nearerDist / Math.max(1e-9, atr * 2.0));
         c += 15.0 * approachFrac;
-
         if (confirmedBreak) {
             c = Math.max(c, 85.0) + 15.0;
         }
@@ -240,10 +239,8 @@ public class WedgeDetectRule implements Rule {
         if (n < 2) return null;
         double sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
         for (PivotRef p : pivots) {
-            sumX += p.idx;
-            sumY += p.price;
-            sumXY += p.idx * p.price;
-            sumXX += p.idx * (double) p.idx;
+            sumX += p.idx; sumY += p.price;
+            sumXY += p.idx * p.price; sumXX += p.idx * (double) p.idx;
         }
         double denom = n * sumXX - sumX * sumX;
         if (denom == 0) return null;
@@ -262,11 +259,6 @@ public class WedgeDetectRule implements Rule {
         double sum = 0;
         for (PivotRef p : pivots) sum += p.price;
         return sum / pivots.size();
-    }
-
-    private static List<PivotRef> lastN(List<PivotRef> sorted, int n) {
-        if (sorted.size() <= n) return sorted;
-        return sorted.subList(sorted.size() - n, sorted.size());
     }
 
     private static int firstIdx(List<PivotRef> sorted) { return sorted.get(0).idx; }

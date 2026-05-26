@@ -32,6 +32,22 @@ class TriangleDetectRuleTest {
 
     private final TriangleDetectRule rule = new TriangleDetectRule();
 
+    /**
+     * Picks the firing with the largest {@code span_end_idx} — the "most recent" pattern in the
+     * wider-scan sweep (per owner direction {@code 474986f0} FIX A applied to the 5 new detectors
+     * via {@code a6f15887}).
+     */
+    private static Firing latest(List<Firing> out) {
+        assertFalse(out.isEmpty(), "expected at least one firing");
+        Firing best = out.get(0);
+        int bestSpanEnd = ((Number) best.getPayload().get("span_end_idx")).intValue();
+        for (Firing f : out) {
+            int spanEnd = ((Number) f.getPayload().get("span_end_idx")).intValue();
+            if (spanEnd > bestSpanEnd) { best = f; bestSpanEnd = spanEnd; }
+        }
+        return best;
+    }
+
     @Test
     void ascending_triangle_detected_when_upper_flat_lower_rising() {
         // Upper line: highs ~1500 (flat). Lower line: rising lows 1300→1340→1380→1420.
@@ -48,15 +64,17 @@ class TriangleDetectRuleTest {
                 /*closePrev=*/ 1465.0);
 
         List<Firing> out = rule.evaluate(ctx, List.of());
-        assertEquals(1, out.size());
-        Map<String, Object> p = out.get(0).getPayload();
+        Map<String, Object> p = latest(out).getPayload();
         assertEquals("ascending", p.get("triangle_type"));
         assertEquals("LONG", p.get("bias"));
         assertEquals("forming", p.get("status"));
-        double upperAtNow = ((Number) p.get("upper_line_at_now")).doubleValue();
+        // Trigger for ascending = upper-line value at the EVAL bar (spanEnd+lookforward clamped
+        // to endIdx). Under wider-scan, eval is at endIdx for the latest-spanEnd window so the
+        // trigger lines up with the "current" upper-line position.
+        double upperAtEval = ((Number) p.get("upper_line_at_eval")).doubleValue();
         double triggerPrice = ((Number) p.get("trigger_price")).doubleValue();
-        assertEquals(upperAtNow, triggerPrice, 1e-6,
-                "trigger for ascending = upper line at now");
+        assertEquals(upperAtEval, triggerPrice, 1e-6,
+                "trigger for ascending = upper line at eval");
     }
 
     @Test
@@ -74,7 +92,7 @@ class TriangleDetectRuleTest {
                 /*closeAtEnd=*/ 1320.0,
                 /*closePrev=*/ 1330.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("descending", p.get("triangle_type"));
         assertEquals("SHORT", p.get("bias"));
@@ -95,7 +113,7 @@ class TriangleDetectRuleTest {
                 /*closeAtEnd=*/ 1400.0,
                 /*closePrev=*/ 1395.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("symmetrical", p.get("triangle_type"));
         assertEquals("NEUTRAL", p.get("bias"));
@@ -116,7 +134,7 @@ class TriangleDetectRuleTest {
                 /*closeAtEnd=*/ 1520.0,   // above the upper line
                 /*closePrev=*/ 1499.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("confirmed", p.get("status"));
         assertEquals(100.0, ((Number) p.get("completion_pct")).doubleValue(), 1e-9);
@@ -138,7 +156,7 @@ class TriangleDetectRuleTest {
                 /*closeAtEnd=*/ 1340.0,   // below lower line at endIdx (line ~1370)
                 /*closePrev=*/ 1380.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("symmetrical", p.get("triangle_type"));
         // Symmetrical-on-break: bias becomes break direction
@@ -199,7 +217,7 @@ class TriangleDetectRuleTest {
                         new Pivot(45, 1500.0, PivotType.HIGH)),
                 1520.0, 1499.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         double trigger = ((Number) f.getPayload().get("trigger_price")).doubleValue();
         double target = ((Number) f.getPayload().get("target_price")).doubleValue();
         // Ascending up-break: target = trigger + (upperAtStart - lowerAtStart). Height at start

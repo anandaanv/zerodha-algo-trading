@@ -28,6 +28,17 @@ class RectangleDetectRuleTest {
 
     private final RectangleDetectRule rule = new RectangleDetectRule();
 
+    private static Firing latest(List<Firing> out) {
+        assertFalse(out.isEmpty(), "expected at least one firing");
+        Firing best = out.get(0);
+        int bestSpanEnd = ((Number) best.getPayload().get("span_end_idx")).intValue();
+        for (Firing f : out) {
+            int spanEnd = ((Number) f.getPayload().get("span_end_idx")).intValue();
+            if (spanEnd > bestSpanEnd) { best = f; bestSpanEnd = spanEnd; }
+        }
+        return best;
+    }
+
     @Test
     void rectangle_detected_when_both_lines_flat_and_height_meaningful() {
         // Highs ~1450 (slight noise), lows ~1300 (slight noise) — both flat, height ~150.
@@ -44,8 +55,7 @@ class RectangleDetectRuleTest {
                 /*closePrev=*/ 1370.0);
 
         List<Firing> out = rule.evaluate(ctx, List.of());
-        assertEquals(1, out.size());
-        Map<String, Object> p = out.get(0).getPayload();
+        Map<String, Object> p = latest(out).getPayload();
         assertEquals("inside", p.get("range_state"));
         assertEquals("NEUTRAL", p.get("bias"));
     }
@@ -64,7 +74,7 @@ class RectangleDetectRuleTest {
                 /*closeAtEnd=*/ 1500.0,    // breaks above ~1450
                 /*closePrev=*/ 1440.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("confirmed", p.get("status"));
         assertEquals("broken_up", p.get("range_state"));
@@ -85,7 +95,7 @@ class RectangleDetectRuleTest {
                 /*closeAtEnd=*/ 1250.0,    // breaks below ~1300
                 /*closePrev=*/ 1310.0);
 
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         assertEquals("confirmed", p.get("status"));
         assertEquals("broken_down", p.get("range_state"));
@@ -153,7 +163,7 @@ class RectangleDetectRuleTest {
                         new Pivot(40, 1300.0, PivotType.LOW),
                         new Pivot(45, 1449.0, PivotType.HIGH)),
                 1500.0, 1440.0);
-        Firing f = rule.evaluate(ctx, List.of()).get(0);
+        Firing f = latest(rule.evaluate(ctx, List.of()));
         Map<String, Object> p = f.getPayload();
         double upper = ((Number) p.get("upper_line_at_now")).doubleValue();
         double target = ((Number) p.get("target_price")).doubleValue();
