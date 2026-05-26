@@ -41,9 +41,11 @@ public class WedgeDetectRule implements Rule {
     private static final int MAX_TOUCHES_PER_LINE = 4;
     private static final int MAX_WEDGE_SPAN_BARS = 200;
     private static final int MIN_WEDGE_SPAN_BARS = 6;
-    private static final double TREND_SLOPE_PCT_PER_BAR = 0.0002;
+    /** ATR-per-bar units per owner direction {@code 79a97439} (was {@code 0.0002} pct/bar). */
+    private static final double TREND_SLOPE_ATR_PER_BAR = 0.01;
     private static final double MIN_CONVERGENCE_PCT = 0.20;
-    private static final double WEDGE_SLOPE_DIFF_PCT_PER_BAR = 0.0005;
+    /** ATR-per-bar units per owner direction {@code 79a97439} (was {@code 0.0005} pct/bar). */
+    private static final double WEDGE_SLOPE_DIFF_ATR_PER_BAR = 0.025;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
     private static final double EMISSION_THRESHOLD = 25.0;
@@ -106,19 +108,18 @@ public class WedgeDetectRule implements Rule {
 
         if (linesCrossWithinSpan(upperLine, lowerLine, spanStart, spanEnd)) return null;
 
-        double upperMean = lineMeanPrice(windowHighs);
-        double lowerMean = lineMeanPrice(windowLows);
-        double upperSlopePct = upperMean > 0 ? upperLine.slope / upperMean : 0.0;
-        double lowerSlopePct = lowerMean > 0 ? lowerLine.slope / lowerMean : 0.0;
+        // Owner direction 79a97439: slope in ATR-per-bar units.
+        double upperSlopeAtr = upperLine.slope / atr;
+        double lowerSlopeAtr = lowerLine.slope / atr;
 
-        boolean bothRising = upperSlopePct >= TREND_SLOPE_PCT_PER_BAR
-                && lowerSlopePct >= TREND_SLOPE_PCT_PER_BAR;
-        boolean bothFalling = upperSlopePct <= -TREND_SLOPE_PCT_PER_BAR
-                && lowerSlopePct <= -TREND_SLOPE_PCT_PER_BAR;
+        boolean bothRising = upperSlopeAtr >= TREND_SLOPE_ATR_PER_BAR
+                && lowerSlopeAtr >= TREND_SLOPE_ATR_PER_BAR;
+        boolean bothFalling = upperSlopeAtr <= -TREND_SLOPE_ATR_PER_BAR
+                && lowerSlopeAtr <= -TREND_SLOPE_ATR_PER_BAR;
         if (!bothRising && !bothFalling) return null;
 
-        double slopeDiff = Math.abs(upperSlopePct - lowerSlopePct);
-        if (slopeDiff < WEDGE_SLOPE_DIFF_PCT_PER_BAR) return null;
+        double slopeDiff = Math.abs(upperSlopeAtr - lowerSlopeAtr);
+        if (slopeDiff < WEDGE_SLOPE_DIFF_ATR_PER_BAR) return null;
 
         double heightAtStart = upperLine.yAt(spanStart) - lowerLine.yAt(spanStart);
         double heightAtSpanEnd = upperLine.yAt(spanEnd) - lowerLine.yAt(spanEnd);
@@ -165,9 +166,9 @@ public class WedgeDetectRule implements Rule {
         payload.put("completion_pct", completion);
         payload.put("wedge_type", wedgeType);
         payload.put("bias", bias);
-        payload.put("upper_slope_pct_per_bar", upperSlopePct);
-        payload.put("lower_slope_pct_per_bar", lowerSlopePct);
-        payload.put("slope_diff_pct_per_bar", slopeDiff);
+        payload.put("upper_slope_atr_per_bar", upperSlopeAtr);
+        payload.put("lower_slope_atr_per_bar", lowerSlopeAtr);
+        payload.put("slope_diff_atr_per_bar", slopeDiff);
         payload.put("convergence_pct", convergence);
         payload.put("upper_line_at_eval", upperAtEval);
         payload.put("lower_line_at_eval", lowerAtEval);

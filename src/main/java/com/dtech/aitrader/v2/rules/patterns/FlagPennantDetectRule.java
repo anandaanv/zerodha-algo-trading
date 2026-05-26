@@ -53,8 +53,9 @@ public class FlagPennantDetectRule implements Rule {
     private static final int MAX_TOUCHES_PER_LINE = 4;
     private static final int MAX_CONSOLIDATION_BARS = 80;
     private static final int MIN_CONSOLIDATION_BARS = 4;
-    private static final double MIN_CONSOLIDATION_SLOPE_PCT_PER_BAR = 0.0003;
-    private static final double FLAG_SLOPE_DIFF_PCT_PER_BAR = 0.0008;
+    /** Slope in ATR-per-bar units per owner direction {@code 79a97439}. */
+    private static final double MIN_CONSOLIDATION_SLOPE_ATR_PER_BAR = 0.012;
+    private static final double FLAG_SLOPE_DIFF_ATR_PER_BAR = 0.04;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
     private static final double EMISSION_THRESHOLD = 25.0;
@@ -148,16 +149,15 @@ public class FlagPennantDetectRule implements Rule {
         double lowerAtConsEnd = lowerLine.yAt(consEnd);
         if (upperAtConsStart <= lowerAtConsStart || upperAtConsEnd <= lowerAtConsEnd) return null;
 
-        double upperMean = lineMeanPrice(consHighs);
-        double lowerMean = lineMeanPrice(consLows);
-        double upperSlopePct = upperMean > 0 ? upperLine.slope / upperMean : 0.0;
-        double lowerSlopePct = lowerMean > 0 ? lowerLine.slope / lowerMean : 0.0;
+        // Owner direction 79a97439: slope in ATR-per-bar units.
+        double upperSlopeAtr = upperLine.slope / atr;
+        double lowerSlopeAtr = lowerLine.slope / atr;
 
         boolean upPole = pole.up;
-        boolean upperDown = upperSlopePct <= -MIN_CONSOLIDATION_SLOPE_PCT_PER_BAR;
-        boolean upperUp = upperSlopePct >= MIN_CONSOLIDATION_SLOPE_PCT_PER_BAR;
-        boolean lowerDown = lowerSlopePct <= -MIN_CONSOLIDATION_SLOPE_PCT_PER_BAR;
-        boolean lowerUp = lowerSlopePct >= MIN_CONSOLIDATION_SLOPE_PCT_PER_BAR;
+        boolean upperDown = upperSlopeAtr <= -MIN_CONSOLIDATION_SLOPE_ATR_PER_BAR;
+        boolean upperUp = upperSlopeAtr >= MIN_CONSOLIDATION_SLOPE_ATR_PER_BAR;
+        boolean lowerDown = lowerSlopeAtr <= -MIN_CONSOLIDATION_SLOPE_ATR_PER_BAR;
+        boolean lowerUp = lowerSlopeAtr >= MIN_CONSOLIDATION_SLOPE_ATR_PER_BAR;
 
         boolean isFlag = false;
         boolean isPennant = false;
@@ -170,8 +170,8 @@ public class FlagPennantDetectRule implements Rule {
         }
         if (!isFlag && !isPennant) return null;
 
-        double slopeDiff = Math.abs(upperSlopePct - lowerSlopePct);
-        if (isFlag && slopeDiff > FLAG_SLOPE_DIFF_PCT_PER_BAR) return null;
+        double slopeDiff = Math.abs(upperSlopeAtr - lowerSlopeAtr);
+        if (isFlag && slopeDiff > FLAG_SLOPE_DIFF_ATR_PER_BAR) return null;
         String patternType = isFlag ? "flag" : "pennant";
 
         int evalIdx = Math.min(endIdx, consEnd + BREAK_LOOKFORWARD_BARS);
@@ -219,9 +219,9 @@ public class FlagPennantDetectRule implements Rule {
         payload.put("lower_line_at_eval", lowerAtEval);
         payload.put("upper_line_at_now", upperLine.yAt(endIdx));
         payload.put("lower_line_at_now", lowerLine.yAt(endIdx));
-        payload.put("upper_slope_pct_per_bar", upperSlopePct);
-        payload.put("lower_slope_pct_per_bar", lowerSlopePct);
-        payload.put("slope_diff_pct_per_bar", slopeDiff);
+        payload.put("upper_slope_atr_per_bar", upperSlopeAtr);
+        payload.put("lower_slope_atr_per_bar", lowerSlopeAtr);
+        payload.put("slope_diff_atr_per_bar", slopeDiff);
         payload.put("upper_touches", consHighs.size());
         payload.put("lower_touches", consLows.size());
         payload.put("upper_fit_residual_atr", upperLine.maxResidual / atr);

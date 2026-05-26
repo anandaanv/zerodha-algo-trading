@@ -50,8 +50,18 @@ public class TriangleDetectRule implements Rule {
     private static final int MAX_TOUCHES_PER_LINE = 4;
     private static final int MAX_TRIANGLE_SPAN_BARS = 200;
     private static final int MIN_TRIANGLE_SPAN_BARS = 6;
-    private static final double FLAT_SLOPE_PCT_PER_BAR = 0.0008;
-    private static final double TREND_SLOPE_PCT_PER_BAR = 0.0010;
+    /**
+     * Slope classification in ATR-PER-BAR units per owner direction {@code 79a97439}
+     * (supersedes the earlier %-per-bar formulation in {@code 6321cdbd}). All distances —
+     * including the rise component of a slope — go in degree-matched ATR per {@code 4d3cb3a7}.
+     * "Flat": |slope/ATR| ≤ {@value #FLAT_SLOPE_ATR_PER_BAR}. "Trending": |slope/ATR| ≥
+     * {@value #TREND_SLOPE_ATR_PER_BAR}. Calibrated against synthetic fixtures (mean ≈ 1400,
+     * ATR ≈ 30) so {@code 0.0008 * 1400 / 30 ≈ 0.04} maps to old FLAT and {@code 0.0010 * 1400 / 30
+     * ≈ 0.05} maps to old TREND. TF-invariant: Day bar slope and ATR scale together; Hour bar
+     * slope and ATR scale together; the ratio is consistent.
+     */
+    private static final double FLAT_SLOPE_ATR_PER_BAR = 0.04;
+    private static final double TREND_SLOPE_ATR_PER_BAR = 0.05;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
     private static final double EMISSION_THRESHOLD = 25.0;
@@ -124,16 +134,15 @@ public class TriangleDetectRule implements Rule {
         // triangle/channel/wedge — the prior endIdx-only check fired on already-crossed lines.
         if (linesCrossWithinSpan(upperLine, lowerLine, spanStart, spanEnd)) return null;
 
-        double upperMean = lineMeanPrice(windowHighs);
-        double lowerMean = lineMeanPrice(windowLows);
-        double upperSlopePct = upperMean > 0 ? upperLine.slope / upperMean : 0.0;
-        double lowerSlopePct = lowerMean > 0 ? lowerLine.slope / lowerMean : 0.0;
-        boolean upperFlat = Math.abs(upperSlopePct) <= FLAT_SLOPE_PCT_PER_BAR;
-        boolean lowerFlat = Math.abs(lowerSlopePct) <= FLAT_SLOPE_PCT_PER_BAR;
-        boolean upperFalling = upperSlopePct <= -TREND_SLOPE_PCT_PER_BAR;
-        boolean lowerRising = lowerSlopePct >= TREND_SLOPE_PCT_PER_BAR;
-        boolean upperRising = upperSlopePct >= TREND_SLOPE_PCT_PER_BAR;
-        boolean lowerFalling = lowerSlopePct <= -TREND_SLOPE_PCT_PER_BAR;
+        // Owner direction 79a97439: slope in ATR-per-bar units (TF-and-volatility invariant).
+        double upperSlopeAtr = upperLine.slope / atr;
+        double lowerSlopeAtr = lowerLine.slope / atr;
+        boolean upperFlat = Math.abs(upperSlopeAtr) <= FLAT_SLOPE_ATR_PER_BAR;
+        boolean lowerFlat = Math.abs(lowerSlopeAtr) <= FLAT_SLOPE_ATR_PER_BAR;
+        boolean upperFalling = upperSlopeAtr <= -TREND_SLOPE_ATR_PER_BAR;
+        boolean lowerRising = lowerSlopeAtr >= TREND_SLOPE_ATR_PER_BAR;
+        boolean upperRising = upperSlopeAtr >= TREND_SLOPE_ATR_PER_BAR;
+        boolean lowerFalling = lowerSlopeAtr <= -TREND_SLOPE_ATR_PER_BAR;
 
         String triangleType;
         String bias;
@@ -212,8 +221,8 @@ public class TriangleDetectRule implements Rule {
         payload.put("completion_pct", completion);
         payload.put("triangle_type", triangleType);
         payload.put("bias", bias);
-        payload.put("upper_slope_pct_per_bar", upperSlopePct);
-        payload.put("lower_slope_pct_per_bar", lowerSlopePct);
+        payload.put("upper_slope_atr_per_bar", upperSlopeAtr);
+        payload.put("lower_slope_atr_per_bar", lowerSlopeAtr);
         payload.put("upper_line_at_eval", upperAtEval);
         payload.put("lower_line_at_eval", lowerAtEval);
         payload.put("upper_line_at_now", upperLine.yAt(endIdx));

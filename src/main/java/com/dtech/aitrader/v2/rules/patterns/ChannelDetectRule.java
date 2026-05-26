@@ -42,13 +42,13 @@ public class ChannelDetectRule implements Rule {
     private static final int MAX_CHANNEL_SPAN_BARS = 250;
     private static final int MIN_CHANNEL_SPAN_BARS = 6;
     /**
-     * Owner slope-hysteresis fix per `aee70944`: channel's minimum sloped gate is raised so a
-     * barely-sloped line no longer qualifies as BOTH rectangle (flat) AND channel (sloped).
-     * Was 0.0005. Combined with Rectangle's FLAT_SLOPE_PCT_PER_BAR=0.0004 this leaves a
-     * dead-band [0.0004, 0.0008] where neither rule fires — gate-boundary artifact eliminated.
+     * Slope in ATR-per-bar units per owner direction {@code 79a97439} (supersedes the
+     * %-per-bar formulation which was TF-blind per {@code 6321cdbd}). Hysteresis dead-band
+     * with Rectangle's {@code FLAT_SLOPE_ATR_PER_BAR=0.02} preserved per {@code aee70944}:
+     * range [0.02, 0.04] is ambiguous — neither rectangle nor channel fires.
      */
-    private static final double MIN_CHANNEL_SLOPE_PCT_PER_BAR = 0.0008;
-    private static final double MAX_SLOPE_DIFF_PCT_PER_BAR = 0.0005;
+    private static final double MIN_CHANNEL_SLOPE_ATR_PER_BAR = 0.04;
+    private static final double MAX_SLOPE_DIFF_ATR_PER_BAR = 0.025;
     private static final double MAX_CONVERGENCE_PCT = 0.20;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
@@ -112,19 +112,18 @@ public class ChannelDetectRule implements Rule {
 
         if (linesCrossWithinSpan(upperLine, lowerLine, spanStart, spanEnd)) return null;
 
-        double upperMean = lineMeanPrice(windowHighs);
-        double lowerMean = lineMeanPrice(windowLows);
-        double upperSlopePct = upperMean > 0 ? upperLine.slope / upperMean : 0.0;
-        double lowerSlopePct = lowerMean > 0 ? lowerLine.slope / lowerMean : 0.0;
+        // Owner direction 79a97439: slope in ATR-per-bar units.
+        double upperSlopeAtr = upperLine.slope / atr;
+        double lowerSlopeAtr = lowerLine.slope / atr;
 
-        boolean bothRising = upperSlopePct >= MIN_CHANNEL_SLOPE_PCT_PER_BAR
-                && lowerSlopePct >= MIN_CHANNEL_SLOPE_PCT_PER_BAR;
-        boolean bothFalling = upperSlopePct <= -MIN_CHANNEL_SLOPE_PCT_PER_BAR
-                && lowerSlopePct <= -MIN_CHANNEL_SLOPE_PCT_PER_BAR;
+        boolean bothRising = upperSlopeAtr >= MIN_CHANNEL_SLOPE_ATR_PER_BAR
+                && lowerSlopeAtr >= MIN_CHANNEL_SLOPE_ATR_PER_BAR;
+        boolean bothFalling = upperSlopeAtr <= -MIN_CHANNEL_SLOPE_ATR_PER_BAR
+                && lowerSlopeAtr <= -MIN_CHANNEL_SLOPE_ATR_PER_BAR;
         if (!bothRising && !bothFalling) return null;
 
-        double slopeDiff = Math.abs(upperSlopePct - lowerSlopePct);
-        if (slopeDiff > MAX_SLOPE_DIFF_PCT_PER_BAR) return null;
+        double slopeDiff = Math.abs(upperSlopeAtr - lowerSlopeAtr);
+        if (slopeDiff > MAX_SLOPE_DIFF_ATR_PER_BAR) return null;
 
         double heightAtStart = upperLine.yAt(spanStart) - lowerLine.yAt(spanStart);
         double heightAtSpanEnd = upperLine.yAt(spanEnd) - lowerLine.yAt(spanEnd);
@@ -172,9 +171,9 @@ public class ChannelDetectRule implements Rule {
         payload.put("channel_direction", channelDirection);
         payload.put("channel_state", channelState);
         payload.put("bias", bias);
-        payload.put("upper_slope_pct_per_bar", upperSlopePct);
-        payload.put("lower_slope_pct_per_bar", lowerSlopePct);
-        payload.put("slope_diff_pct_per_bar", slopeDiff);
+        payload.put("upper_slope_atr_per_bar", upperSlopeAtr);
+        payload.put("lower_slope_atr_per_bar", lowerSlopeAtr);
+        payload.put("slope_diff_atr_per_bar", slopeDiff);
         payload.put("upper_line_at_eval", upperAtEval);
         payload.put("lower_line_at_eval", lowerAtEval);
         payload.put("upper_line_at_now", upperLine.yAt(endIdx));
@@ -241,7 +240,7 @@ public class ChannelDetectRule implements Rule {
         double lowerFitFrac = clamp01(1.0 - lower.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         c += 5.0 * upperFitFrac;
         c += 5.0 * lowerFitFrac;
-        double parallelismFrac = clamp01(1.0 - slopeDiff / MAX_SLOPE_DIFF_PCT_PER_BAR);
+        double parallelismFrac = clamp01(1.0 - slopeDiff / MAX_SLOPE_DIFF_ATR_PER_BAR);
         c += 10.0 * parallelismFrac;
         double stabilityFrac = clamp01(1.0 - Math.abs(convergenceFrac) / MAX_CONVERGENCE_PCT);
         c += 10.0 * stabilityFrac;

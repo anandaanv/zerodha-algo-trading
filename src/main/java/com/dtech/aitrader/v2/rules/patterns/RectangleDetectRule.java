@@ -44,12 +44,12 @@ public class RectangleDetectRule implements Rule {
     private static final int MAX_RECT_SPAN_BARS = 250;
     private static final int MIN_RECT_SPAN_BARS = 6;
     /**
-     * Owner slope-hysteresis fix per `aee70944`: rectangle's "flat" gate is tightened so a
-     * barely-sloped line no longer qualifies as BOTH rectangle (flat) AND channel (sloped).
-     * Was 0.0008. Combined with Channel's MIN_CHANNEL_SLOPE_PCT_PER_BAR=0.0008 this leaves a
-     * dead-band [0.0004, 0.0008] where neither rule fires — gate-boundary artifact eliminated.
+     * Slope in ATR-per-bar units per owner direction {@code 79a97439} (supersedes the
+     * %-per-bar formulation which was TF-blind per {@code 6321cdbd}). Hysteresis dead-band
+     * with Channel's {@code MIN_CHANNEL_SLOPE_ATR_PER_BAR=0.04} preserved per {@code aee70944}:
+     * range [0.02, 0.04] is ambiguous — neither rectangle nor channel fires.
      */
-    private static final double FLAT_SLOPE_PCT_PER_BAR = 0.0004;
+    private static final double FLAT_SLOPE_ATR_PER_BAR = 0.02;
     private static final double MIN_RECT_HEIGHT_ATR = 1.5;
     private static final double LINE_FIT_RESIDUAL_ATR = 1.0;
     private static final double BASE_PRIOR = 0.40;
@@ -111,12 +111,11 @@ public class RectangleDetectRule implements Rule {
         LineFit lowerLine = fitLine(windowLows);
         if (upperLine == null || lowerLine == null) return null;
 
-        double upperMean = lineMeanPrice(windowHighs);
-        double lowerMean = lineMeanPrice(windowLows);
-        double upperSlopePct = upperMean > 0 ? upperLine.slope / upperMean : 0.0;
-        double lowerSlopePct = lowerMean > 0 ? lowerLine.slope / lowerMean : 0.0;
-        boolean upperFlat = Math.abs(upperSlopePct) < FLAT_SLOPE_PCT_PER_BAR;
-        boolean lowerFlat = Math.abs(lowerSlopePct) < FLAT_SLOPE_PCT_PER_BAR;
+        // Owner direction 79a97439: slope in ATR-per-bar units.
+        double upperSlopeAtr = upperLine.slope / atr;
+        double lowerSlopeAtr = lowerLine.slope / atr;
+        boolean upperFlat = Math.abs(upperSlopeAtr) < FLAT_SLOPE_ATR_PER_BAR;
+        boolean lowerFlat = Math.abs(lowerSlopeAtr) < FLAT_SLOPE_ATR_PER_BAR;
         if (!upperFlat || !lowerFlat) return null;
 
         int evalIdx = Math.min(endIdx, spanEnd + BREAK_LOOKFORWARD_BARS);
@@ -146,7 +145,7 @@ public class RectangleDetectRule implements Rule {
         boolean confirmedBreak = broken || alreadyAbove || alreadyBelow;
 
         double completion = computeCompletion(windowHighs, windowLows, upperLine, lowerLine,
-                upperSlopePct, lowerSlopePct, atr, closeAt, upperAtEval, lowerAtEval, confirmedBreak);
+                upperSlopeAtr, lowerSlopeAtr, atr, closeAt, upperAtEval, lowerAtEval, confirmedBreak);
         if (completion < EMISSION_THRESHOLD) return null;
         if (!emittedSpanEnds.add(spanEnd)) return null;
 
@@ -163,8 +162,8 @@ public class RectangleDetectRule implements Rule {
         payload.put("lower_line_at_now", lowerLine.yAt(endIdx));
         payload.put("rect_height", rectHeight);
         payload.put("rect_height_atr", rectHeight / atr);
-        payload.put("upper_slope_pct_per_bar", upperSlopePct);
-        payload.put("lower_slope_pct_per_bar", lowerSlopePct);
+        payload.put("upper_slope_atr_per_bar", upperSlopeAtr);
+        payload.put("lower_slope_atr_per_bar", lowerSlopeAtr);
         payload.put("upper_touches", windowHighs.size());
         payload.put("lower_touches", windowLows.size());
         payload.put("upper_fit_residual_atr", upperLine.maxResidual / atr);
@@ -206,7 +205,7 @@ public class RectangleDetectRule implements Rule {
 
     private double computeCompletion(List<PivotRef> highs, List<PivotRef> lows,
                                       LineFit upper, LineFit lower,
-                                      double upperSlopePct, double lowerSlopePct,
+                                      double upperSlopeAtr, double lowerSlopeAtr,
                                       double atr, double closeAt,
                                       double upperAtEval, double lowerAtEval,
                                       boolean confirmedBreak) {
@@ -218,8 +217,8 @@ public class RectangleDetectRule implements Rule {
         double lowerFitFrac = clamp01(1.0 - lower.maxResidual / (atr * LINE_FIT_RESIDUAL_ATR));
         c += 5.0 * upperFitFrac;
         c += 5.0 * lowerFitFrac;
-        double upperFlatFrac = clamp01(1.0 - Math.abs(upperSlopePct) / FLAT_SLOPE_PCT_PER_BAR);
-        double lowerFlatFrac = clamp01(1.0 - Math.abs(lowerSlopePct) / FLAT_SLOPE_PCT_PER_BAR);
+        double upperFlatFrac = clamp01(1.0 - Math.abs(upperSlopeAtr) / FLAT_SLOPE_ATR_PER_BAR);
+        double lowerFlatFrac = clamp01(1.0 - Math.abs(lowerSlopeAtr) / FLAT_SLOPE_ATR_PER_BAR);
         c += 7.5 * upperFlatFrac;
         c += 7.5 * lowerFlatFrac;
         double distToUpper = Math.max(0, upperAtEval - closeAt);
