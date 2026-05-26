@@ -49,7 +49,7 @@ class PatternContextAttacherTest {
         SymbolContext base = baseCtx("RELIANCE", "Week",
                 Map.of("Day", List.of(pivot("2026-04-29T09:45:00Z", 1318.7, PivotType.LOW))));
 
-        PatternContextAttacher attacher = new PatternContextAttacher(instrumentRepo, barsLoader);
+        PatternContextAttacher attacher = new PatternContextAttacher(instrumentRepo, barsLoader, new com.dtech.aitrader.v2.rules.patterns.dataload.CandleSwingExtractor());
         SymbolContext out = attacher.attach(base, "Day");
 
         assertNotNull(out.getSeries(), "series should be populated");
@@ -69,7 +69,7 @@ class PatternContextAttacherTest {
         when(instrumentRepo.findByTradingsymbolAndExchangeIn(any(), any())).thenReturn(null);
 
         SymbolContext base = baseCtx("UNKNOWN", "Week", Map.of());
-        PatternContextAttacher attacher = new PatternContextAttacher(instrumentRepo, barsLoader);
+        PatternContextAttacher attacher = new PatternContextAttacher(instrumentRepo, barsLoader, new com.dtech.aitrader.v2.rules.patterns.dataload.CandleSwingExtractor());
         SymbolContext out = attacher.attach(base, "Day");
 
         assertSame(base, out, "unknown instrument ⇒ return base unchanged");
@@ -82,7 +82,7 @@ class PatternContextAttacherTest {
         BarsLoader barsLoader = Mockito.mock(BarsLoader.class);
         SymbolContext base = baseCtx("RELIANCE", "Week", Map.of());
 
-        PatternContextAttacher attacher = new PatternContextAttacher(instrumentRepo, barsLoader);
+        PatternContextAttacher attacher = new PatternContextAttacher(instrumentRepo, barsLoader, new com.dtech.aitrader.v2.rules.patterns.dataload.CandleSwingExtractor());
         SymbolContext out = attacher.attach(base, "NotARealTf");
         assertSame(base, out);
     }
@@ -104,7 +104,7 @@ class PatternContextAttacherTest {
         SymbolContext base = baseCtx("RELIANCE", "Week",
                 Map.of("Week", List.of(pivot("2026-04-01T00:00:00Z", 1500.0, PivotType.HIGH))));
 
-        PatternContextAttacher attacher = new PatternContextAttacher(instrumentRepo, barsLoader);
+        PatternContextAttacher attacher = new PatternContextAttacher(instrumentRepo, barsLoader, new com.dtech.aitrader.v2.rules.patterns.dataload.CandleSwingExtractor());
         SymbolContext out = attacher.attach(base, "Day");
 
         assertNotNull(out.getSeries(), "series populated even if no Day pivots in bundle");

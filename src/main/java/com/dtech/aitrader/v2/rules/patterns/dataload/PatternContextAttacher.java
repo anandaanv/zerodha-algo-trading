@@ -39,6 +39,7 @@ public class PatternContextAttacher {
 
     private final InstrumentRepository instrumentRepository;
     private final BarsLoader barsLoader;
+    private final CandleSwingExtractor candleSwingExtractor;
 
     /**
      * Augment a SymbolContext with bar series + pivots aligned to a target TF, so pattern
@@ -98,6 +99,69 @@ public class PatternContextAttacher {
         return base.toBuilder()
                 .series(series)
                 .pivots(pivots)
+                .build();
+    }
+
+    /**
+     * Candle-swing variant per owner direction {@code 4a322dbe}: substrate-independent endpoint
+     * where pattern pivots come from local-extremum candle highs/lows, NOT the smoothed zigzag.
+     * Same interface as {@link #attach(SymbolContext, String)} but the {@code pivots} field on
+     * the returned context is the {@link CandleSwingExtractor} output for the requested TF's bar
+     * series. EW context ({@code pivotsByTf}) is left untouched — only the pattern engine's
+     * own {@code pivots} field is rebased on candles.
+     *
+     * @param base           base context (typically from {@code ScanContextLoader.loadById})
+     * @param targetTfLabel  "Week" | "Day" | "OneHour" — TF for both bar load and swing extraction
+     * @return context with {@code series} loaded + {@code pivots} rebased on candle swings,
+     *         or {@code base} on lookup failure
+     */
+    public SymbolContext attachWithCandleSwings(SymbolContext base, String targetTfLabel) {
+        return attachWithCandleSwings(base, targetTfLabel,
+                CandleSwingExtractor.DEFAULT_LOOKBACK_N,
+                CandleSwingExtractor.DEFAULT_MIN_SWING_ATR);
+    }
+
+    public SymbolContext attachWithCandleSwings(SymbolContext base, String targetTfLabel,
+                                                  int lookbackN, double minSwingAtr) {
+        if (base == null) return null;
+        if (base.getSymbol() == null) {
+            log.warn("[pattern-loader] base context has no symbol");
+            return base;
+        }
+        Interval interval;
+        try {
+            interval = Interval.valueOf(targetTfLabel);
+        } catch (IllegalArgumentException e) {
+            log.warn("[pattern-loader] unknown TF label '{}'", targetTfLabel);
+            return base;
+        }
+        Instrument instrument = instrumentRepository.findByTradingsymbolAndExchangeIn(
+                base.getSymbol(), new String[]{"NSE"});
+        if (instrument == null) {
+            log.warn("[pattern-loader] instrument not found for symbol={}", base.getSymbol());
+            return base;
+        }
+        BarSeries series;
+        try {
+            series = barsLoader.loadInstrumentSeries(instrument, interval);
+        } catch (DataFetchException e) {
+            log.warn("[pattern-loader] bar load failed symbol={} interval={}: {}",
+                    base.getSymbol(), interval, e.getMessage());
+            return base;
+        }
+        if (series == null || series.getBarCount() == 0) {
+            log.warn("[pattern-loader] empty series for symbol={} interval={}", base.getSymbol(), interval);
+            return base;
+        }
+
+        List<MarketStructurePoint> candleSwings =
+                candleSwingExtractor.extract(series, lookbackN, minSwingAtr);
+        log.info("[pattern-loader-candle] attached symbol={} interval={} bars={} candle-swings={}",
+                base.getSymbol(), interval, series.getBarCount(), candleSwings.size());
+
+        return base.toBuilder()
+                .series(series)
+                .pivots(candleSwings)
                 .build();
     }
 }

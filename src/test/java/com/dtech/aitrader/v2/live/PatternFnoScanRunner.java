@@ -45,6 +45,8 @@ class PatternFnoScanRunner {
 
     private static final String DEFAULT_STOCKS =
             "RELIANCE,ICICIBANK,TCS,HDFCBANK,INFY,MARUTI,SBIN,AXISBANK,TATASTEEL,SUNPHARMA";
+    /** "zigzag" (default) or "candle" — pattern pivot substrate per owner direction 4a322dbe. */
+    private static final String SUBSTRATE_ENV = "PATTERN_SUBSTRATE";
 
     @Autowired private MultiPassEngine engine;
     @Autowired private List<Rule> allRules;
@@ -54,17 +56,19 @@ class PatternFnoScanRunner {
     void scan_pattern_firings_across_fno_stocks() throws Exception {
         String stocksEnv = System.getenv().getOrDefault("PATTERN_SCAN_STOCKS", DEFAULT_STOCKS);
         String patternTf = System.getenv().getOrDefault("PATTERN_SCAN_TF", "Day");
+        String substrate = System.getenv().getOrDefault(SUBSTRATE_ENV, "zigzag");
         List<String> symbols = List.of(stocksEnv.split(","));
 
         Map<String, Object> overallResult = new LinkedHashMap<>();
         overallResult.put("pattern_tf", patternTf);
+        overallResult.put("substrate", substrate);
         overallResult.put("scanned_at", java.time.Instant.now().toString());
         overallResult.put("stocks", new ArrayList<>());
 
         for (String sym : symbols) {
             String trimmed = sym.trim();
             if (trimmed.isEmpty()) continue;
-            Map<String, Object> entry = runOne(trimmed, patternTf);
+            Map<String, Object> entry = runOne(trimmed, patternTf, substrate);
             ((List<Map<String, Object>>) overallResult.get("stocks")).add(entry);
         }
 
@@ -79,10 +83,11 @@ class PatternFnoScanRunner {
         System.out.println(json);
     }
 
-    private Map<String, Object> runOne(String symbol, String patternTf) {
+    private Map<String, Object> runOne(String symbol, String patternTf, String substrate) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("symbol", symbol);
         entry.put("pattern_tf", patternTf);
+        entry.put("substrate", substrate);
 
         Path bundlePath = Path.of("/tmp/bundle-" + symbol.toLowerCase() + ".md");
         if (!Files.exists(bundlePath)) {
@@ -107,8 +112,10 @@ class PatternFnoScanRunner {
                     .annotations(parsed.getAnnotations())
                     .build();
 
-            // Attach Day/Hr bars + pivots for the pattern engine.
-            ctx = patternContextAttacher.attach(ctx, patternTf);
+            // Attach pattern-side data per substrate choice (owner direction 4a322dbe).
+            ctx = "candle".equalsIgnoreCase(substrate)
+                    ? patternContextAttacher.attachWithCandleSwings(ctx, patternTf)
+                    : patternContextAttacher.attach(ctx, patternTf);
 
             List<Firing> firings = engine.run(ctx, allRules);
 
