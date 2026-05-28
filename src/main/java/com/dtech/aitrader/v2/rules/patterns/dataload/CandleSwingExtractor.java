@@ -13,6 +13,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
+ * <h2>RETIRED — owner directive {@code 60d21c43} (2026-05-28).</h2>
+ * The candle-substrate path was retired after the calibration sweep {@code cf487bd1} proved
+ * STRUCTURAL over-firing that knob-tuning (N, minSwingAtr) cannot fix: rectangle 45× zigzag
+ * at strictest config, flag-pennant under-fires at same setting, no (N, minSwingAtr) brings
+ * Day AND Hour to similar ratios. The candle DIRECTION was right (H&S detection retained at
+ * every config — diagnostic {@code 43493549} resolved), but the swing-extraction PRIMITIVE was
+ * wrong. The correct primitive is CLUSTER-RESPECT on the zigzag substrate (SPEC-009 {@code
+ * 36b585f6}, build plan SPEC-010 {@code 3663d889}).
+ *
+ * <p>This class is NOT deleted — it stays as a candidate-source available to the cluster-respect
+ * tests if needed, AND because the rollback tag {@code pattern-engine-zigzag-stable-v1} reasoning
+ * depends on the Phase 2 history. {@code PATTERN_SUBSTRATE=zigzag} is the only supported value
+ * going forward. Do not invoke this as the pattern primitive.
+ *
+ * <hr>
+ *
+ * <h2>Original intent (preserved for historical context):</h2>
+ *
  * Candle-swing pivot extractor per owner direction {@code 4a322dbe} — picks swing highs/lows
  * directly from candle high/low values via a local-extremum scan, NOT from the smoothed zigzag.
  *

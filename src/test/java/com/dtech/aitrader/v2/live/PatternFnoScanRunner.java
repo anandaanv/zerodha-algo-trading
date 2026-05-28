@@ -45,8 +45,17 @@ class PatternFnoScanRunner {
 
     private static final String DEFAULT_STOCKS =
             "RELIANCE,ICICIBANK,TCS,HDFCBANK,INFY,MARUTI,SBIN,AXISBANK,TATASTEEL,SUNPHARMA";
-    /** "zigzag" (default) or "candle" — pattern pivot substrate per owner direction 4a322dbe. */
+    /**
+     * Pattern pivot substrate. <b>zigzag is the ONLY supported value</b> per owner directive
+     * {@code 60d21c43} (candle path retired 2026-05-28 after calibration sweep {@code cf487bd1}
+     * proved structural over-firing). The {@code candle} branch is kept callable for cluster-respect
+     * validation tests (SPEC-009 {@code 36b585f6}) only, not for pattern production.
+     */
     private static final String SUBSTRATE_ENV = "PATTERN_SUBSTRATE";
+    /** Candle-substrate lookback-N override (env CANDLE_LOOKBACK_N); RETIRED — for cluster-respect validation tests only. */
+    private static final String CANDLE_N_ENV = "CANDLE_LOOKBACK_N";
+    /** Candle-substrate min swing height in ATR (env CANDLE_MIN_SWING_ATR); RETIRED — for cluster-respect validation tests only. */
+    private static final String CANDLE_MIN_ATR_ENV = "CANDLE_MIN_SWING_ATR";
 
     @Autowired private MultiPassEngine engine;
     @Autowired private List<Rule> allRules;
@@ -59,16 +68,21 @@ class PatternFnoScanRunner {
         String substrate = System.getenv().getOrDefault(SUBSTRATE_ENV, "zigzag");
         List<String> symbols = List.of(stocksEnv.split(","));
 
+        Integer candleN = parseIntEnv(CANDLE_N_ENV);
+        Double candleMinAtr = parseDoubleEnv(CANDLE_MIN_ATR_ENV);
+
         Map<String, Object> overallResult = new LinkedHashMap<>();
         overallResult.put("pattern_tf", patternTf);
         overallResult.put("substrate", substrate);
+        if (candleN != null) overallResult.put("candle_lookback_n", candleN);
+        if (candleMinAtr != null) overallResult.put("candle_min_swing_atr", candleMinAtr);
         overallResult.put("scanned_at", java.time.Instant.now().toString());
         overallResult.put("stocks", new ArrayList<>());
 
         for (String sym : symbols) {
             String trimmed = sym.trim();
             if (trimmed.isEmpty()) continue;
-            Map<String, Object> entry = runOne(trimmed, patternTf, substrate);
+            Map<String, Object> entry = runOne(trimmed, patternTf, substrate, candleN, candleMinAtr);
             ((List<Map<String, Object>>) overallResult.get("stocks")).add(entry);
         }
 
@@ -83,7 +97,8 @@ class PatternFnoScanRunner {
         System.out.println(json);
     }
 
-    private Map<String, Object> runOne(String symbol, String patternTf, String substrate) {
+    private Map<String, Object> runOne(String symbol, String patternTf, String substrate,
+                                         Integer candleN, Double candleMinAtr) {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("symbol", symbol);
         entry.put("pattern_tf", patternTf);
@@ -113,9 +128,13 @@ class PatternFnoScanRunner {
                     .build();
 
             // Attach pattern-side data per substrate choice (owner direction 4a322dbe).
-            ctx = "candle".equalsIgnoreCase(substrate)
-                    ? patternContextAttacher.attachWithCandleSwings(ctx, patternTf)
-                    : patternContextAttacher.attach(ctx, patternTf);
+            if ("candle".equalsIgnoreCase(substrate)) {
+                ctx = (candleN != null && candleMinAtr != null)
+                        ? patternContextAttacher.attachWithCandleSwings(ctx, patternTf, candleN, candleMinAtr)
+                        : patternContextAttacher.attachWithCandleSwings(ctx, patternTf);
+            } else {
+                ctx = patternContextAttacher.attach(ctx, patternTf);
+            }
 
             List<Firing> firings = engine.run(ctx, allRules);
 
@@ -169,5 +188,17 @@ class PatternFnoScanRunner {
         for (String k : keys) {
             if (src.containsKey(k)) dst.put(k, src.get(k));
         }
+    }
+
+    private static Integer parseIntEnv(String name) {
+        String v = System.getenv(name);
+        if (v == null || v.isBlank()) return null;
+        try { return Integer.parseInt(v.trim()); } catch (NumberFormatException e) { return null; }
+    }
+
+    private static Double parseDoubleEnv(String name) {
+        String v = System.getenv(name);
+        if (v == null || v.isBlank()) return null;
+        try { return Double.parseDouble(v.trim()); } catch (NumberFormatException e) { return null; }
     }
 }

@@ -103,7 +103,16 @@ public class PatternContextAttacher {
     }
 
     /**
-     * Candle-swing variant per owner direction {@code 4a322dbe}: substrate-independent endpoint
+     * <p><b>RETIRED per owner directive {@code 60d21c43} (2026-05-28).</b> The candle substrate
+     * was retired after the calibration sweep {@code cf487bd1} proved structural over-firing
+     * unfixable by knob-tuning. The DIRECTION was right (H&S retained at every config — diagnostic
+     * {@code 43493549} resolved), but the swing-extraction PRIMITIVE was wrong. The correct
+     * primitive is CLUSTER-RESPECT on the zigzag substrate (SPEC-009 {@code 36b585f6}). Method
+     * kept (not deleted) per owner direction — demotes to candidate-source for cluster-respect
+     * tests. Do NOT call this from production code paths. Use {@link #attach(SymbolContext, String)}
+     * which routes through the canonical zigzag pivots.
+     *
+     * <p>Candle-swing variant per owner direction {@code 4a322dbe}: substrate-independent endpoint
      * where pattern pivots come from local-extremum candle highs/lows, NOT the smoothed zigzag.
      * Same interface as {@link #attach(SymbolContext, String)} but the {@code pivots} field on
      * the returned context is the {@link CandleSwingExtractor} output for the requested TF's bar
