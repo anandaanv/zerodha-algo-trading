@@ -50,7 +50,7 @@ public class EwClusterConfluenceRule implements Rule {
         List<Firing> clusters = priorFirings.stream()
                 .filter(f -> f.getFamily() == Family.EW)
                 .filter(f -> f.getFiresOn() == FiresOn.FACT)
-                .filter(f -> EwWkClusterScanRule.RULE_ID.equals(f.getRuleId()))
+                .filter(f -> EwClusterRuleIds.WK.equals(f.getRuleId()))
                 .toList();
         List<Firing> candidates = priorFirings.stream()
                 .filter(f -> f.getFamily() == Family.EW)

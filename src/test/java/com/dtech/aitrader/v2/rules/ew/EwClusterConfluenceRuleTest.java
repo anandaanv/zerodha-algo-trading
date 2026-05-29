@@ -200,7 +200,7 @@ class EwClusterConfluenceRuleTest {
         p.put("role", roleStr);
         p.put("touch_count", touchCount);
         return Firing.builder()
-                .id(id).ruleId(EwWkClusterScanRule.RULE_ID).family(Family.EW)
+                .id(id).ruleId(EwClusterRuleIds.WK).family(Family.EW)
                 .pass(Pass.P1_STRUCTURAL).firesOn(FiresOn.FACT)
                 .payload(p).build();
     }

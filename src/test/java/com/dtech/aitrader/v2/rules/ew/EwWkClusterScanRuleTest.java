@@ -33,7 +33,8 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class EwWkClusterScanRuleTest {
 
-    private static final EwWkClusterScanRule RULE = new EwWkClusterScanRule();
+    private static final EwClusterScanRule RULE =
+            new EwClusterScanRule("Week", EwClusterRuleIds.WK, 2.0, 3);
 
     @Test
     void finds_blessed_RELIANCE_clusters() {
@@ -42,7 +43,7 @@ class EwWkClusterScanRuleTest {
 
         assertFalse(emitted.isEmpty(), "must emit at least one cluster FACT");
         for (Firing f : emitted) {
-            assertEquals(EwWkClusterScanRule.RULE_ID, f.getRuleId());
+            assertEquals(EwClusterRuleIds.WK, f.getRuleId());
             assertEquals(Family.EW, f.getFamily());
             assertEquals(Pass.P1_STRUCTURAL, f.getPass());
             assertEquals(FiresOn.FACT, f.getFiresOn());

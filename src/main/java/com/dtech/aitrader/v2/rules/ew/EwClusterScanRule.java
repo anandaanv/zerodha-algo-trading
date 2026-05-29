@@ -12,8 +12,6 @@ import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint.PivotType;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint.StructureLabel;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -27,72 +25,76 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Pass-1 EW Rule-5 cluster scan. Identifies price levels touched multiple times by pivots of the
- * same kind (resistance for HIGHs, support for LOWs). Emits one FACT per identified cluster.
+ * Pass-1 EW Rule-5 cluster scan, generic across TF per owner directive {@code b954cd6e}.
+ * Identifies price levels touched multiple times by reversal pivots and dwell pivots of the
+ * same degree. One CLASS, three Spring-managed INSTANCES (Week / Day / OneHour) defined in
+ * {@link EwClusterScanConfig}.
  *
- * <p>Algorithm: separate HIGH and LOW pivots, sort by price, walk through grouping consecutive
- * prices within ±{@link #bandPct}% of the cluster's running centroid. Clusters with at least
- * {@link #minTouches} pivots are emitted.
- *
- * <p>Defaults (configurable via {@code rules.ew.cluster.*}):
+ * <p>Each instance:
  * <ul>
- *   <li>{@code band_pct} = 2.0% (per spec ab9bd541)</li>
- *   <li>{@code min_touches} = 3 (per blessed reference cde6bbc9 criterion b)</li>
+ *   <li>Reads {@code ctx.pivotsByTf().get(tf)} for its TF (falls back to {@code ctx.pivots()}
+ *       for the legacy single-TF unit-test path).</li>
+ *   <li>Reads {@code ctx.dwellPivots()} filtered to its TF (SPEC-010 Phase 1, owner
+ *       {@code 59fa728f}).</li>
+ *   <li>Emits cluster firings with its own rule-id ({@link EwClusterRuleIds}) so downstream
+ *       readers can target a specific TF's clusters.</li>
  * </ul>
  *
- * <p>Acceptance — RELIANCE blessed reference (criterion b): the 3 clusters ~1361, ~1290-1307,
- * ~1473-1489 must all surface with touch_count ≥ 3.
+ * <p>Algorithm: separate HIGH and LOW pivots and dwell-derived synthetic touches, sort by
+ * price, walk through grouping consecutive prices within ±{@code bandPct} of the cluster's
+ * running centroid. Clusters with at least {@code minTouches} touches are emitted.
+ *
+ * <p>Owner override {@code 75b20b10}: clusters are PRICE-LEVEL touches across pivot KINDS,
+ * not per-kind. The blessed "~1290-1307 support cluster" mixes LOW 1290 (2026) + HIGH 1307.7
+ * (2025) + HIGH 1313 (2022). The cluster's role label is the majority breakdown.
+ *
+ * <p>Dwell touches per owner {@code f1201a45}: HH-dwell → synthetic LOW touch (support
+ * contributor); LL-dwell → synthetic HIGH touch (resistance); INDETERMINATE → LOW default.
+ * Identity-tracked via {@link IdentityHashMap} so the {@code dwell_touches} payload count
+ * is accurate (NOT a value-based heuristic).
  */
-@Component
 @Slf4j
-public class EwWkClusterScanRule implements Rule {
+public class EwClusterScanRule implements Rule {
 
-    public static final String RULE_ID = "EW_WK_CLUSTER_SCAN";
+    private final String tf;
+    private final String ruleId;
+    private final double bandPct;
+    private final int minTouches;
 
-    // Field initializers ensure the production defaults apply even when the rule is constructed
-    // directly via `new` in unit tests (where Spring's @Value injection doesn't run).
-    @Value("${rules.ew.cluster.band-pct:2.0}")
-    private double bandPct = 2.0;
+    public EwClusterScanRule(String tf, String ruleId, double bandPct, int minTouches) {
+        this.tf = tf;
+        this.ruleId = ruleId;
+        this.bandPct = bandPct;
+        this.minTouches = minTouches;
+    }
 
-    @Value("${rules.ew.cluster.min-touches:3}")
-    private int minTouches = 3;
-
-    @Override public String ruleId() { return RULE_ID; }
+    @Override public String ruleId() { return ruleId; }
     @Override public Pass pass() { return Pass.P1_STRUCTURAL; }
     @Override public Family family() { return Family.EW; }
 
+    /** The TF this instance scans (Week / Day / OneHour). Exposed for downstream filtering. */
+    public String tf() { return tf; }
+
     @Override
     public List<Firing> evaluate(SymbolContext ctx, List<Firing> priorFirings) {
-        // Prefer Wk pivots from pivotsByTf if present (real scan-context path); else fall back to
-        // the single-TF context.pivots (unit-test path).
+        // Prefer pivots from pivotsByTf if present (real scan-context path); else fall back to
+        // the single-TF context.pivots (legacy unit-test path).
         List<MarketStructurePoint> pivots = null;
-        if (ctx.getPivotsByTf() != null && ctx.getPivotsByTf().containsKey("Week")) {
-            pivots = ctx.getPivotsByTf().get("Week");
+        if (ctx.getPivotsByTf() != null && ctx.getPivotsByTf().containsKey(tf)) {
+            pivots = ctx.getPivotsByTf().get(tf);
         }
         if (pivots == null) pivots = ctx.getPivots();
         if (pivots == null || pivots.isEmpty()) return List.of();
 
-        // Owner override (75b20b10): clusters are PRICE-LEVEL touches across pivot KINDS, not
-        // per-kind. The blessed "~1290-1307 support cluster" mixes LOW 1290 (2026) + HIGH 1307.7
-        // (2025) + HIGH 1313 (2022). The cluster's TYPE is labelled from the majority breakdown.
-        //
-        // SPEC-010 Phase 1 ({@code 60d21c43}): dwell pivots from {@link SymbolContext#getDwellPivots()}
-        // also contribute touches per owner direction {@code 59fa728f}. HH-dwells (continuation
-        // support per {@code f1201a45}) are mapped to synthetic LOW-kind touches; LL-dwells
-        // (continuation resistance) to synthetic HIGH-kind touches. INDETERMINATE dwells are
-        // included as MIXED — they participate in cluster aggregation but carry no role bias.
         List<MarketStructurePoint> sorted = new ArrayList<>();
         for (MarketStructurePoint p : pivots) {
             if (p.getPivotType() != null) sorted.add(p);
         }
-        // Track synthetic dwell-derived touches by reference identity (NOT a value heuristic)
-        // so downstream payloads can report dwell_touches accurately without conflating with
-        // real reversal pivots that happen to have null RSI etc.
         Set<MarketStructurePoint> dwellSynthetics =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         if (ctx.getDwellPivots() != null) {
             for (DwellPivot d : ctx.getDwellPivots()) {
-                if (!"Week".equals(d.getTf())) continue;
+                if (!tf.equals(d.getTf())) continue;
                 MarketStructurePoint touch = asSyntheticTouch(d);
                 sorted.add(touch);
                 dwellSynthetics.add(touch);
@@ -137,6 +139,7 @@ public class EwWkClusterScanRule implements Rule {
         else role = "mixed";
 
         Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("tf", tf);
         payload.put("centre", centre);
         payload.put("low_edge", min);
         payload.put("high_edge", max);
@@ -155,9 +158,9 @@ public class EwWkClusterScanRule implements Rule {
                 .map(p -> p.getPivotType().name()).toList());
 
         sink.add(Firing.builder()
-                .ruleId(RULE_ID)
+                .ruleId(ruleId)
                 .symbol(ctx.getSymbol())
-                .tf(ctx.getTf())
+                .tf(tf)
                 .asOf(ctx.getAsOf())
                 .family(Family.EW)
                 .pass(Pass.P1_STRUCTURAL)
@@ -173,23 +176,19 @@ public class EwWkClusterScanRule implements Rule {
     }
 
     /**
-     * Synthesise a {@link MarketStructurePoint} that the cluster algorithm can consume from a
-     * {@link DwellPivot}. Per owner {@code f1201a45}: HH-dwell (continuation support) maps to
-     * LOW-kind touch; LL-dwell (continuation resistance) maps to HIGH-kind touch; INDETERMINATE
-     * to LOW (treated as neutral / will not bias role aggregation away from true support).
-     * Marked via {@link StructureLabel#FIRST} so {@link #isDwellSynthetic(MarketStructurePoint)}
-     * can identify it for the {@code dwell_touches} payload field.
+     * Synthesise a {@link MarketStructurePoint} for cluster aggregation from a {@link DwellPivot}.
+     * Per owner {@code f1201a45}: HH-dwell (continuation support) → LOW-kind touch; LL-dwell
+     * (continuation resistance) → HIGH-kind touch; INDETERMINATE → LOW (neutral default).
      */
     private static MarketStructurePoint asSyntheticTouch(DwellPivot dwell) {
         PivotType kind = (dwell.getDirection() == Direction.LL) ? PivotType.HIGH : PivotType.LOW;
         return MarketStructurePoint.builder()
                 .pivotType(kind)
-                .structureLabel(StructureLabel.FIRST) // marker — cluster scan only reads pivotType
+                .structureLabel(StructureLabel.FIRST)
                 .timestamp(dwell.getStartTimestamp())
                 .price(dwell.getCenterPrice())
                 .atrAtPivot(dwell.getAtrUsed())
                 .rsiAtPivot(null)
                 .build();
     }
-
 }

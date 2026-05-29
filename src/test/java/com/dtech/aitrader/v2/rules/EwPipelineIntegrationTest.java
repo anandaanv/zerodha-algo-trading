@@ -10,8 +10,9 @@ import com.dtech.aitrader.v2.rules.ew.EwHardRuleValidatorRule;
 import com.dtech.aitrader.v2.rules.ew.EwLegSubstructureRule;
 import com.dtech.aitrader.v2.rules.ew.EwMacroAnchorRule;
 import com.dtech.aitrader.v2.rules.ew.EwMagnitudeRule;
+import com.dtech.aitrader.v2.rules.ew.EwClusterRuleIds;
+import com.dtech.aitrader.v2.rules.ew.EwClusterScanRule;
 import com.dtech.aitrader.v2.rules.ew.EwWaveCompletionRule;
-import com.dtech.aitrader.v2.rules.ew.EwWkClusterScanRule;
 import com.dtech.aitrader.v2.rules.synthesis.EwVerdictSynthesisRule;
 import com.dtech.aitrader.v2.rules.synthesis.PatternVerdictSynthesisRule;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint;
@@ -66,7 +67,7 @@ class EwPipelineIntegrationTest {
         MultiPassEngine engine = new MultiPassEngine();
         List<Rule> rules = new ArrayList<>(List.of(
                 new EwMacroAnchorRule(),
-                new EwWkClusterScanRule(),
+                new EwClusterScanRule("Week", EwClusterRuleIds.WK, 2.0, 3),
                 new EwAnnotationIntakeRule(),
                 new EwEnumerationRule(),
                 new EwHardRuleValidatorRule(),
@@ -91,7 +92,7 @@ class EwPipelineIntegrationTest {
         assertEquals(1611.8, ((Number) anchors.get(0).getPayload().get("anchor_price")).doubleValue(), 0.001,
                 "blessed anchor price is 1611.8");
 
-        List<Firing> clusters = firingsOf(firings, EwWkClusterScanRule.RULE_ID);
+        List<Firing> clusters = firingsOf(firings, EwClusterRuleIds.WK);
         assertTrue(clusters.size() >= 2,
                 "blessed ≥2 Wk clusters present (~1290 support, ~1473 resistance); got " + clusters.size());
         boolean has1290Cluster = clusters.stream().anyMatch(f -> nearCentre(f, 1290.0, 1310.0));
@@ -199,7 +200,7 @@ class EwPipelineIntegrationTest {
         MultiPassEngine engine = new MultiPassEngine();
         List<Rule> rules = List.of(
                 new EwMacroAnchorRule(),
-                new EwWkClusterScanRule(),
+                new EwClusterScanRule("Week", EwClusterRuleIds.WK, 2.0, 3),
                 new EwAnnotationIntakeRule(),
                 new EwEnumerationRule(),
                 new EwHardRuleValidatorRule(),
