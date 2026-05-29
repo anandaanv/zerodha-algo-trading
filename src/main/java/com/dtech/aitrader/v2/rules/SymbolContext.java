@@ -68,4 +68,21 @@ public class SymbolContext {
      * — this map is additive.
      */
     java.util.Map<String, List<com.dtech.kitecon.service.copilot.dto.MarketStructurePoint>> pivotsByTf;
+
+    /**
+     * Dwell pivots (SPEC-010 Phase 1 per {@code 60d21c43}, design per SPEC-009 {@code 36b585f6}
+     * + dwell spec {@code e603dbf9} + owner refinements {@code 59fa728f} / {@code f1201a45}). A
+     * SEPARATE explicit collection from the alternating reversal-pivot series — owner
+     * constraint {@code 59fa728f}: dwell pivots MUST NOT be spliced into the H-L-H-L
+     * reversal-pivot series; they are LEVELS (consolidation shelves), not turns. Each entry
+     * carries its own {@code tf}, so consumers filter by TF.
+     *
+     * <p>Populated by {@code DwellPivotAttacher} (service pattern, sibling to
+     * {@code PatternContextAttacher}) — the engine never mutates context; pre-attach happens
+     * BEFORE the multi-pass engine runs.
+     *
+     * <p>The reversal-pivot series ({@link #pivots} / {@link #pivotsByTf}) is UNTOUCHED — EW
+     * wave-counting depends on the H-L-H-L alternation invariant.
+     */
+    List<com.dtech.aitrader.v2.rules.ew.dwell.DwellPivot> dwellPivots;
 }

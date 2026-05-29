@@ -5,11 +5,14 @@ import com.dtech.aitrader.v2.rules.Firing;
 import com.dtech.aitrader.v2.rules.FiresOn;
 import com.dtech.aitrader.v2.rules.Pass;
 import com.dtech.aitrader.v2.rules.SymbolContext;
+import com.dtech.aitrader.v2.rules.ew.dwell.Direction;
+import com.dtech.aitrader.v2.rules.ew.dwell.DwellPivot;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint.PivotType;
 import com.dtech.kitecon.service.copilot.dto.MarketStructurePoint.StructureLabel;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -71,6 +74,73 @@ class EwWkClusterScanRuleTest {
                                 && ((Number) p.get("touch_count")).intValue() >= 3
                                 && "support".equals(p.get("role"))),
                 "expected ~1290-1307 support cluster with ≥3 touches; got: " + clusters);
+    }
+
+    @Test
+    void dwell_pivots_contribute_touches_to_a_cluster_at_their_centre() {
+        // Spec contract (SPEC-010 Phase 1 / 60d21c43 / 59fa728f): dwell pivots feed the cluster
+        // scan as additional touches. Two reversal LOWs near 1290 (below minTouches=3) plus a
+        // DWELL with center 1295 (HH = continuation-support) should promote the 1290-zone to a
+        // 3-touch cluster.
+        List<MarketStructurePoint> pivots = new ArrayList<>();
+        pivots.add(pivot(2024,  3, 11, PivotType.LOW, 1290.0));
+        pivots.add(pivot(2025,  9, 22, PivotType.LOW, 1305.0));
+        // High side: a singleton far above to confirm it does NOT cluster
+        pivots.add(pivot(2025, 12, 31, PivotType.HIGH, 1611.8));
+
+        DwellPivot dwell = DwellPivot.builder()
+                .tf("Week")
+                .startTimestamp(Instant.parse("2026-03-02T05:30:00Z"))
+                .endTimestamp(Instant.parse("2026-03-23T05:30:00Z"))
+                .startIdx(50).endIdx(53)
+                .centerPrice(1295.0).bandHi(1300.0).bandLo(1290.0)
+                .atrUsed(30.0).barCount(4)
+                .direction(Direction.HH) // support shelf
+                .build();
+
+        SymbolContext ctx = SymbolContext.builder()
+                .symbol("DWELL-TEST").tf("Week").asOf(LocalDate.of(2026, 5, 22))
+                .pivots(pivots)
+                .dwellPivots(List.of(dwell))
+                .build();
+
+        List<Firing> emitted = RULE.evaluate(ctx, List.of());
+        assertEquals(1, emitted.size(),
+                "exactly one cluster expected (1290 zone promoted by dwell); got: " + emitted);
+        Map<String, Object> payload = emitted.get(0).getPayload();
+        assertEquals(3, ((Number) payload.get("touch_count")).intValue(),
+                "cluster touch_count must include the dwell-derived touch");
+        assertEquals(1, ((Number) payload.get("dwell_touches")).intValue(),
+                "exactly one dwell-derived touch in this cluster");
+        // HH-dwell maps to a synthetic LOW touch → support role wins (2 LOW reversals + 1 LOW dwell)
+        assertEquals("support", payload.get("role"));
+    }
+
+    @Test
+    void dwell_pivots_filtered_by_TF_do_not_contribute_when_tf_mismatches() {
+        // Spec contract (59fa728f): cluster scan reads dwell pivots for ITS tf (Week here).
+        // A Day-tagged dwell at the same price must NOT contribute to the weekly cluster.
+        List<MarketStructurePoint> pivots = new ArrayList<>();
+        pivots.add(pivot(2024,  3, 11, PivotType.LOW, 1290.0));
+        pivots.add(pivot(2025,  9, 22, PivotType.LOW, 1305.0));
+
+        DwellPivot dayDwell = DwellPivot.builder()
+                .tf("Day")  // not Week
+                .centerPrice(1295.0).bandHi(1300.0).bandLo(1290.0)
+                .startTimestamp(Instant.parse("2026-03-02T05:30:00Z"))
+                .atrUsed(30.0).barCount(4)
+                .direction(Direction.HH)
+                .build();
+
+        SymbolContext ctx = SymbolContext.builder()
+                .symbol("DWELL-TEST").tf("Week").asOf(LocalDate.of(2026, 5, 22))
+                .pivots(pivots)
+                .dwellPivots(List.of(dayDwell))
+                .build();
+
+        List<Firing> emitted = RULE.evaluate(ctx, List.of());
+        assertTrue(emitted.isEmpty(),
+                "Day-tagged dwell must not contribute to Week cluster scan; got: " + emitted);
     }
 
     @Test
