@@ -1,0 +1,19 @@
+# Local OHLC cache (real Kite pulls) -- never committed
+data/ohlc/*
+!data/ohlc/.gitkeep
+
+# Sink outputs (inspection artifacts) -- never committed
+records/out/*
+!records/out/.gitkeep
+
+# Generated reports
+reports/*
+!reports/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/

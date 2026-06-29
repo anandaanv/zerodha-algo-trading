@@ -1,0 +1,11 @@
+# fractal-reversal module -- pinned dependencies.
+# Pins chosen for mutual compatibility on Python 3.11.
+# PR0 only imports numpy/pandas; scipy/PyWavelets/nolds are pinned now so the
+# resolve is proven and later measure PRs (PR2+) need no requirements change.
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+PyWavelets==1.6.0
+nolds==0.6.1
+pyarrow==16.1.0
+pytest==8.2.2

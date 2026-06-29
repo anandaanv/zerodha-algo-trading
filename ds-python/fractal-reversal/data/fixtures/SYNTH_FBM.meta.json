@@ -1,0 +1,12 @@
+{
+  "symbol": "SYNTH_FBM",
+  "kind": "synthetic-fbm-oracle",
+  "hurst_true": 0.7,
+  "n": 4000,
+  "seed": 8,
+  "method": "exact fBm via Cholesky of analytic covariance 0.5*(|s|^2H+|t|^2H-|s-t|^2H)",
+  "oracle_column": "fbm",
+  "price_transform": "close = 1000.0 + 50.0 * fbm (affine, preserves H)",
+  "validation": "Independent estimators on this committed realization: structure-function H~=0.699, aggregated-variance H~=0.687.",
+  "note": "PR2 acceptance: nolds.dfa over the fbm column (or log close) must recover H within tolerance (~+/-0.1) of hurst_true=0.70. DFA carries a known small-sample upward bias; see phase-1 spec (threshold 0.55)."
+}
